@@ -1,7 +1,7 @@
 # Claude Code Plugins Monorepo
 
 > **Maintainer**: Arie Goldkin
-> **Plugins**: ctk (formerly continuity-toolkit), dtk (formerly devops-toolkit), atk (formerly ai-toolkit), ftk (formerly frontend-toolkit), etk (formerly engineering-toolkit), cotk (formerly coordination-toolkit)
+> **Plugins**: ctk (formerly continuity-toolkit), dtk (formerly devops-toolkit), atk (formerly ai-toolkit), ftk (formerly frontend-toolkit), etk (formerly engineering-toolkit)
 > **Versioning**: Independent per plugin
 > **CC Alignment**: v2.1.173 (audited 2026-06-11). Per-version "considered but not adopted" notes are not tracked here — see `git log -p CLAUDE.md` or the CC CHANGELOG for prior reasoning. The v2.1.159→173 review ($PROJECT permission-rule fix, build-tool-config protections, $HOME deny parity, types.ts hook-schema additions, nested-subagent doc updates) is captured in `docs/reviews/2026-06-11_cc-v2.1.173-alignment-audit.md`; the prior v2.1.153→158 review is in `docs/reviews/2026-05-31_cc-v2.1.158-plugin-system-alignment-audit.md`.
 
@@ -11,7 +11,7 @@
 
 ## Architecture
 
-Monorepo for 6 domain-agnostic Claude Code plugins, sharing hook infrastructure via **directory-level symlinks**.
+Monorepo for 5 domain-agnostic Claude Code plugins, sharing hook infrastructure via **directory-level symlinks**.
 
 ```
 claude-dev-kit/
@@ -43,8 +43,7 @@ claude-dev-kit/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.5, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.3, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.2, installed as ftk)
-│   ├── engineering-toolkit/    # Engineering practices, quality, architecture (v2.7.0, installed as etk)
-│   └── coordination-toolkit/   # Multi-session peer coordination (v1.0.2, installed as cotk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.7.0, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -57,11 +56,10 @@ claude-dev-kit/
 | atk (formerly ai-toolkit) | 16 | 1 | 25 | 1 (continuity-recommendation) | RAG, embeddings, LangGraph, LLM patterns, conversational AI, NotebookLM |
 | ftk (formerly frontend-toolkit) | 16 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
 | etk (formerly engineering-toolkit) | 23 | 4 | 19 | 2 (review-logger, continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode |
-| cotk (formerly coordination-toolkit) | 4 | 0 | 4 | 8 (peer-register, peer-deregister, peer-heartbeat, conflict-detector, peer-announcer, message-checker, notification-handler) | Multi-session peer coordination, file claims, messaging, distributed experiments |
 
 > **Important**: ctk (formerly continuity-toolkit) is the **canonical owner of all shared hooks** (security, permissions, lifecycle, post-tool, HIPAA context injection). Install it alongside other plugins for full hook coverage. Other plugins have been stripped of shared hooks to prevent duplication when multiple plugins are installed simultaneously.
 >
-> **Note**: All 6 plugins are **domain-agnostic** and reusable on any project.
+> **Note**: All 5 plugins are **domain-agnostic** and reusable on any project.
 
 ### Symlink Setup
 
@@ -139,7 +137,6 @@ With `preserveSymlinks: true`, TypeScript resolves imports relative to the **sym
 | dtk | repo-access-guard, continuity-recommendation | Domain-specific only |
 | atk | continuity-recommendation | Recommends ctk installation |
 | ftk | continuity-recommendation | Recommends ctk installation |
-| cotk | peer-register, peer-deregister, peer-heartbeat | Peer coordination only (no shared hooks) |
 
 Users must install ctk (continuity-toolkit) for shared hook coverage (security, permissions, lifecycle, etc.).
 
@@ -182,7 +179,7 @@ vim shared/hooks-infra/src/lib/output.ts
 # Test in any plugin
 cd plugins/continuity-toolkit/hooks && npm test
 
-# Commit — CI validates all 6 plugins
+# Commit — CI validates all 5 plugins
 git add -A && git commit -m "fix: shared output helper edge case"
 ```
 
@@ -228,13 +225,13 @@ npm run lint         # Biome lint
 >
 > **CC v2.1.119+ closes the loop**: when plugin A pins plugin B to a version *range*, CC now auto-updates B to the highest satisfying git tag — no manual `plugin install` re-run needed. Our `dependencies: ["ctk"]` declarations are unversioned (any-ctk-satisfies), so this is a no-op for our current state. If we ever pin to a range like `["ctk@^2"]`, users will get rolling minor updates within the range automatically.
 
-### Verifying a 6-plugin install with `/doctor` (CC v2.1.144+)
+### Verifying a 5-plugin install with `/doctor` (CC v2.1.144+)
 
-CC v2.1.144 removed the truncated skill listing from the startup notification — the full per-plugin breakdown is now only available via `/doctor`. For a 6-plugin install (ctk + 5 other core), this matters: the startup line no longer confirms whether every plugin's skills loaded.
+CC v2.1.144 removed the truncated skill listing from the startup notification — the full per-plugin breakdown is now only available via `/doctor`. For a 5-plugin install (ctk + 4 other core), this matters: the startup line no longer confirms whether every plugin's skills loaded.
 
 After `claude plugin install` (or after a `/reload-plugins`), run `/doctor` to verify the full skill, agent, command, and hook count matches what each plugin declares. Mismatch usually points to a missing dependency (use `claude plugin install <name>` to re-resolve per v2.1.117+/v2.1.118+ behavior) or a hook-load error (visible in the `/plugin` Errors tab per v2.1.118+).
 
-For a quick install/enablement census without full diagnostics, run `/plugin list` (CC v2.1.163+) — the `--enabled`/`--disabled` filters confirm all 6 plugins are enabled faster than `/doctor` when you only need presence, not counts.
+For a quick install/enablement census without full diagnostics, run `/plugin list` (CC v2.1.163+) — the `--enabled`/`--disabled` filters confirm all 5 plugins are enabled faster than `/doctor` when you only need presence, not counts.
 
 ### Authoring skills/agents/commands with `--dangerously-skip-permissions` (CC v2.1.121+)
 
@@ -269,13 +266,13 @@ Common uses:
 Files are scanned with a streaming read in v2.1.152+, so memory stays flat even on long sessions.
 
 ### Update build config (rare)
-Build configs are per-plugin (not symlinked). When updating, copy across all 6 plugins in the same commit.
+Build configs are per-plugin (not symlinked). When updating, copy across all 5 plugins in the same commit.
 
 ## CI Pipeline
 
 GitHub Actions runs `.github/workflows/ci.yml` on every push to `main` and on pull requests. Jobs:
 
-- **`plugins`** — a matrix over all 6 plugins; each runs `npm ci` (shared hooks-infra + plugin hooks) then `npm run lint`, `npm run typecheck`, `npm test`. `fail-fast: false` so one plugin's failure doesn't cancel the others.
+- **`plugins`** — a matrix over all 5 plugins; each runs `npm ci` (shared hooks-infra + plugin hooks) then `npm run lint`, `npm run typecheck`, `npm test`. `fail-fast: false` so one plugin's failure doesn't cancel the others.
 - **`shared-tests`** — runs the shared `hooks-infra` test suite (lock, dangerous-bash, input, guards, …).
 - **`manifest-shape`** — runs `scripts/validate-manifest-shape.sh` against the fixtures (rejects top-level `themes`/`monitors` keys).
 - **`validate`** — `claude plugin validate plugins/{name}` per plugin for static structure checks (frontmatter, hooks.json schema). Non-blocking (`continue-on-error: true`), since the CLI install path isn't available in every fork.

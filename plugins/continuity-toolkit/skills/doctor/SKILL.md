@@ -28,13 +28,13 @@ Cross-plugin system diagnostics for the claude-dev-kit ecosystem. Checks what's 
 
 ### Step 1: Detect Installed Plugins
 
-Scan for all 7 possible plugins:
+Scan for all 6 possible plugins:
 
 ```
-Plugins to check: ctk, etk, dtk, atk, ftk, cotk
+Plugins to check: ctk, etk, dtk, atk, ftk
 Legacy names (still resolve via glob fallback for older installs):
                    continuity-toolkit, engineering-toolkit, devops-toolkit,
-                   ai-toolkit, frontend-toolkit, coordination-toolkit
+                   ai-toolkit, frontend-toolkit
 
 For each short name, check:
 1. ~/.claude/plugins/cache/*/[plugin-name]/ (marketplace install)

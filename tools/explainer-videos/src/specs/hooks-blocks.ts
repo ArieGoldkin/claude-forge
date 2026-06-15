@@ -189,7 +189,6 @@ export const hooksBlocksSpec: BlocksSpec = {
         { label: "atk", color: COLORS.warn },
         { label: "ftk", color: COLORS.danger },
         { label: "etk", color: COLORS.neutral },
-        { label: "cotk", color: COLORS.pre },
         { label: "wtk", color: COLORS.post },
       ],
       narration: "Same officers staff every terminal. Write once.",

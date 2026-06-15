@@ -34,7 +34,6 @@ jobs:
           - ai-toolkit
           - frontend-toolkit
           - engineering-toolkit
-          - coordination-toolkit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -86,7 +85,6 @@ jobs:
           - ai-toolkit
           - frontend-toolkit
           - engineering-toolkit
-          - coordination-toolkit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -22,7 +22,7 @@ Fall back to scanning known plugin directories on older CC:
 
 ```bash
 # Check marketplace cache for each plugin
-PLUGINS=("ctk" "etk" "dtk" "atk" "ftk" "cotk" "wtk")
+PLUGINS=("ctk" "etk" "dtk" "atk" "ftk" "wtk")
 
 for PLUGIN in "${PLUGINS[@]}"; do
   # Check marketplace cache

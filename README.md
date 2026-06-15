@@ -11,7 +11,6 @@ Monorepo for Arie Goldkin Claude Code plugins with shared hook infrastructure.
 | [atk](plugins/ai-toolkit/) (was: ai-toolkit) | 2.0.3 | 16 | 1 | 25 | **Solves for** LLM-feature trial-and-error — RAG/agent/evaluation patterns rediscovered per team. AI/LLM — RAG, embeddings, LangGraph, coaching, prompt patterns, NotebookLM |
 | [ftk](plugins/frontend-toolkit/) (was: frontend-toolkit) | 2.3.2 | 17 | 4 | 11 | **Solves for** slow design-to-code round-trips and decisions buried in chat scrollback. Frontend — React, Figma, Stitch AI, json-render, design systems, browser automation, Remotion explainer videos (block-based + bespoke) |
 | [etk](plugins/engineering-toolkit/) (was: engineering-toolkit) | 2.7.0 | 23 | 4 | 19 | **Solves for** review bounces — lint/format/typecheck failures caught after push instead of before. Engineering — ADR, TDD, code review, HIPAA, quality gates, brainstorming, Sentry investigation, MR-comment posting, business-invariants authoring + planning-time consumption, subagent scope-restate, ticket scope-check (auto-loaded), codebase zoom-out, caveman terse-mode |
-| [cotk](plugins/coordination-toolkit/) (was: coordination-toolkit) | 1.0.2 | 4 | 0 | 4 | **Solves for** parallel-session collisions — two Claude sessions silently editing the same files. Multi-session coordination — peer discovery, file claims, conflict detection, task distribution, real-time messaging bridge |
 
 ## Installation
 
@@ -60,12 +59,11 @@ claude-dev-kit/
 │   ├── devops-toolkit/        # hooks/src/lib → symlink to shared
 │   ├── ai-toolkit/            # hooks/src/lib → symlink to shared
 │   ├── frontend-toolkit/      # hooks/src/lib → symlink to shared
-│   ├── engineering-toolkit/   # hooks/src/lib → symlink to shared
-│   └── coordination-toolkit/  # hooks/src/lib → symlink to shared
+│   └── engineering-toolkit/   # hooks/src/lib → symlink to shared
 └── .github/workflows/     # GitHub Actions CI (per-plugin matrix)
 ```
 
-> **Note**: Install `ctk` alongside other plugins for shared hook coverage (security, permissions, lifecycle). All 6 plugins are domain-agnostic and reusable on any project. See [CLAUDE.md](CLAUDE.md) for full architecture details.
+> **Note**: Install `ctk` alongside other plugins for shared hook coverage (security, permissions, lifecycle). All 5 plugins are domain-agnostic and reusable on any project. See [CLAUDE.md](CLAUDE.md) for full architecture details.
 
 ## Development
 
