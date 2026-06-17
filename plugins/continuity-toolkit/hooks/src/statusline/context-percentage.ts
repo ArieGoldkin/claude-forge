@@ -76,9 +76,16 @@ export function getBarColor(pct: number): string {
 }
 
 /**
- * Format cost as a dollar string with two decimal places.
+ * Format cost as a dollar string.
+ *
+ * Below $10 we keep two decimals (cents matter for cheap sessions and the
+ * decimal point reads clearly between single digits). At $10+ we drop cents
+ * and add thousands separators: at statusline font size the decimal point in
+ * e.g. "$356.00" disappears and gets misread as "$35600", so whole dollars
+ * are unambiguous ("$356", "$1,234", "$35,600").
  */
 export function formatCost(costUsd: number): string {
+  if (costUsd >= 10) return `$${Math.round(costUsd).toLocaleString('en-US')}`;
   return `$${costUsd.toFixed(2)}`;
 }
 
@@ -145,6 +152,35 @@ export function extractCost(data: Record<string, unknown>): {
 }
 
 /**
+ * Extract 5-hour (session) and 7-day (weekly) rate-limit usage percentages
+ * from StatusLine data (CC v2.1.176+, schema confirmed against the official
+ * statusline docs). Both windows are optional: `rate_limits` is present only
+ * for Claude.ai Pro/Max subscribers after the first API response in a session,
+ * and each window may be independently absent. Returns null for any window not
+ * present so the caller can omit it gracefully (API/Bedrock users see no line).
+ */
+export function extractRateLimits(data: Record<string, unknown>): {
+  fiveHourPct: number | null;
+  sevenDayPct: number | null;
+} {
+  const rateLimits = data['rate_limits'] as Record<string, unknown> | undefined;
+  if (!rateLimits) return { fiveHourPct: null, sevenDayPct: null };
+
+  const readWindow = (key: string): number | null => {
+    const win = rateLimits[key] as Record<string, unknown> | undefined;
+    if (!win) return null;
+    const used = win['used_percentage'];
+    if (typeof used !== 'number' || Number.isNaN(used)) return null;
+    return Math.round(used);
+  };
+
+  return {
+    fiveHourPct: readWindow('five_hour'),
+    sevenDayPct: readWindow('seven_day'),
+  };
+}
+
+/**
  * Extract model display name from StatusLine stdin data.
  * Tries model.display_name, then model.id, then falls back to "?".
  */
@@ -195,7 +231,33 @@ export function formatLine2(pct: number, costUsd: number, durationMs: number): s
 }
 
 /**
- * Format the complete two-line StatusLine output.
+ * Format line 3 (account usage): session: <bar> N% \u00B7 weekly: <bar> N%
+ *
+ * Renders only the windows that are present, reusing the same threshold
+ * coloring as the context bar (green <70, yellow 70-89, red 90+). Returns ''
+ * when both windows are absent so the caller omits the line entirely \u2014 this
+ * is the normal case for API/Bedrock users and before the first API response.
+ */
+export function formatLine3(fiveHourPct: number | null, sevenDayPct: number | null): string {
+  const segments: string[] = [];
+  if (fiveHourPct !== null) {
+    segments.push(
+      `session: ${getBarColor(fiveHourPct)}${buildProgressBar(fiveHourPct)}${ANSI.RESET} ${fiveHourPct}%`
+    );
+  }
+  if (sevenDayPct !== null) {
+    segments.push(
+      `weekly: ${getBarColor(sevenDayPct)}${buildProgressBar(sevenDayPct)}${ANSI.RESET} ${sevenDayPct}%`
+    );
+  }
+  return segments.join(' \u00B7 ');
+}
+
+/**
+ * Format the complete StatusLine output: two lines always, plus an optional
+ * third usage line when rate-limit data is present (CC v2.1.176+).
+ * fiveHourPct/sevenDayPct default to null, keeping the two-line output and
+ * existing call sites byte-identical.
  */
 export function formatStatusLine(
   pct: number,
@@ -204,9 +266,14 @@ export function formatStatusLine(
   gitBranch: string,
   costUsd: number,
   durationMs: number,
-  worktreePath = ''
+  worktreePath = '',
+  fiveHourPct: number | null = null,
+  sevenDayPct: number | null = null
 ): string {
-  return `${formatLine1(modelName, workspaceName, gitBranch, worktreePath)}\n${formatLine2(pct, costUsd, durationMs)}`;
+  const line1 = formatLine1(modelName, workspaceName, gitBranch, worktreePath);
+  const line2 = formatLine2(pct, costUsd, durationMs);
+  const line3 = formatLine3(fiveHourPct, sevenDayPct);
+  return line3 ? `${line1}\n${line2}\n${line3}` : `${line1}\n${line2}`;
 }
 
 // =============================================================================
@@ -338,6 +405,7 @@ function main(): void {
   const modelName = extractModelName(data);
   const workspaceName = extractWorkspaceName(data);
   const { costUsd, durationMs } = extractCost(data);
+  const { fiveHourPct, sevenDayPct } = extractRateLimits(data);
   const gitBranch = getGitBranch();
   const worktreePath = extractWorktreePath(data);
 
@@ -356,9 +424,10 @@ function main(): void {
     // Non-fatal - the hook will gracefully degrade without the file
   }
 
-  // Output rich two-line status string to stdout
+  // Output rich status string to stdout (third usage line appears only when
+  // rate_limits is present in the payload — Pro/Max, post-first-response).
   process.stdout.write(
-    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath)}\n`
+    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct)}\n`
   );
 }
 

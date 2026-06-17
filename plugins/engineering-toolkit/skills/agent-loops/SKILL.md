@@ -1,6 +1,6 @@
 ---
 name: agent-loops
-description: Agentic workflow patterns — ReAct agents, plan-and-execute, self-correcting validation, sliding-window memory, and replanning
+description: Agentic workflow patterns — ReAct agents, plan-and-execute, self-correcting validation, sliding-window memory, and replanning. Triggers on agent loop, ReAct, plan-and-execute, reasoning loop, self-correcting agent, replanning, agentic workflow
 effort: low
 keep-coding-instructions: true
 ---

@@ -2,6 +2,12 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.3] - 2026-06-17 — agent-browser: refresh to upstream Vercel v0.27.3
+
+### Changed
+
+- **`agent-browser` skill docs synced from v0.22.x → v0.27.3** (`SKILL.md`, `references/commands.md`, `references/protocol-alignment.md`). Adds v0.24–v0.27 coverage: React introspection, Web Vitals, the doctor/chat/skills subsystems, and stable `t1`/`t2` tab ids. Corrects the `snapshot -s` documentation bug (it scopes the snapshot to a CSS-selector subtree, not a "structure-only DOM tree"). Upstream `--provider agentcore` (AWS Bedrock cloud browser) coverage is retained — it is an upstream agent-browser feature, not company infrastructure.
+
 ## [2.3.2] - 2026-06-14 — first open-source release
 
 Frontend development, UI/UX design, browser automation, and Remotion explainer videos. 16 skills, 4 agents, 11 commands.

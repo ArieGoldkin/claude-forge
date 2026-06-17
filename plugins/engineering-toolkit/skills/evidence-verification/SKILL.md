@@ -1,6 +1,6 @@
 ---
 name: evidence-verification
-description: Evidence-based verification — test results, coverage metrics, build artifacts, deployment health checks before marking tasks done
+description: Evidence-based verification — test results, coverage metrics, build artifacts, deployment health checks before marking tasks done. Triggers on evidence, verify done, proof of completion, definition of done, is it actually done, mark complete
 effort: low
 keep-coding-instructions: true
 ---

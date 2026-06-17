@@ -1,6 +1,6 @@
 ---
 name: hipaa-compliance-checker
-description: HIPAA compliance validation — health data handling, API security, data privacy, and security gap identification
+description: HIPAA compliance validation — health data handling, API security, data privacy, and security gap identification. Triggers on HIPAA, PHI, health data, compliance check, data privacy, protected health information, BAA
 effort: low
 keep-coding-instructions: true
 paths:
