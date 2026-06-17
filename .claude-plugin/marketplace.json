@@ -13,7 +13,7 @@
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
       "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 10 skills, 11 commands, 26 shared hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact → SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.6.6",
+      "version": "2.6.7",
       "category": "development"
     },
     {
@@ -34,14 +34,14 @@
       "name": "ftk",
       "source": "./plugins/frontend-toolkit",
       "description": "Frontend development toolkit (ftk, formerly frontend-toolkit) - 17 skills, 4 agents, 11 commands for UI/UX, design systems, browser automation, Google Stitch AI, and Remotion explainer videos",
-      "version": "2.3.2",
+      "version": "2.3.3",
       "category": "development"
     },
     {
       "name": "etk",
       "source": "./plugins/engineering-toolkit",
-      "description": "Engineering practices toolkit (etk, formerly engineering-toolkit) - 23 skills, 4 agents, 19 commands for quality, architecture, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
-      "version": "2.7.0",
+      "description": "Engineering practices toolkit (etk, formerly engineering-toolkit) - 24 skills, 4 agents, 19 commands for quality, architecture, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
+      "version": "2.7.1",
       "category": "development"
     }
   ]

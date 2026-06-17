@@ -1,6 +1,6 @@
 ---
 name: quality-gates
-description: Complexity assessment and quality gates for task planning — 1-5 scoring, information gathering, escalation triggers
+description: Complexity assessment and quality gates for task planning — 1-5 scoring, information gathering, escalation triggers. Triggers on quality gate, complexity assessment, task scoring, escalation, planning gate, readiness check, how complex is this
 effort: low
 keep-coding-instructions: true
 ---

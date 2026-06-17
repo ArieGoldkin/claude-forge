@@ -92,3 +92,18 @@ jobs:
           node-version: 22
       - run: npm install -g @anthropic-ai/claude-code
       - run: claude plugin validate plugins/${{ matrix.plugin }}
+
+  # Secret scanning — the enforced CI-side gate. The .pre-commit gitleaks hook
+  # is local-only and bypassable; this job is not. Uses the repo's .gitleaks.toml.
+  # gitleaks-action is license-free for public repositories and individual
+  # accounts (a GITLEAKS_LICENSE is only required for GitHub *organizations*).
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml

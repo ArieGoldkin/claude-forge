@@ -1,6 +1,6 @@
 ---
 name: tool-wrapper-patterns
-description: Patterns for CLI tool wrapper skills — auto-context, setup verification, output budgeting, error enrichment
+description: Patterns for CLI tool wrapper skills — auto-context, setup verification, output budgeting, error enrichment. Triggers on tool wrapper, CLI wrapper skill, wrapper pattern, auto-context, setup verification, output budgeting
 effort: low
 paths:
   - "**/skills/**"

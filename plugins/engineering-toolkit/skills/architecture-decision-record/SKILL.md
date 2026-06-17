@@ -1,6 +1,6 @@
 ---
 name: architecture-decision-record
-description: Architecture Decision Records — Nygard templates, context/decision/consequences, lifecycle, and trade-off evaluation
+description: Architecture Decision Records — Nygard templates, context/decision/consequences, lifecycle, and trade-off evaluation. Triggers on ADR, architecture decision, design decision, Nygard, record a decision, decision record, document a trade-off
 effort: low
 keep-coding-instructions: true
 ---

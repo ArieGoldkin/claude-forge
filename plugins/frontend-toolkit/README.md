@@ -56,4 +56,4 @@ cd hooks && npm install && npm run build && npm test
 
 ---
 
-**Version**: 2.2.0
+**Version**: 2.3.3

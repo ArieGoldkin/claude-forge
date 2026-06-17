@@ -1,6 +1,10 @@
-# agent-browser Command Reference (v0.22.x)
+# agent-browser Command Reference
 
-150+ commands, 100% Native Rust. All commands run as `agent-browser <command>`.
+> **Curated snapshot of upstream v0.27.3.** This static file is for offline reference and discovery. The **authoritative, always-version-matched** reference is served by the installed CLI:
+> ```bash
+> agent-browser skills get core --full   # every command, flag, alias, env var + templates
+> ```
+> Run that when the CLI is installed; fall back to this snapshot otherwise. All commands run as `agent-browser <command>`.
 
 ## Table of Contents
 
@@ -11,9 +15,9 @@
 - [Extraction](#extraction)
 - [Check State](#check-state)
 - [Wait](#wait)
+- [Semantic Find](#semantic-find)
 - [Scroll](#scroll)
 - [Mouse](#mouse)
-- [Semantic Find](#semantic-find)
 - [Screenshot](#screenshot)
 - [Recording](#recording)
 - [Clipboard](#clipboard)
@@ -28,6 +32,9 @@
 - [Tab Management](#tab-management)
 - [Frame Management](#frame-management)
 - [Browser Emulation](#browser-emulation)
+- [React Introspection and Web Vitals](#react-introspection-and-web-vitals)
+- [AI Chat](#ai-chat)
+- [Doctor and Skills](#doctor-and-skills)
 - [Stream (Live Preview)](#stream-live-preview)
 - [Profiler](#profiler)
 - [JavaScript Execution](#javascript-execution)
@@ -40,184 +47,184 @@
 
 | Command | Description |
 |---------|-------------|
-| `navigate <url>` | Navigate to URL (starts browser if needed) |
-| `back` | Go back in history |
-| `forward` | Go forward in history |
-| `reload` | Reload current page |
-| `close` | Close browser |
+| `open <url>` | Open a page / navigate (primary verb; starts browser if needed) |
+| `navigate <url>` | Alias for `open` |
+| `back` / `forward` / `reload` | History navigation |
+| `pushstate <url>` | Client-side SPA navigation, no full page load (auto-detects Next router) |
+| `close [--all]` | Close current browser session (or all sessions) |
 
 ## Snapshot
 
 | Command | Description |
 |---------|-------------|
-| `snapshot` | Get page snapshot (compact element list) |
-| `snapshot -i` | Interactive snapshot with clickable refs (@e1, @e2...) |
-| `snapshot -c` | Cursor-focused snapshot |
-| `snapshot -s` | Structure-only snapshot (DOM tree) |
-| `snapshot -d` | Detailed snapshot with full attributes |
+| `snapshot` | Full accessibility-tree snapshot (verbose) |
+| `snapshot -i` | Interactive elements only, with `@e1`, `@e2` refs (**preferred**) |
+| `snapshot -u` / `--urls` | Include `href` URLs on link elements |
+| `snapshot -c` | Compact (drop empty structural nodes) |
+| `snapshot -d <n>` | Cap tree depth at `n` levels |
+| `snapshot -s "<css>"` | Scope snapshot to a CSS selector subtree |
+| `snapshot --json` | Machine-readable output |
 
-Output format: `@e1 [button] "Submit"`, `@e2 [input type="email"]`
+Refs are reassigned on every snapshot and go stale on any page change — re-snapshot before the next ref interaction. (Note: the old `-C`/`--cursor` flag was removed in v0.22.0; cursor elements are included by default.)
 
 ## Interaction
 
 | Command | Description |
 |---------|-------------|
-| `click @ref` | Click element |
-| `dblclick @ref` | Double-click element |
-| `fill @ref "text"` | Clear field then type text (for inputs) |
+| `click @ref` / `click "<css>"` | Click element (ref, CSS selector) |
+| `click @ref --new-tab` | Open the link in a new tab instead of navigating |
+| `dblclick @ref` | Double-click |
+| `fill @ref "text"` | Clear field, then type (inputs) |
 | `type @ref "text"` | Append text without clearing |
-| `press @ref "key"` | Press key on focused element |
-| `select @ref "value"` | Select dropdown option |
-| `check @ref` | Check checkbox |
-| `uncheck @ref` | Uncheck checkbox |
-| `hover @ref` | Hover over element |
-| `drag @from @to` | Drag element to target |
+| `press <key>` | Press a key at current focus (e.g. `press Enter`, `press Control+a`) — no ref needed |
+| `select @ref "value" ["value2" …]` | Select dropdown option(s) |
+| `check @ref` / `uncheck @ref` | Toggle checkbox/radio |
+| `hover @ref` / `focus @ref` / `blur @ref` | Pointer/focus control |
+| `upload @ref <file> [<file> …]` | Set file input(s) |
+| `drag @from @to` | Drag and drop |
 | `clear @ref` | Clear input field |
-| `focus @ref` | Focus element |
-| `blur @ref` | Remove focus from element |
+| `scrollintoview @ref` | Scroll element into view |
 
 ## Keyboard
 
 | Command | Description |
 |---------|-------------|
 | `keyboard type "text"` | Type text with key events |
-| `keyboard inserttext "text"` | Insert text directly (no key events) |
-| `keyboard press "key"` | Press key (e.g. Enter, Tab, ArrowDown, Control+a) |
+| `keyboard inserttext "text"` | Insert text directly (no key events — bypasses custom inputs) |
+| `keyboard press "key"` | Press key (Enter, Tab, ArrowDown, Control+a, …) |
 
 ## Extraction
 
 | Command | Description |
 |---------|-------------|
-| `get text @ref` | Get element text content |
-| `get html @ref` | Get element outer HTML |
-| `get value @ref` | Get input/select value |
-| `get attribute @ref "name"` | Get element attribute by name |
-| `get count @ref` | Count matching elements |
-| `get box @ref` | Get bounding box (x, y, width, height) |
-| `get styles @ref` | Get computed styles |
-| `get title` | Get page title |
-| `get url` | Get current URL |
+| `get text @ref` | Visible text content |
+| `get html @ref` | Outer/inner HTML |
+| `get value @ref` | Input/select value |
+| `get attr @ref "name"` | Attribute by name (alias of `get attribute`) |
+| `get count "<css>"` | Count matching elements |
+| `get box @ref` | Bounding box (x, y, width, height) |
+| `get styles @ref` | Computed styles |
+| `get title` / `get url` | Page title / current URL |
 
 ## Check State
 
 | Command | Description |
 |---------|-------------|
-| `is visible @ref` | Check if element is visible |
-| `is enabled @ref` | Check if element is enabled |
-| `is checked @ref` | Check if checkbox/radio is checked |
-| `is editable @ref` | Check if element is editable |
+| `is visible @ref` | Element visible |
+| `is enabled @ref` | Element enabled |
+| `is checked @ref` | Checkbox/radio checked |
+| `is editable @ref` | Element editable |
 
 ## Wait
 
 | Command | Description |
 |---------|-------------|
-| `wait @ref` | Wait for element to appear |
-| `wait --load <state>` | Wait for load state (e.g. networkidle) |
-| `wait --text "text"` | Wait for text to appear on page |
-| `wait --url "pattern"` | Wait for URL to match pattern |
-| `wait --function "js"` | Wait for JS expression to return truthy |
-| `wait <ms>` | Wait specified milliseconds |
+| `wait @ref` | Until element appears |
+| `wait --load <state>` | Load state: `networkidle`, `domcontentloaded`, `load` |
+| `wait --text "text"` | Until text appears on page |
+| `wait --url "pattern"` | Until URL matches glob pattern |
+| `wait --fn "<js>"` | Until JS expression is truthy |
+| `wait <ms>` | Fixed wait in milliseconds (last resort) |
+
+Default timeout is 25s. Prefer element/text/url/network waits over fixed `wait <ms>`.
+
+## Semantic Find
+
+Find an element and (optionally) act on it in one command — no prior snapshot needed:
+
+| Command | Description |
+|---------|-------------|
+| `find role <role> <action> [--name "…"] [--exact]` | By ARIA role, e.g. `find role button click --name "Submit"` |
+| `find text "…" <action> [--exact]` | By visible text, e.g. `find text "Sign In" click` |
+| `find label "…" <action>` | By associated label, e.g. `find label "Email" fill "user@test.com"` |
+| `find placeholder "…" <action>` | By placeholder |
+| `find testid "…" <action>` | By `data-testid` |
+| `find first "<css>" <action>` / `find nth <n> "<css>" <action>` | First / nth match |
+
+Reliability order for AI agents: snapshot + `@eN` refs > `find role/text/label` > raw CSS selectors.
 
 ## Scroll
 
 | Command | Description |
 |---------|-------------|
-| `scroll @ref` | Scroll element into view |
-| `scroll up` | Scroll up |
-| `scroll down` | Scroll down |
-| `scroll left` | Scroll left |
-| `scroll right` | Scroll right |
-| `scroll --to top` | Scroll to top of page |
-| `scroll --to bottom` | Scroll to bottom of page |
+| `scroll up\|down\|left\|right [px]` | Scroll page by amount (e.g. `scroll down 500`) |
+| `scroll --to top\|bottom` | Scroll to page extremes |
+| `scrollintoview @ref` | Scroll a specific element into view |
 
 ## Mouse
 
 | Command | Description |
 |---------|-------------|
-| `mouse move <x> <y>` | Move mouse to coordinates |
-| `mouse down` | Press mouse button |
-| `mouse up` | Release mouse button |
-| `mouse click <x> <y>` | Click at coordinates |
-| `mouse dblclick <x> <y>` | Double-click at coordinates |
-| `mouse wheel <deltaX> <deltaY>` | Scroll wheel (positive = down/right) |
-
-## Semantic Find
-
-| Command | Description |
-|---------|-------------|
-| `find role "button"` | Find element by ARIA role |
-| `find text "Submit"` | Find element by visible text |
-| `find label "Email"` | Find input by associated label |
-| `find placeholder "Search"` | Find input by placeholder text |
-| `find nth 2` | Select nth matching element (0-indexed) |
+| `mouse move <x> <y>` | Move to coordinates |
+| `mouse down` / `mouse up` | Press / release button |
+| `mouse click <x> <y>` / `mouse dblclick <x> <y>` | Click at coordinates |
+| `mouse wheel <dx> <dy>` | Scroll wheel (positive = down/right) |
 
 ## Screenshot
 
 | Command | Description |
 |---------|-------------|
-| `screenshot [path]` | Take viewport screenshot |
-| `screenshot --full [path]` | Full page screenshot |
-| `screenshot --annotate [path]` | Screenshot with element annotations |
+| `screenshot [path]` | Viewport screenshot (temp path printed if omitted) |
+| `screenshot --full [path]` | Full scroll-height screenshot |
+| `screenshot --annotate [path]` | Numbered element labels; `[N]` maps to ref `@eN` (built for multimodal models) |
 | `pdf [path]` | Save page as PDF |
 
-Flags: `--screenshot-format png|jpeg`, `--screenshot-quality 0-100`, `--screenshot-dir <path>`
+Flags: `--screenshot-format png\|jpeg`, `--screenshot-quality 0-100`, `--screenshot-dir <path>`, `--hide-scrollbars true\|false`.
 
 ## Recording
 
 | Command | Description |
 |---------|-------------|
-| `record start [path]` | Start video recording |
+| `record start [path]` | Start video recording (WebM/VP9, no audio) |
 | `record stop` | Stop recording |
-| `record restart` | Stop current and start new recording |
+| `record restart` | Stop current and start new |
 
-Output: WebM (VP9), no audio. Use for bug documentation, test evidence, and flow documentation.
+See [video-recording.md](video-recording.md) for codec options and GIF export.
 
 ## Clipboard
 
 | Command | Description |
 |---------|-------------|
-| `clipboard read` | Read clipboard contents |
-| `clipboard write "text"` | Write text to clipboard |
-| `clipboard copy @ref` | Copy element content to clipboard |
-| `clipboard paste @ref` | Paste clipboard content into element |
+| `clipboard read` / `clipboard write "text"` | Read / write clipboard |
+| `clipboard copy @ref` / `clipboard paste @ref` | Copy element content / paste into element |
 
 ## Diff
 
 | Command | Description |
 |---------|-------------|
-| `diff snapshot <file1> <file2>` | Compare two snapshots |
-| `diff screenshot <file1> <file2>` | Compare two screenshots visually |
+| `diff snapshot <file1> <file2>` | Compare two snapshots (ARIA-tree diffing) |
+| `diff screenshot <file1> <file2>` | Visual screenshot comparison |
 | `diff url <url1> <url2>` | Compare two URLs side by side |
 
 ## Batch
 
-Reads a JSON array of commands from stdin:
+Run multiple commands in one invocation, from stdin or inline args:
 
 ```bash
-echo '[{"command":"navigate","args":["https://example.com"]},{"command":"snapshot","args":["-i"]}]' | agent-browser batch
+echo '[{"command":"open","args":["https://example.com"]},{"command":"snapshot","args":["-i"]}]' | agent-browser batch
 ```
+
+Inline-argument mode (no stdin) was added in v0.25.0.
 
 ## Session and State
 
 | Command | Description |
 |---------|-------------|
-| `--session-name <name>` | Use named session (auto-save/restore) |
-| `state save <name>` | Save current session state |
-| `state load <name>` | Load saved session state |
-| `state list` | List all saved states |
-| `state show <name>` | Show details of saved state |
-| `state rename <old> <new>` | Rename a saved state |
-| `state clear <name>` | Delete a saved state |
-| `state clean` | Remove all expired states |
+| `--session <name>` | Use a named, isolated browser session (own cookies/tabs/refs) |
+| `state save <path>` / `state load <path>` | Save / load session state (cookies + localStorage) |
+| `state list` / `state show <name>` | Inspect saved states |
+| `state rename <old> <new>` / `state clear <name>` / `state clean` | Manage saved states |
+| `--state <path>` | Start a command from a saved state file |
+| `--session-name <name>` | Auto-save/restore session state by name |
 
 ## Auth Vault
 
 | Command | Description |
 |---------|-------------|
-| `auth save <name>` | Save current auth state (encrypted) |
-| `auth login <name>` | Restore saved auth state |
+| `auth save <name> [--url <login-url> --username <user> --password-stdin]` | Save encrypted auth state (read password from stdin) |
+| `auth login <name>` | Restore saved auth; fills credentials and submits |
 
-Encrypted storage uses AES-256-GCM. Set `AGENT_BROWSER_ENCRYPTION_KEY` for the encryption key.
+Encrypted with AES-256-GCM. Set `AGENT_BROWSER_ENCRYPTION_KEY`.
 
 ## Cookies and Storage
 
@@ -225,103 +232,142 @@ Encrypted storage uses AES-256-GCM. Set `AGENT_BROWSER_ENCRYPTION_KEY` for the e
 |---------|-------------|
 | `cookies` | Get all cookies |
 | `cookies set <name> <value> [--domain <d>]` | Set a cookie |
+| `cookies set --curl <file>` | Bulk import (auto-detects JSON, cURL, and Cookie-header formats) |
 | `cookies clear` | Clear all cookies |
-| `storage local` | Get all localStorage entries |
-| `storage local get <key>` | Get localStorage value |
-| `storage local set <key> <value>` | Set localStorage value |
-| `storage session` | Get all sessionStorage entries |
-| `storage session get <key>` | Get sessionStorage value |
-| `storage session set <key> <value>` | Set sessionStorage value |
+| `storage local [get\|set] [<key> [<value>]]` | localStorage access |
+| `storage session [get\|set] [<key> [<value>]]` | sessionStorage access |
 
 ## Network
 
 | Command | Description |
 |---------|-------------|
-| `network requests [--type <type>] [--method <method>] [--status <code>]` | List tracked requests with optional filters |
-| `network request <id>` | Get details of specific request |
-| `network route <pattern> --body <response>` | Mock response for matching requests |
-| `network route <pattern> --abort` | Block matching requests |
-| `network har start [path]` | Start HAR recording |
-| `network har stop` | Stop HAR recording |
+| `network requests [--type <t>] [--method <m>] [--status <code>]` | List tracked requests |
+| `network request <id>` | Details of a specific request |
+| `network route "<glob>" --body <response>` | Mock a response |
+| `network route "<glob>" --abort` | Block matching requests |
+| `network route "<glob>" --resource-type <csv>` | Filter intercepts by CDP resource type |
+| `network har start [path]` / `network har stop [path]` | HAR recording |
 
 ## Console
 
 | Command | Description |
 |---------|-------------|
-| `console` | Get all console messages |
-| `console --type error\|warning\|log` | Filter by message type |
-| `errors` | Get page errors (shortcut for `console --type error`) |
+| `console` | All console messages |
+| `console --type error\|warning\|log` | Filter by type |
+| `errors` | Page errors (shortcut for `console --type error`) |
 
 ## Dialog Handling
 
 | Command | Description |
 |---------|-------------|
-| `dialog accept ["text"]` | Accept alert/confirm/prompt (optional input text) |
-| `dialog dismiss` | Dismiss/cancel dialog |
-| `dialog status` | Check current dialog state |
+| `dialog status` | Pending-dialog state |
+| `dialog accept ["text"]` | Accept (optional prompt input) |
+| `dialog dismiss` | Cancel |
+
+`alert` and `beforeunload` are auto-accepted so agents never block.
 
 ## Tab Management
 
 | Command | Description |
 |---------|-------------|
-| `tab new [url]` | Create new tab (optionally navigate to URL) |
-| `tab list` | List open tabs |
-| `tab switch <id>` | Switch to tab by ID |
-| `tab close [id]` | Close tab (current if no ID) |
+| `tab` | List open tabs (with stable `tabId`) |
+| `tab new [--label <name>] [<url>]` | New tab (optionally labeled / navigated), switches to it |
+| `tab <t2\|label>` | Switch to a tab by stable id or label |
+| `tab close <t2\|label>` | Close a tab |
+
+Tab ids are **stable strings** (`t1`, `t2`, …) that don't shift when other tabs open/close. **Bare integers are rejected** with a teaching error — always use `t<N>` or a label. After switching tabs, prior-tab refs no longer apply — re-snapshot.
 
 ## Frame Management
 
 | Command | Description |
 |---------|-------------|
-| `frame list` | List all frames |
-| `frame select <id>` | Switch to frame by ID |
-| `frame main` | Switch back to main frame |
+| `frame @ref` | Switch context into an iframe (refs from `snapshot -i`) |
+| `frame main` | Return to the main frame |
+| `frame list` | List frames |
+
+Iframes are auto-inlined in snapshots — their refs work transparently without switching. Cross-origin iframes that block accessibility access are silently skipped.
 
 ## Browser Emulation
 
 | Command | Description |
 |---------|-------------|
-| `set viewport <width> <height>` | Set viewport dimensions |
+| `set viewport <w> <h>` | Viewport dimensions |
 | `set device "iPhone 15"` | Emulate device (viewport, UA, touch) |
-| `set geo <lat> <lon>` | Set geolocation |
+| `set geo <lat> <lon>` | Geolocation |
 | `set offline true\|false` | Toggle offline mode |
-| `set media <feature> <value>` | Set media feature (e.g. prefers-reduced-motion) |
-| `set color-scheme dark\|light` | Set preferred color scheme |
+| `set media <feature> <value>` | Media feature (e.g. prefers-reduced-motion) |
+| `set color-scheme dark\|light` | Preferred color scheme |
+
+## React Introspection and Web Vitals
+
+First-class React DevTools integration (any React app: Next.js, Remix, Vite+React, CRA, TanStack Start, RN Web). Requires the DevTools hook at launch via `--enable react-devtools`:
+
+| Command | Description |
+|---------|-------------|
+| `open --enable react-devtools <url>` | Launch with the React DevTools hook installed |
+| `react tree` | Component tree |
+| `react inspect <fiberId>` | Per-fiber props, hooks, state, source |
+| `react renders start` / `react renders stop` | Re-render recording + profile (mount/re-render counts, change details) |
+| `react suspense [--only-dynamic]` | Suspense boundaries + root-cause classifier |
+| `vitals [url] [--json]` | Core Web Vitals (LCP, CLS, TTFB, FCP, INP) + React hydration phases |
+
+`react …` commands error without `--enable react-devtools`. `vitals` and `pushstate` work on any site regardless of framework.
+
+## AI Chat
+
+| Command | Description |
+|---------|-------------|
+| `chat "<task>"` | Single-shot AI-driven automation (the agent calls any agent-browser command) |
+| `chat` | Interactive REPL |
+
+Requires `AI_GATEWAY_API_KEY`; model via `--model` or `AI_GATEWAY_MODEL`. Also available in the observability dashboard.
+
+## Doctor and Skills
+
+| Command | Description |
+|---------|-------------|
+| `doctor [--offline] [--quick] [--fix] [--json]` | Diagnose install (env, Chrome, daemons, config, security, providers, network, live launch). `--fix` runs repairs |
+| `skills get <name> [--full]` | Print a built-in skill (`core`, `electron`, `slack`, `dogfood`, `vercel-sandbox`, `agentcore`). `--full` includes references + templates |
+| `skills list` | List skills available on the installed version |
+| `skills add` | Install agent skills (with eval support for testing against live sessions) |
+
+`doctor` auto-cleans stale socket/pid/version sidecar files on every run. Run it first when a command fails unexpectedly (`Unknown command`, `Failed to connect`, version mismatch).
 
 ## Stream (Live Preview)
 
 | Command | Description |
 |---------|-------------|
-| `stream enable [--port <port>]` | Enable live preview WebSocket stream |
-| `stream status` | Check stream status |
-| `stream disable` | Disable live preview stream |
+| `stream enable [--port <port>]` | Enable live-preview WebSocket stream |
+| `stream status` / `stream disable` | Status / disable |
 
-WebSocket at `ws://localhost:9223` for live headless session preview. Configure port with `AGENT_BROWSER_STREAM_PORT`.
+The observability **dashboard** (embedded in the binary, port **4848**) provides live session views, status, stream traffic, and an AI chat — no separate install. Configure the stream port via `AGENT_BROWSER_STREAM_PORT` (default 9223).
 
 ## Profiler
 
 | Command | Description |
 |---------|-------------|
-| `profiler start [path]` | Start performance profiling |
-| `profiler stop` | Stop profiling and save results |
+| `profiler start [path]` / `profiler stop` | Performance profiling |
+
+See [profiling.md](profiling.md) (upstream) for Chrome DevTools tracing details.
 
 ## JavaScript Execution
 
 | Command | Description |
 |---------|-------------|
-| `eval "expression"` | Execute JavaScript expression |
-| `eval --stdin <<'EOF' ... EOF` | Execute multi-line JavaScript from stdin |
+| `eval "expression"` | Execute a JS expression (simple expressions only) |
+| `eval --stdin` | Multi-line JS from stdin (heredoc) — preferred for quotes/special chars |
+| `eval -b <base64>` | Execute base64-encoded JS |
 
 ## Debugging
 
 | Command | Description |
 |---------|-------------|
-| `--headed` | Show browser window (visible mode) |
-| `highlight @ref` | Highlight element visually |
+| `--headed` | Show the browser window |
+| `highlight @ref` | Highlight an element visually |
 | `inspect` | Open DevTools |
-| `trace start` | Start recording trace |
-| `trace stop` | Stop and save trace |
-| `get cdp-url` | Get Chrome DevTools Protocol URL |
+| `trace start` / `trace stop` | Record / save a trace |
+| `get cdp-url` | Get the Chrome DevTools Protocol URL |
+| `profiles [--json]` | List available Chrome profiles |
 
 ## Browser Control
 
@@ -329,66 +375,67 @@ WebSocket at `ws://localhost:9223` for live headless session preview. Configure 
 |------|-------------|
 | `--executable-path <path>` | Path to browser executable |
 | `--engine chrome\|lightpanda` | Browser engine selection |
-| `--extension <path>` | Load browser extension |
-| `--args <browser-args>` | Additional browser arguments |
-| `--auto-connect` | Auto-connect to running browser |
+| `--extension <path>` | Load a browser extension |
+| `--args <browser-args>` | Extra browser arguments |
+| `--auto-connect` | Connect to an already-running browser |
+| `--cdp <port>` | Connect to a specific CDP port |
 | `--download-path <path>` | Default download directory |
 | `--idle-timeout <ms>` | Idle timeout before auto-close |
+| `--headers <json>` | HTTP headers scoped to the URL's origin |
 
 ## Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--session-name <name>` | Named session (isolated browser context) |
+| `--session <name>` | Isolated browser session |
 | `--headed` | Show browser window |
 | `--json` | Machine-readable JSON output |
-| `--timeout <ms>` | Command timeout in milliseconds |
-| `--proxy <url>` | Proxy server URL |
-| `--proxy-bypass <list>` | Comma-separated proxy bypass list |
-| `--user-agent <ua>` | Custom user agent string |
-| `--profile <path>` | Browser profile directory |
-| `--state <path>` | State storage directory |
+| `--timeout <ms>` | Command timeout |
+| `--proxy <url>` / `--proxy-bypass <list>` | Proxy server / bypass list |
+| `--user-agent <ua>` | Custom user agent |
+| `--profile <name\|path>` | Chrome profile (resolves names like `Default`, copies to temp to reuse login state) |
+| `--state <path>` | Load saved auth state from JSON |
 | `--config <path>` | Config file path |
-| `--provider <name>` | Browser provider |
-| `--content-boundaries` | Include content boundary markers |
+| `--provider <name>` | Cloud browser provider |
+| `--content-boundaries` | Wrap page content in LLM-safety delimiters |
 | `--allowed-domains <list>` | Restrict navigation to listed domains |
-| `--action-policy <path>` | Action policy file path |
+| `--action-policy <path>` | Action policy file |
 | `--annotate` | Annotate screenshots with element refs |
 | `--max-output <chars>` | Maximum output character count |
 | `--color-scheme dark\|light` | Preferred color scheme |
+| `--init-script <path>` | Register a script before first navigation (repeatable) |
+| `--enable <feature>` | Enable a built-in init script (e.g. `react-devtools`) (repeatable) |
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `AGENT_BROWSER_SESSION_NAME` | Default session name |
+| `AGENT_BROWSER_SESSION_NAME` / `AGENT_BROWSER_SESSION` | Default session name |
 | `AGENT_BROWSER_PROFILE` | Browser profile directory |
 | `AGENT_BROWSER_STATE` | State storage directory |
-| `AGENT_BROWSER_EXECUTABLE_PATH` | Path to browser executable |
-| `AGENT_BROWSER_EXTENSIONS` | Browser extensions to load |
+| `AGENT_BROWSER_EXECUTABLE_PATH` | Browser executable path |
+| `AGENT_BROWSER_EXTENSIONS` | Extensions to load |
 | `AGENT_BROWSER_ARGS` | Additional browser arguments |
-| `AGENT_BROWSER_USER_AGENT` | Default user agent string |
-| `AGENT_BROWSER_PROXY` | Proxy server URL |
-| `AGENT_BROWSER_PROXY_BYPASS` | Proxy bypass list |
+| `AGENT_BROWSER_USER_AGENT` | Default user agent |
+| `AGENT_BROWSER_PROXY` / `AGENT_BROWSER_PROXY_BYPASS` | Proxy / bypass list |
 | `AGENT_BROWSER_CONTENT_BOUNDARIES` | Enable content boundary markers |
-| `AGENT_BROWSER_MAX_OUTPUT` | Maximum output character count |
-| `AGENT_BROWSER_ALLOWED_DOMAINS` | Restrict navigation to listed domains |
+| `AGENT_BROWSER_MAX_OUTPUT` | Max output characters |
+| `AGENT_BROWSER_ALLOWED_DOMAINS` | Restrict navigation domains |
 | `AGENT_BROWSER_ACTION_POLICY` | Action policy file path |
 | `AGENT_BROWSER_ANNOTATE` | Enable screenshot annotations |
-| `AGENT_BROWSER_SCREENSHOT_DIR` | Default screenshot directory |
-| `AGENT_BROWSER_SCREENSHOT_FORMAT` | Screenshot format (png or jpeg) |
-| `AGENT_BROWSER_SCREENSHOT_QUALITY` | Screenshot quality (0-100) |
+| `AGENT_BROWSER_SCREENSHOT_DIR` / `_FORMAT` / `_QUALITY` | Screenshot defaults |
 | `AGENT_BROWSER_AUTO_CONNECT` | Auto-connect to running browser |
 | `AGENT_BROWSER_PROVIDER` | Browser provider |
 | `AGENT_BROWSER_CONFIG` | Config file path |
 | `AGENT_BROWSER_ENGINE` | Browser engine (chrome or lightpanda) |
 | `AGENT_BROWSER_DOWNLOAD_PATH` | Default download directory |
 | `AGENT_BROWSER_IDLE_TIMEOUT_MS` | Idle timeout before auto-close |
-| `AGENT_BROWSER_DEFAULT_TIMEOUT` | Default command timeout (ms) |
-| `AGENT_BROWSER_ENCRYPTION_KEY` | Encryption key for auth vault (AES-256-GCM) |
+| `AGENT_BROWSER_DEFAULT_TIMEOUT` | Default command timeout |
+| `AGENT_BROWSER_ENCRYPTION_KEY` | Auth-vault encryption key (AES-256-GCM) |
 | `AGENT_BROWSER_STATE_EXPIRE_DAYS` | Days before saved states expire |
-| `AGENT_BROWSER_STREAM_PORT` | WebSocket stream port (default: 9223) |
-| `HTTP_PROXY` | HTTP proxy (standard) |
-| `HTTPS_PROXY` | HTTPS proxy (standard) |
-| `ALL_PROXY` | Universal proxy (standard) |
-| `NO_PROXY` | Proxy bypass list (standard) |
+| `AGENT_BROWSER_STREAM_PORT` | WebSocket stream port (default 9223) |
+| `AGENT_BROWSER_INIT_SCRIPTS` | Init scripts to register before first navigation |
+| `AGENT_BROWSER_ENABLE` | Built-in init scripts to enable (e.g. `react-devtools`) |
+| `AI_GATEWAY_API_KEY` / `AI_GATEWAY_MODEL` | `chat` command credentials / model |
+| `AGENTCORE_REGION` / `AGENTCORE_PROFILE_ID` / `AGENTCORE_BROWSER_ID` | AWS Bedrock AgentCore provider config |
+| `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY` | Standard proxy vars |

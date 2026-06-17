@@ -14,12 +14,14 @@ import {
   buildProgressBar,
   extractCost,
   extractModelName,
+  extractRateLimits,
   extractWorkspaceName,
   extractWorktreePath,
   formatCost,
   formatDuration,
   formatLine1,
   formatLine2,
+  formatLine3,
   formatStatusLine,
   getBarColor,
   getContextEmoji,
@@ -159,6 +161,20 @@ describe('formatCost', () => {
     expect(formatCost(0.126)).toBe('$0.13');
     expect(formatCost(0.124)).toBe('$0.12');
   });
+
+  it('should keep cents just under the $10 threshold', () => {
+    expect(formatCost(9.99)).toBe('$9.99');
+  });
+
+  it('should drop cents at $10 and above (decimal point illegible at statusline size)', () => {
+    expect(formatCost(10)).toBe('$10');
+    expect(formatCost(356)).toBe('$356');
+  });
+
+  it('should add thousands separators for large costs', () => {
+    expect(formatCost(1234.56)).toBe('$1,235');
+    expect(formatCost(35600)).toBe('$35,600');
+  });
 });
 
 // =============================================================================
@@ -237,6 +253,90 @@ describe('extractCost', () => {
   it('should default non-number values to zero', () => {
     const data = { cost: { total_cost_usd: 'invalid', total_duration_ms: null } };
     expect(extractCost(data as Record<string, unknown>)).toEqual({ costUsd: 0, durationMs: 0 });
+  });
+});
+
+// =============================================================================
+// extractRateLimits (CC 2.1.176+)
+// =============================================================================
+
+describe('extractRateLimits', () => {
+  it('should extract and round both windows', () => {
+    const data = {
+      rate_limits: {
+        five_hour: { used_percentage: 23.5, resets_at: 1738425600 },
+        seven_day: { used_percentage: 41.2, resets_at: 1738857600 },
+      },
+    };
+    expect(extractRateLimits(data)).toEqual({ fiveHourPct: 24, sevenDayPct: 41 });
+  });
+
+  it('should return nulls when rate_limits is absent (API/Bedrock users)', () => {
+    expect(extractRateLimits({})).toEqual({ fiveHourPct: null, sevenDayPct: null });
+  });
+
+  it('should handle each window being independently absent', () => {
+    const onlyFive = { rate_limits: { five_hour: { used_percentage: 50 } } };
+    expect(extractRateLimits(onlyFive)).toEqual({ fiveHourPct: 50, sevenDayPct: null });
+
+    const onlySeven = { rate_limits: { seven_day: { used_percentage: 80 } } };
+    expect(extractRateLimits(onlySeven)).toEqual({ fiveHourPct: null, sevenDayPct: 80 });
+  });
+
+  it('should default non-number / NaN used_percentage to null', () => {
+    const data = {
+      rate_limits: {
+        five_hour: { used_percentage: Number.NaN },
+        seven_day: { used_percentage: 'oops' },
+      },
+    };
+    expect(extractRateLimits(data as Record<string, unknown>)).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+    });
+  });
+
+  it('should return null for a window object with no used_percentage', () => {
+    const data = { rate_limits: { five_hour: { resets_at: 1738425600 } } };
+    expect(extractRateLimits(data)).toEqual({ fiveHourPct: null, sevenDayPct: null });
+  });
+});
+
+// =============================================================================
+// formatLine3 (usage bars)
+// =============================================================================
+
+describe('formatLine3', () => {
+  it('should render both bars with session: and weekly: prefixes', () => {
+    const line = formatLine3(23, 41);
+    expect(line).toContain('session:');
+    expect(line).toContain('weekly:');
+    expect(line).toContain('23%');
+    expect(line).toContain('41%');
+    expect(line).toContain(' · '); // separator between the two segments
+  });
+
+  it('should render only session when weekly is absent', () => {
+    const line = formatLine3(23, null);
+    expect(line).toContain('session:');
+    expect(line).not.toContain('weekly:');
+    expect(line).not.toContain(' · ');
+  });
+
+  it('should render only weekly when session is absent', () => {
+    const line = formatLine3(null, 41);
+    expect(line).toContain('weekly:');
+    expect(line).not.toContain('session:');
+  });
+
+  it('should return empty string when both windows are absent', () => {
+    expect(formatLine3(null, null)).toBe('');
+  });
+
+  it('should color-code bars by threshold like the context bar', () => {
+    expect(formatLine3(23, null)).toContain(ANSI.GREEN); // <70
+    expect(formatLine3(75, null)).toContain(ANSI.YELLOW); // 70-89
+    expect(formatLine3(95, null)).toContain(ANSI.RED); // 90+
   });
 });
 
@@ -333,6 +433,24 @@ describe('formatStatusLine', () => {
     const result = formatStatusLine(42, 'Opus', 'my-app', '', 0.08, 423000);
     const line1 = result.split('\n')[0];
     expect(line1).not.toContain('\uD83C\uDF3F');
+  });
+
+  it('should stay two lines when no rate limits are passed (default)', () => {
+    const result = formatStatusLine(42, 'Opus', 'my-app', 'main', 0.08, 423000);
+    expect(result.split('\n').length).toBe(2);
+  });
+
+  it('should add a third usage line when rate limits are present', () => {
+    const result = formatStatusLine(42, 'Opus', 'my-app', 'main', 0.08, 423000, '', 23, 41);
+    const lines = result.split('\n');
+    expect(lines.length).toBe(3);
+    expect(lines[2]).toContain('session:');
+    expect(lines[2]).toContain('weekly:');
+  });
+
+  it('should stay two lines when both rate-limit windows are null', () => {
+    const result = formatStatusLine(42, 'Opus', 'my-app', 'main', 0.08, 423000, '', null, null);
+    expect(result.split('\n').length).toBe(2);
   });
 });
 

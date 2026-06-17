@@ -8,9 +8,9 @@ maxTurns: 30
 color: blue
 initialPrompt: "Read the task requirements, identify the target code, and begin the red-green-refactor cycle by writing a failing test first."
 skills:
-  - coding-standards
-  - testing-strategy-builder
-  - evidence-verification
+  - etk:coding-standards
+  - etk:testing-strategy-builder
+  - etk:evidence-verification
 ---
 
 ## Directive
