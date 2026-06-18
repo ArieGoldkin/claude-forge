@@ -35,6 +35,7 @@ function getBarColor(pct) {
   return ANSI.GREEN;
 }
 function formatCost(costUsd) {
+  if (costUsd >= 10) return `$${Math.round(costUsd).toLocaleString("en-US")}`;
   return `$${costUsd.toFixed(2)}`;
 }
 function formatDuration(durationMs) {
@@ -73,6 +74,21 @@ function extractCost(data) {
   const durationMs = typeof totalDuration === "number" && !Number.isNaN(totalDuration) ? totalDuration : 0;
   return { costUsd, durationMs };
 }
+function extractRateLimits(data) {
+  const rateLimits = data["rate_limits"];
+  if (!rateLimits) return { fiveHourPct: null, sevenDayPct: null };
+  const readWindow = (key) => {
+    const win = rateLimits[key];
+    if (!win) return null;
+    const used = win["used_percentage"];
+    if (typeof used !== "number" || Number.isNaN(used)) return null;
+    return Math.round(used);
+  };
+  return {
+    fiveHourPct: readWindow("five_hour"),
+    sevenDayPct: readWindow("seven_day")
+  };
+}
 function extractModelName(data) {
   const model = data["model"];
   if (!model) return "?";
@@ -101,9 +117,28 @@ function formatLine2(pct, costUsd, durationMs) {
   const duration = formatDuration(durationMs);
   return `${color}${bar}${ANSI.RESET} ${pct}% ${emoji} | ${ANSI.YELLOW}${cost}${ANSI.RESET} | \u23F1\uFE0F ${duration}`;
 }
-function formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath = "") {
-  return `${formatLine1(modelName, workspaceName, gitBranch, worktreePath)}
-${formatLine2(pct, costUsd, durationMs)}`;
+function formatLine3(fiveHourPct, sevenDayPct) {
+  const segments = [];
+  if (fiveHourPct !== null) {
+    segments.push(
+      `session: ${getBarColor(fiveHourPct)}${buildProgressBar(fiveHourPct)}${ANSI.RESET} ${fiveHourPct}%`
+    );
+  }
+  if (sevenDayPct !== null) {
+    segments.push(
+      `weekly: ${getBarColor(sevenDayPct)}${buildProgressBar(sevenDayPct)}${ANSI.RESET} ${sevenDayPct}%`
+    );
+  }
+  return segments.join(" \xB7 ");
+}
+function formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath = "", fiveHourPct = null, sevenDayPct = null) {
+  const line1 = formatLine1(modelName, workspaceName, gitBranch, worktreePath);
+  const line2 = formatLine2(pct, costUsd, durationMs);
+  const line3 = formatLine3(fiveHourPct, sevenDayPct);
+  return line3 ? `${line1}
+${line2}
+${line3}` : `${line1}
+${line2}`;
 }
 function hashString(str) {
   let hash = 0;
@@ -196,6 +231,7 @@ function main() {
   const modelName = extractModelName(data);
   const workspaceName = extractWorkspaceName(data);
   const { costUsd, durationMs } = extractCost(data);
+  const { fiveHourPct, sevenDayPct } = extractRateLimits(data);
   const gitBranch = getGitBranch();
   const worktreePath = extractWorktreePath(data);
   const sessionId = process.env["CLAUDE_SESSION_ID"] || "default";
@@ -208,7 +244,7 @@ function main() {
   } catch {
   }
   process.stdout.write(
-    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath)}
+    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct)}
 `
   );
 }
@@ -216,6 +252,6 @@ if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(proce
   main();
 }
 
-export { ANSI, buildProgressBar, extractCost, extractModelName, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatLine1, formatLine2, formatStatusLine, getBarColor, getContextEmoji, getGitBranch };
+export { ANSI, buildProgressBar, extractCost, extractModelName, extractRateLimits, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatLine1, formatLine2, formatLine3, formatStatusLine, getBarColor, getContextEmoji, getGitBranch };
 //# sourceMappingURL=context-percentage.js.map
 //# sourceMappingURL=context-percentage.js.map

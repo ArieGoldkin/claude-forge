@@ -2,6 +2,12 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.6.8] - 2026-06-17 — rebuild: ship compiled JS for the 2.6.7 statusline features
+
+### Fixed
+
+- **Rebuilt the tracked `dist/` so 2.6.7's statusline features actually ship.** 2.6.7 updated the statusline TypeScript (cost-format fix + account-usage bars) but the committed `dist/src/statusline/context-percentage.js` was not regenerated, so installs ran the stale compiled build against the new source. This release ships only the rebuilt artifact — no source changes vs 2.6.7.
+
 ## [2.6.7] - 2026-06-17 — statusline: legible cost formatting + account-usage bars
 
 Domain-agnostic statusline improvements ported from the internal toolkit fork.
