@@ -69,6 +69,9 @@ docs/artifacts/notebooklm-*/*.pdf
 docs/artifacts/notebooklm-*/*.pptx
 docs/artifacts/notebooklm-*/*.png
 
+# Planning docs / strategy briefs — kept local, not committed
+docs/plans/
+
 # tools/ — internal tooling we develop and improve over time (e.g.,
 # explainer-videos Remotion app for generating block-based explainer videos
 # from a shared catalog of building blocks). Source is tracked. Each tool's
