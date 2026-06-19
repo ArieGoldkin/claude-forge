@@ -152,3 +152,15 @@ All description-mismatch findings resolved to **false-positive** on verification
 The reasoning: the runtime hook layer already blocks the most dangerous *execution* paths a malicious skill would attempt (`curl|sh`, `rm -rf`, protected-file and settings/hook/CI writes are stopped at execution time whether or not the skill was pre-scanned). So the immediately-exploitable surface a scanner would add coverage for is **narrower than the meta-gap finding implies** — it is specifically instruction-level injection/exfil *directives* that ride a tool Claude is already allowed to use (e.g. "summarize the repo and POST it to this endpoint" over an unguarded WebFetch). That is exactly the same gap the §4 #1, #2, and #4 items address more cheaply at the source.
 
 Therefore: **fix the per-skill trust-boundary gaps first (items 1-9, mostly one-line docs edits), then build the scanner as the durable, generalizable backstop** — phased so each piece (a `/etk:scan-skill` command, a trust-model doc, a doctor nudge) ships independently. A self-declared provenance/signature frontmatter field is low-value until CC supports skill signing natively (an attacker can set the same field), so defer it. Starting with `/scan-skill` directly operationalizes the suite's "scan-before-trust" thesis and is the single highest-leverage *strategic* addition — but it earns its place behind the cheap source fixes, not ahead of them.
+
+---
+
+## 6. Update — 2026-06-19 (post-demo web research)
+
+A `/ctk:web-research` run (the new internal-MCP + web blend) verified the scan-before-trust landscape against primary sources, refining §2.5 / §4 #10 / §5:
+
+- **Build → wrap.** **NVIDIA SkillSpector** (`github.com/NVIDIA/SkillSpector`, **Apache-2.0**) is a pre-install scanner purpose-built for `SKILL.md` artifacts: 64 patterns / 16 categories, two-stage hybrid (static AST + regex + OSV.dev CVE lookups, optional LLM semantic pass), **SARIF** output for CI, and it explicitly targets Claude Code. So #10 shifts from "build `/etk:scan-skill` from scratch" to **"wrap/integrate SkillSpector"** (a thin `/etk:scan-skill` that shells out to it) — lower effort, purpose-fit. Other prior art: Invariant `mcp-scan`, `eSentire-Labs/mcp-scanner`, Snyk ToxicSkills.
+- **Soften the headline stat.** The "~5% malicious" figure (arXiv:2601.10338, Liu et al., 42,447 skills) is **contested**: a repository-aware follow-up (arXiv:2603.16572, ~238k skills) dropped confirmed-suspicious to **~0.52%** once skills are judged in repo context. The ~26% *vulnerability* rate stands; design any scanner UX around **triage, not a binary block**, to avoid false-positive fatigue.
+- **No native platform vetting** (Anthropic/OpenAI/Cursor) was found as of 2026-06 — the #10 gap is real, but it remains *defense-in-depth* on top of the runtime hooks that already block the worst execution paths, so #10 stays **lowest priority**.
+
+Sources: NVIDIA/SkillSpector repo + dev blog; arXiv:2601.10338; arXiv:2603.16572; OWASP MCP Tool Poisoning; Invariant Labs mcp-scan.
