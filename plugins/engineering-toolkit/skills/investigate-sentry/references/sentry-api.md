@@ -4,14 +4,14 @@
 
 ```bash
 # Primary: 1Password CLI
-SENTRY_AUTH_TOKEN=$(op read "op://Engineering/sentry-api-token/credential" 2>/dev/null)
+SENTRY_AUTH_TOKEN=$(op read "op://<your-vault>/sentry-api-token/credential" 2>/dev/null)
 
 # Fallback: environment variable
 SENTRY_AUTH_TOKEN="${SENTRY_AUTH_TOKEN:-}"
 
 # Validate token
 curl -sf -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/organizations/assured-care-ltd/" > /dev/null
+  "https://sentry.io/api/0/organizations/<your-org>/" > /dev/null
 ```
 
 If `op` CLI fails: ask the user for the correct `op://` vault path or a manually exported `SENTRY_AUTH_TOKEN`.
@@ -19,7 +19,7 @@ If `op` CLI fails: ask the user for the correct `op://` vault path or a manually
 ## API Endpoints
 
 Base URL: `https://sentry.io/api/0/`
-Org slug: `assured-care-ltd`
+Org slug: `<your-org>`
 Auth header: `Authorization: Bearer $SENTRY_AUTH_TOKEN`
 
 ### Resolve short ID to numeric issue ID

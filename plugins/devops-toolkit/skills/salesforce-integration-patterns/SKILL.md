@@ -46,10 +46,20 @@ sf_client = SalesforceClient()
 Upsert application users to Salesforce Contacts using an external ID custom field:
 
 ```python
-# Check + upsert pattern
+# Check + upsert pattern.
+# SOQL has no bind-parameter API in simple_salesforce, so the value is
+# interpolated — VALIDATE it first to prevent SOQL injection. user.id is your
+# own PK, so a strict allowlist is both safe and sufficient.
+import re
+user_ext_id = str(user.id)
+if not re.fullmatch(r"[A-Za-z0-9_-]+", user_ext_id):
+    raise ValueError("unexpected External_User_ID format")
+
 existing = sf_client.client.query(
-    f"SELECT Id FROM Contact WHERE External_User_ID__c = '{user.id}'"
+    f"SELECT Id FROM Contact WHERE External_User_ID__c = '{user_ext_id}'"
 )
+# Tip: prefer upsert-by-external-id to skip the query+branch entirely:
+#   sf_client.client.Contact.upsert(f"External_User_ID__c/{user_ext_id}", sf_data)
 
 sf_data = {
     "Email": user.email,
@@ -99,14 +109,11 @@ Required on Contact object (rename fields to match your domain):
 - `Tags__c` or `Segments__c` (Multi-Picklist) — domain-specific categorization
 - `Last_Sync_Date__c` (DateTime)
 
-## Detailed Patterns
+## Security Notes
 
-**For complete implementations, see:**
-- [Sync Patterns](${CLAUDE_SKILL_DIR}/references/sync-patterns.md) - User sync, subscription updates, full Lambda examples
-- [Webhook Patterns](${CLAUDE_SKILL_DIR}/references/webhook-patterns.md) - Case webhooks, signature verification, event handling
-- [Bulk Operations](${CLAUDE_SKILL_DIR}/references/bulk-operations.md) - Batch processing, performance optimization, error handling
-- [Query Helpers](${CLAUDE_SKILL_DIR}/references/query-helpers.md) - SOQL queries, data retrieval, common operations
-- [Troubleshooting](${CLAUDE_SKILL_DIR}/references/troubleshooting.md) - Common issues, rate limits, debugging
+- **SOQL injection**: SOQL has no bind-parameter API in `simple_salesforce`; any value interpolated into a query string must be validated/escaped first (see the User Sync pattern above). Prefer upsert-by-external-id over query-then-branch where possible.
+- **Webhook authenticity**: verify the `X-SF-Signature` HMAC-SHA256 on inbound Case webhooks before trusting the payload.
+- **Least privilege**: scope the integration user's profile to only the objects/fields it syncs.
 
 ## Adopting for Your Domain
 

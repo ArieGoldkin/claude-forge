@@ -96,7 +96,10 @@ const TOOLS = {
     return { results: [] }
   },
   calculate: async (expression: string) => {
-    return { result: eval(expression) }
+    // SECURITY: never eval() model-supplied input — it is an injection-to-RCE path.
+    // Use a sandboxed expression parser restricted to arithmetic.
+    const { Parser } = await import('expr-eval'); // npm i expr-eval
+    return { result: new Parser().evaluate(expression) };
   },
   get_weather: async (location: string) => {
     // Weather API call
@@ -116,6 +119,8 @@ async function executeTool(toolName: string, input: any) {
   }
 }
 ```
+
+> **Security — tool inputs are untrusted (OWASP LLM01).** This loop `JSON.parse`s model-authored `Action Input` and dispatches it. In production: (1) validate each tool's input against a schema (zod/Pydantic) before executing, (2) keep tools to an explicit allowlist (above) — never dynamically resolve a tool name into `exec`/`import`, and (3) never pass model output to `eval`/`exec`/shell. The `calculate` tool uses a sandboxed math parser for exactly this reason. The same rule applies to the multi-agent and autonomous-loop examples below.
 
 ---
 

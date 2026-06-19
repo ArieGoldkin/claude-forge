@@ -2,6 +2,18 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.6.9] - 2026-06-19 — web-research: trust boundary + internal MCP sources
+
+Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).
+
+### Security
+
+- **`web-research-analyst` agent now states an explicit trust boundary** — fetched web/API/search content is untrusted DATA, not instructions (covers the default WebFetch path, not just agent-browser): ignore embedded directives, don't follow page-invented URLs, and pass `--content-boundaries` on agent-browser escalation. Also dropped the unused `Write` tool from the agent to shrink injection blast radius.
+
+### Changed
+
+- **`/ctk:web-research` now blends internal + external sources.** The command queries connected MCP servers (Atlassian/Confluence, Google Drive, …) for internal context and dispatches the `web-research-analyst` agent for public web sources, synthesizing with per-source citations (`internal:<server>` / `web:<url>`). The agent gained a **Sources** section clarifying it covers the web tier and that MCP-relayed content is untrusted too. Internal sources are queried by the (MCP-capable) command, not the restricted subagent — so it stays domain-agnostic (no hardcoded server names).
+
 ## [2.6.8] - 2026-06-17 — rebuild: ship compiled JS for the 2.6.7 statusline features
 
 ### Fixed

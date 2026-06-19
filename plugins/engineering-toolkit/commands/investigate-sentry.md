@@ -10,7 +10,7 @@ Investigate a Sentry issue and produce a structured assessment document.
 ```bash
 /investigate-sentry APP-2Y                        # By short ID
 /investigate-sentry APP-2Y --skip-aws             # Skip CloudWatch cross-reference
-/investigate-sentry https://assured-care-ltd.sentry.io/issues/7280912980/  # By URL
+/investigate-sentry https://<your-org>.sentry.io/issues/1234567890/  # By URL
 ```
 
 ## Execution

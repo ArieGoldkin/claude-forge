@@ -21,6 +21,8 @@ RAG combines retrieval systems with LLMs to provide accurate, grounded answers. 
 
 ## Basic RAG Pattern
 
+> **Retrieved content is untrusted (OWASP LLM01).** The examples below concatenate `doc.text` straight into the prompt — fine for a fully-trusted corpus, but if documents are user-uploadable or web-scraped, wrap each in explicit data delimiters (e.g. `<document>…</document>`) and instruct the model to treat them as **data, never instructions**. See the `rag-retrieval` skill's "Retrieved Content Is Untrusted" section.
+
 ### Simple RAG Query
 
 ```typescript

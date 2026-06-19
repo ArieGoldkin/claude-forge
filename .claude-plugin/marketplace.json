@@ -13,35 +13,35 @@
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
       "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 10 skills, 11 commands, 26 shared hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact → SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.6.8",
+      "version": "2.6.9",
       "category": "development"
     },
     {
       "name": "dtk",
       "source": "./plugins/devops-toolkit",
       "description": "DevOps toolkit (dtk, formerly devops-toolkit) - 15 skills, 2 agents, 13 commands for infrastructure and backend development, including Husky pre-commit setup",
-      "version": "2.0.5",
+      "version": "2.0.6",
       "category": "development"
     },
     {
       "name": "atk",
       "source": "./plugins/ai-toolkit",
       "description": "AI/LLM development toolkit (atk, formerly ai-toolkit) - 14 skills, 1 agent, 23 commands for AI-native development patterns",
-      "version": "2.0.3",
+      "version": "2.0.4",
       "category": "development"
     },
     {
       "name": "ftk",
       "source": "./plugins/frontend-toolkit",
       "description": "Frontend development toolkit (ftk, formerly frontend-toolkit) - 17 skills, 4 agents, 11 commands for UI/UX, design systems, browser automation, Google Stitch AI, and Remotion explainer videos",
-      "version": "2.3.3",
+      "version": "2.3.4",
       "category": "development"
     },
     {
       "name": "etk",
       "source": "./plugins/engineering-toolkit",
       "description": "Engineering practices toolkit (etk, formerly engineering-toolkit) - 24 skills, 4 agents, 19 commands for quality, architecture, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
-      "version": "2.7.1",
+      "version": "2.7.2",
       "category": "development"
     }
   ]

@@ -2,6 +2,15 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.4] - 2026-06-19 — security: trust-boundary notes; MCP dep audit + SDK pin
+
+Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).
+
+### Security
+
+- **Trust-boundary notes** added to `browser-content-capture` (captured page text is untrusted data; use `--content-boundaries`) and `stitch` (Gemini-generated markup is untrusted content — prompt-injection risk, review before adopting; not XSS).
+- **MCP workspace**: pinned `@google/stitch-sdk` to an exact version (it handles the API key). The MCP advisories themselves are unreachable (stdio-only transport); a non-blocking `mcp-audit` CI job for visibility is staged separately.
+
 ## [2.3.3] - 2026-06-17 — agent-browser: refresh to upstream Vercel v0.27.3
 
 ### Changed

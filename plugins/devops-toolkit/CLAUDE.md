@@ -1,8 +1,8 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.5
-> **Last Updated**: 2026-06-11
+> **Version**: 2.0.6
+> **Last Updated**: 2026-06-19
 
 ## Overview
 
