@@ -1,6 +1,6 @@
 ---
 name: verify
-description: "Run tests, linting, and type checking with structured evidence collection. Auto-detects project stack (Node, Python, Rust). Reports quality level: all clear, warnings, failures, or blocked. Use when: validating code before commit, checking CI readiness, running all project checks, or collecting evidence for a PR. Triggers on: verify, run checks, quality check, run tests, does it pass, lint, typecheck, pre-commit check, green, validate"
+description: "Run tests, linting, and type checking with structured evidence collection. Auto-detects project stack (Node, Python, Rust). Reports quality level: all clear, warnings, failures, or blocked. Optional streak gate requires N consecutive green runs before declaring success. Use when: validating code before commit, checking CI readiness, running all project checks, or collecting evidence for a PR. Triggers on: verify, run checks, quality check, run tests, does it pass, lint, typecheck, pre-commit check, green, validate, flaky test, streak gate"
 effort: medium
 paths:
   - "**/*.test.*"
@@ -55,6 +55,17 @@ cargo clippy               # Rust
 
 **Important**: Run each check independently. A failure in one should not prevent running the others — collect all evidence.
 
+### Step 2b: Streak Verification (when `--streak=N` is set)
+
+Single-shot pass/fail can be fooled by a flaky test that passes once by luck. When `--streak=N` is set (N ≥ 2), run the flaky-prone check (the **test** suite) **N times in a row** and gate success on the streak:
+
+- Report **All clear** / **Warnings only** only if **every** one of the N runs passes.
+- If **any** run fails, the result is **Failures** — record which run first broke the streak (e.g. "run 2 of 3") and surface that output. A suite that passes 2 of 3 times is a flaky failure, not a pass.
+- Run typecheck and lint **once** — they are deterministic, so a streak adds nothing.
+- Keep per-run evidence; the summary reports the streak, e.g. `Tests | PASS | streak 3/3`.
+
+Default is `--streak=1` (current single-pass behavior); nothing changes unless the user opts in. Streak gating is the structured form of "run it again to rule out flakiness" — prefer it over eyeballing a re-run when a green result must be trustworthy (CI gating, pre-release).
+
 ### Step 3: Collect Evidence
 
 For each check, record:
@@ -107,6 +118,7 @@ The user can request specific scopes:
 - `/verify lint` — Run only linting
 - `/verify typecheck` — Run only type checking
 - `/verify --fix` — Run lint with auto-fix, then verify
+- `/verify --streak=N` — Require N consecutive green test runs before reporting success (flaky-test defense; default 1). See Step 2b.
 
 ## Integration with /develop
 
@@ -137,7 +149,7 @@ Violating the letter of these rules is violating the spirit of the rules.
 | If You're Thinking... | Required Action |
 |---|---|
 | "This check doesn't apply to this project" | STOP. Verify by looking for config files. Don't assume — detect. |
-| "The test failed but it's probably flaky" | STOP. Run it again. If it fails twice, it's a real failure. Report it. |
+| "The test failed but it's probably flaky" | STOP. Run it again — or use `--streak=N` to require N consecutive passes. If it fails even once, treat it as a real failure. Report it. |
 | "Linting warnings aren't important" | STOP. Warnings are evidence. Report them and let the user decide severity. |
 | "I already know the code is correct" | STOP. Verification exists because confidence is not evidence. Run the checks. |
 

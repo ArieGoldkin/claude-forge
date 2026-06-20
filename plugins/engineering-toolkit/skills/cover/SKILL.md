@@ -1,6 +1,6 @@
 ---
 name: cover
-description: "Generate, execute, and heal test suites across unit, integration, and E2E tiers. Automated failure healing, coverage comparison, fingerprint caching, and ARIA accessibility diffing. Supports --target for autonomous coverage improvement. Use when: adding tests, increasing coverage, generating test files, or validating untested code. Triggers on: cover, generate tests, test coverage, write tests, add tests, untested, increase coverage, coverage target, E2E tests, Playwright"
+description: "Generate, execute, and heal test suites across unit, integration, and E2E tiers. Automated failure healing, coverage comparison, fingerprint caching, and ARIA accessibility diffing. Supports --target for autonomous coverage improvement and --streak to require N consecutive green runs before a test is kept. Use when: adding tests, increasing coverage, generating test files, or validating untested code. Triggers on: cover, generate tests, test coverage, write tests, add tests, untested, increase coverage, coverage target, E2E tests, Playwright, flaky test, streak gate"
 effort: xhigh
 paths:
   - "**/*.test.*"
@@ -28,6 +28,7 @@ Generate, execute, and heal test suites across three tiers: unit, integration, a
 /cover --status-protocol {scope}     # Emit machine-parseable status lines
 /cover {scope} --target=85%                # Autonomous mode: iterate until 85% coverage
 /cover {scope} --target=90% --max-iterations=15  # Custom iteration budget
+/cover {scope} --streak=3                   # Keep a test only after it passes 3 consecutive runs (flaky defense)
 ```
 
 ## Phase 0: Fingerprint Check
@@ -194,6 +195,16 @@ Classify each failure and apply the fix strategy from `${CLAUDE_SKILL_DIR}/refer
 **Source bug detection**: If a test failure reveals a genuine bug in source code, report it clearly but do NOT fix it. The cover skill generates tests, not patches.
 
 After each heal iteration, re-run failed tests. Stop when all pass or iterations exhausted.
+
+### Streak gate (`--streak=N`)
+
+By default a generated test is considered healed once it passes a single run. With `--streak=N` (N ≥ 2), a test is marked **passing/kept** only after it passes **N consecutive runs** — a defense against newly generated tests that pass intermittently (timing, shared state, ordering). Run the streak check after the heal loop converges:
+
+- A test that holds the streak (N/N green) is kept and counted in the coverage delta.
+- A test that breaks its streak is flagged **flaky** and re-enters the heal loop, counting against the `--max-iterations` budget; if it still can't hold the streak when the budget is exhausted, report it as flaky rather than keeping it as green.
+- The Phase 6 report's "Tests Generated" table notes the streak (e.g. `streak 3/3`) and lists any tests dropped for flakiness.
+
+Default `--streak=1` preserves current single-pass behavior. `--streak` composes with `--target`: an iteration's new tests must hold the streak before their coverage gain is counted toward the target.
 
 ## Phase 5b: Autonomous Coverage Improvement
 
