@@ -202,7 +202,7 @@ By default a generated test is considered healed once it passes a single run. Wi
 
 - A test that holds the streak (N/N green) is kept and counted in the coverage delta.
 - A test that breaks its streak is flagged **flaky** and re-enters the heal loop, counting against the `--max-iterations` budget; if it still can't hold the streak when the budget is exhausted, report it as flaky rather than keeping it as green.
-- The Phase 6 report's "Tests Generated" table notes the streak (e.g. `streak 3/3`) and lists any tests dropped for flakiness.
+- When `--streak` is active, the Phase 6 report records the streak outcome and lists any flaky-dropped tests (see Phase 6).
 
 Default `--streak=1` preserves current single-pass behavior. `--streak` composes with `--target`: an iteration's new tests must hold the streak before their coverage gain is counted toward the target.
 
@@ -254,6 +254,8 @@ Present a summary table:
 ```
 
 When `--target` was used, the report includes an **Autonomous Coverage Improvement Log** table showing iteration-by-iteration results (coverage delta, tests added/kept, keep/discard status).
+
+When `--streak=N` was used, the **Tests Generated** table gains a **Streak** column (e.g. `3/3`), and any test that could not hold the streak is listed under **Remaining Gaps** as flaky rather than counted as healed.
 
 When `--status-protocol` is enabled, a machine-parseable summary line is emitted at the end of the report. Filter lines starting with `[COVER_` to extract the structured event stream. See `${CLAUDE_SKILL_DIR}/references/status-protocol.md` for the full event format.
 
