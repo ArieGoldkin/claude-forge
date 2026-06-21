@@ -403,6 +403,8 @@ Auto-research passes budget to the target skill, never exceeds it:
 User overrides (`--iterations N`, `--minutes N`) take precedence over defaults.
 If both auto-research and the target skill have budgets, the **stricter** one applies.
 
+**The token ceiling (`--tokens` / `max_tokens`) is enforced at the auto-research loop level, not passed per-skill** — it is the cumulative output-token count across all iterations, checked between iterations, and stops the loop when exceeded (the same role as the iteration/minute ceilings). Target skills receive only `--iterations`/`--minutes`; they do not need a token parameter. Per-skill and unattended cost enforcement (a hard mid-run cutoff) is Phase 2 of the loop-capability roadmap.
+
 ## Validation
 
 The intent classification rules can be validated against a benchmark suite of 50+ known
