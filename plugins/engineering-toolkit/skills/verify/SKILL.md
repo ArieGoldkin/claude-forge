@@ -57,7 +57,7 @@ cargo clippy               # Rust
 
 ### Step 2b: Streak Verification (when `--streak=N` is set)
 
-Single-shot pass/fail can be fooled by a flaky test that passes once by luck. When `--streak=N` is set (N ≥ 2), run the flaky-prone check (the **test** suite) **N times in a row** and gate success on the streak:
+Single-shot pass/fail can be fooled by a flaky test that passes once by luck. When `--streak=N` is set (N ≥ 2), run the flaky-prone check (the **test** suite) **N times in a row, freshly each time** — no prior or cached result counts toward the streak — and gate success on the streak:
 
 - Report **All clear** / **Warnings only** only if **every** one of the N runs passes.
 - If **any** run fails, the result is **Failures** — record which run first broke the streak (e.g. "run 2 of 3") and surface that output. A suite that passes 2 of 3 times is a flaky failure, not a pass.

@@ -35,7 +35,7 @@ Generate, execute, and heal test suites across three tiers: unit, integration, a
 
 Hash source files in scope with SHA-256 and compare against `.cover/fingerprints.json` from the previous run. Files whose hash is unchanged and whose last result was `pass` are skipped — subsequent phases only process changed, new, or previously failing files. On first run (no fingerprint file), all files proceed.
 
-Use `--no-cache` to bypass fingerprint gating entirely and test everything in scope.
+Use `--no-cache` to bypass fingerprint gating entirely and test everything in scope. `--streak=N` likewise overrides caching for the streaked tests — they are always re-run so the streak reflects fresh runs, never a cached prior `pass` (see Phase 5 → Streak gate).
 
 Output: `"N files cached, M files changed — proceeding with reduced scope"`
 
@@ -200,6 +200,7 @@ After each heal iteration, re-run failed tests. Stop when all pass or iterations
 
 By default a generated test is considered healed once it passes a single run. With `--streak=N` (N ≥ 2), a test is marked **passing/kept** only after it passes **N consecutive runs** — a defense against newly generated tests that pass intermittently (timing, shared state, ordering). Run the streak check after the heal loop converges:
 
+- **Each streak run must be fresh.** `--streak` re-runs each test N times this pass and **bypasses Phase 0 fingerprint gating** for streaked tests — a cached or skipped result (a prior `pass`) never counts toward a streak. A test that is not actually re-run N times cannot be marked green; reading a stale prior pass would satisfy the streak with **zero fresh runs**, the exact false-green the gate exists to prevent.
 - A test that holds the streak (N/N green) is kept and counted in the coverage delta.
 - A test that breaks its streak is flagged **flaky** and re-enters the heal loop, counting against the `--max-iterations` budget; if it still can't hold the streak when the budget is exhausted, report it as flaky rather than keeping it as green.
 - When `--streak` is active, the Phase 6 report records the streak outcome and lists any flaky-dropped tests (see Phase 6).
