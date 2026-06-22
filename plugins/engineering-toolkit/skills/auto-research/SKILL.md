@@ -77,6 +77,9 @@ many execution paths.
 
 # Build a feature
 /auto-research implement the user preferences page from ticket PROJ-142
+
+# Run a preset recipe (named goal + stop-condition)
+/auto-research --recipe coverage-90
 ```
 
 ## The 5-Phase Flow
@@ -121,9 +124,10 @@ Build the execution plan with concrete parameters.
 
 1. Select the target skill based on classification
 2. Extract skill-specific parameters from the goal
-3. Determine budget: default 10 iterations / 30 minutes (dual ceiling)
+3. Determine budget: default 10 iterations / 30 minutes / 200k tokens (**triple ceiling** — whichever limit is hit first stops the loop)
 4. Identify target files by scanning the codebase if not specified
-5. Compose the full invocation
+5. Choose the stop-condition(s) — see "Stop-Conditions" below (default: goal reached, else budget exhausted)
+6. Compose the full invocation
 
 See `${CLAUDE_SKILL_DIR}/references/routing-rules.md` for detailed parameter extraction
 rules per target skill.
@@ -135,7 +139,8 @@ Goal:     "{user's original goal}"
 Strategy: {intent category}
 Skill:    /{target-skill} {extracted args}
 Target:   {files or scope}
-Budget:   {iterations} iterations / {minutes} minutes
+Budget:   {iterations} iter / {minutes} min / {tokens} tokens
+Stop:     {goal | streak=N | holdout-wins | budget}
 Metric:   {what we're measuring} ({direction})
 ```
 
@@ -152,7 +157,8 @@ Present the plan and get explicit user approval.
    │  Strategy: {intent category}                    │
    │  Skill:    /{skill} {args}                      │
    │  Target:   {files}                              │
-   │  Budget:   {iterations} iter / {minutes} min    │
+   │  Budget:   {iters} / {min} / {tokens} tok       │
+   │  Stop:     {goal | streak | holdout | budget}   │
    │  Metric:   {metric} ({direction})               │
    ├─────────────────────────────────────────────────┤
    │  [Run]  [Adjust]  [Cancel]                      │
@@ -318,6 +324,33 @@ human intent (program.md) + agent-modified code (target files) + metric (evaluat
 
 See `${CLAUDE_SKILL_DIR}/references/program-md-convention.md` for the file format.
 
+## Stop-Conditions
+
+A loop ends when its stop-condition is satisfied or the budget triple-ceiling is hit. Stop-conditions are composable — name them in the plan's `Stop:` line and pass via `--until`:
+
+| Stop-condition | Meaning | Backed by |
+|---|---|---|
+| `goal` (default) | The metric/target stated in the goal is reached | the target skill's own success check |
+| `streak=N` | The success check passes **N consecutive fresh runs** | `/verify --streak`, `/cover --streak` |
+| `holdout-wins` | A skill/prompt change beats the champion on a fresh holdout set | self-improvement route (see `references/self-improvement.md`) |
+| `budget` | Run until the triple ceiling (iters/min/tokens) is hit — for sweeps with no single success metric | budget enforcement |
+
+**Integrity law — only fresh runs count.** A stop-condition may never be satisfied by a stale, cached, or skipped prior result; re-run the check. A cached "pass" satisfying a streak with zero fresh runs is the exact false-green class fixed in etk 2.7.4 — when in doubt, force a fresh run. This law applies to every stop-condition, not just streak.
+
+## Recipe Presets
+
+Recipes are named goal+stop-condition templates so common loops don't need hand-authored parameters each time. `--recipe <name>` expands to the right target skill, budget, and stop-condition; the user can still override any field (`--recipe coverage-90 --until streak=2`).
+
+| Recipe | Expands to | Stop |
+|---|---|---|
+| `coverage-90` | `/cover {scope} --target=90% --streak=2` | streak=2 (target met, held twice) |
+| `perf-p95-200ms` | `/experiment` minimizing p95 latency below 200ms | goal |
+| `error-sweep` | `/fix-bug` over the top open error, investigation-first | budget |
+| `docs-drift` | `/verify` + a doc-vs-code consistency scan | goal |
+| `flake-hunt` | `/verify --streak=5` to surface intermittent failures | streak=5 |
+
+Recipes are presets, not new machinery — they ride the existing engine (experiment / cover / verify / fix-bug) and the triple ceiling. The full catalog and how to add a recipe live in `${CLAUDE_SKILL_DIR}/references/recipes.md`.
+
 ## Configuration
 
 ### Budget Defaults
@@ -326,18 +359,24 @@ See `${CLAUDE_SKILL_DIR}/references/program-md-convention.md` for the file forma
 |---|---|---|
 | `max_iterations` | 10 | 100 |
 | `max_minutes` | 30 | 480 |
+| `max_tokens` | 200k | 2M |
 
-Override inline: `/auto-research --iterations 20 --minutes 60 reduce API latency`
+Override inline: `/auto-research --iterations 20 --minutes 60 --tokens 500k reduce API latency`
+
+The three limits form a **triple ceiling**: the loop stops as soon as *any* one is hit (iterations, wall-clock, or cumulative output tokens). The token ceiling makes long runs cost-safe and is the brake that lets a loop run further unattended in future modes.
 
 ### Flags
 
 | Flag | Effect |
 |---|---|
+| `--recipe <name>` | Load a named goal+stop-condition preset (see Recipe Presets) |
+| `--until <cond>` | Set the stop-condition: `goal` (default), `streak=N`, `holdout-wins`, or `budget` |
 | `--dry-run` | Show the plan without executing |
 | `--replay` | Teaching mode: narrate what would happen without modifying code |
 | `--no-confirm` | Skip confirmation (use with caution) |
 | `--iterations N` | Override iteration budget |
 | `--minutes N` | Override time budget |
+| `--tokens N` | Override token budget (e.g. `--tokens 500k`) |
 | `--verbose` | Show detailed heartbeat every 30s |
 
 ## Safety & Budget Enforcement
@@ -364,6 +403,8 @@ Auto-research passes budget to the target skill, never exceeds it:
 User overrides (`--iterations N`, `--minutes N`) take precedence over defaults.
 If both auto-research and the target skill have budgets, the **stricter** one applies.
 
+**The token ceiling (`--tokens` / `max_tokens`) is enforced at the auto-research loop level, not passed per-skill** — it is the cumulative output-token count across all iterations, checked between iterations, and stops the loop when exceeded (the same role as the iteration/minute ceilings). Target skills receive only `--iterations`/`--minutes`; they do not need a token parameter. Per-skill and unattended cost enforcement (a hard mid-run cutoff) is Phase 2 of the loop-capability roadmap.
+
 ## Validation
 
 The intent classification rules can be validated against a benchmark suite of 50+ known
@@ -376,6 +417,8 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
 
 - **Routing Rules**: `${CLAUDE_SKILL_DIR}/references/routing-rules.md` — Detailed parameter
   extraction logic per target skill, edge cases, disambiguation rules
+- **Recipe Presets**: `${CLAUDE_SKILL_DIR}/references/recipes.md` — Named goal+stop-condition
+  templates, their expansions, and how to add a new recipe
 - **Worked Examples**: `${CLAUDE_SKILL_DIR}/references/worked-examples.md` — Full end-to-end
   examples for each route (optimize, fix, cover, design, build, review, verify)
 - **Self-Improvement**: `${CLAUDE_SKILL_DIR}/references/self-improvement.md` — Skill

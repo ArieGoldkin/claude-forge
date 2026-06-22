@@ -2,6 +2,16 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.7.5] - 2026-06-21 — auto-research: recipes, token ceiling, composable stop-conditions
+
+Phase 1 of adopting OrchestKit's loop capabilities in our idiom (capability, not substrate — see `docs/plans/2026-06-21_adopt-loop-capabilities-roadmap.md`). Turns `/auto-research` into the hub for the loop-quality features, all skill-prose (no hook/dist rebuild).
+
+### Added
+
+- **Recipe presets — `/auto-research --recipe <name>`.** Named goal+stop-condition templates (`coverage-90`, `perf-p95-200ms`, `error-sweep`, `docs-drift`, `flake-hunt`) that expand to the right target skill + budget + stop-condition, overridable inline. Adopts ork's loop recipe book through our routing instead of a parallel `/goal` command. New `references/recipes.md` catalog.
+- **Token/cost ceiling — `--tokens N`.** The budget is now a **triple ceiling** (iterations / minutes / **tokens**); the loop stops as soon as any one is hit. Adopts ork's budget caps; makes long runs cost-safe.
+- **Composable stop-conditions — `--until <goal|streak=N|holdout-wins|budget>`.** First-class, selectable, shown in the plan's `Stop:` line. Includes a global **integrity law**: a stop-condition may only count *fresh* runs, never a stale/cached/skipped prior pass (generalizes the 2.7.4 streak fix).
+
 ## [2.7.4] - 2026-06-21 — streak gate hardening: fresh runs only
 
 Hardening of the 2.7.3 streak gate, prompted by researching OrchestKit's parallel work — they shipped the same gate, then hit a race (their #2554) where a stale prior "pass" satisfied the streak with **zero fresh runs**. Our `/cover` had a latent version of that bug via Phase 0 fingerprint caching.
