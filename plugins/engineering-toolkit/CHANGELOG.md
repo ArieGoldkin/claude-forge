@@ -2,6 +2,21 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.7.6] - 2026-06-22 — auto-research: unattended / propose-only watcher mode
+
+Phase 2 (first PR) of adopting OrchestKit's loop capabilities in our idiom (capability, not substrate — see `docs/plans/2026-06-21_adopt-loop-capabilities-roadmap.md`, roadmap item R4). Skill-prose only (no hook/dist rebuild). Adopts ork's `ci-sentinel` value — a background watcher that observes and reports — without ork's substrate (no daemon, no server, no coordination DB).
+
+### Added
+
+- **Unattended / propose-only mode — `/auto-research --unattended <goal>`.** Runs the loop as a background watcher that self-schedules on CC-native primitives (`ScheduleWakeup` session-bound, default; `Cron` / `/schedule` persistent), re-checks state freshly each wake, and reports to a findings ledger. Governed by one safety invariant — **propose-don't-apply**: it never mutates source, commits, or pushes; its only write is the ledger. Write-routes (`/cover`, `/experiment`, `/fix-bug`, `/develop`) are degraded to propose-only (change lands in the ledger as a diff with an `apply with:` line). New `references/unattended-mode.md` with the four hard rails, cadence guidance, ledger format, and termination conditions.
+- **`--ledger <path>`** — findings-ledger path (default `docs/artifacts/unattended/<goal-slug>.md`, gitignored so propose-only output stays local).
+- **`--max-wakeups N`** (default 24) and **`--deadline <ISO-date>`** — bounded-lifetime caps for an unattended run; `--deadline` is kept distinct from the stop-condition selector `--until` to avoid overloading one flag with two value grammars. A loop that can't describe how it ends doesn't run unattended.
+
+### Changed
+
+- **Token ceiling hardens in unattended mode.** The `--tokens` axis of the triple ceiling becomes a **hard mid-run cutoff** (not just a between-iteration check) when `--unattended` is set — the cost brake for running unwatched. Realizes the forward-reference left in 2.7.5 (`SKILL.md` Budget Passing) that this was "Phase 2 of the loop-capability roadmap."
+- **Confirmation model under `--unattended`** moves from per-change to once-at-setup: the invocation is the confirmation and implies `--no-confirm` for the iterations — but never permission to apply.
+
 ## [2.7.5] - 2026-06-21 — auto-research: recipes, token ceiling, composable stop-conditions
 
 Phase 1 of adopting OrchestKit's loop capabilities in our idiom (capability, not substrate — see `docs/plans/2026-06-21_adopt-loop-capabilities-roadmap.md`). Turns `/auto-research` into the hub for the loop-quality features, all skill-prose (no hook/dist rebuild).

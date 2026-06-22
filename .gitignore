@@ -69,6 +69,10 @@ docs/artifacts/notebooklm-*/*.pdf
 docs/artifacts/notebooklm-*/*.pptx
 docs/artifacts/notebooklm-*/*.png
 
+# Auto-research unattended-mode findings ledgers — propose-only output for
+# local human review, never auto-committed (see auto-research/references/unattended-mode.md).
+docs/artifacts/unattended/
+
 # Planning docs / strategy briefs — kept local, not committed
 docs/plans/
 
