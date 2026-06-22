@@ -247,6 +247,42 @@ reached or not. If partially improved, suggest continuing with adjusted paramete
 
 ## Advanced Modes
 
+### Unattended / Propose-Only Mode
+
+`/auto-research --unattended <goal>` runs the loop as a background **watcher** — it
+self-schedules on CC-native primitives, re-checks state freshly each wake, and reports
+to a findings ledger. The one invariant that makes background autonomy safe:
+
+> **Propose-don't-apply.** Unattended mode never mutates source, never commits, never
+> pushes. Its only write is appending to a findings ledger. Write-routes (`/cover`,
+> `/experiment`, `/fix-bug`, `/develop`) are degraded to propose-only — the change lands
+> in the ledger as a diff with an `apply with:` line, not in the working tree.
+
+```
+# Watch main for failing tests; report, never fix
+/auto-research --unattended watch main for failing tests --max-wakeups 24
+
+# Tight-cadence external watch with a hard token cap and a custom ledger
+/auto-research --unattended watch CI on this branch --tokens 300k --ledger docs/artifacts/unattended/ci.md
+```
+
+**Four hard rails** (full guardrails in `${CLAUDE_SKILL_DIR}/references/unattended-mode.md`):
+
+1. **Propose-don't-apply** — ledger append is the only writable artifact.
+2. **Hard token cap** — `--tokens` becomes a mid-run cutoff, not just a between-iteration check; it is the cost brake for running unwatched.
+3. **User-initiated only** — the first invocation must be human; the loop self-schedules its next wake but can never bootstrap itself (the no-paid-background-LLM rule).
+4. **Bounded lifetime** — every run carries `--max-wakeups N` (default 24) or `--until <date>`; the loop stops scheduling the moment any terminator fires.
+
+**Self-scheduling** uses `ScheduleWakeup` (session-bound, the default) or `Cron` / `/schedule`
+(persistent across sessions) — no daemon, no polling. The loop sleeps between checks and is
+re-invoked by the harness. **Cadence:** ~270s for active external state (stays in the
+prompt-cache window), 1200–1800s for idle drift; don't pick 300s.
+
+Confirmation moves from per-change to once-at-setup: the `--unattended` invocation **is** the
+confirmation, so it implies `--no-confirm` for the iterations — but never permission to apply.
+This is ork's `ci-sentinel` capability (a background watcher that observes and reports) in our
+idiom: CC-native scheduling, a file-based ledger, propose-don't-apply — capability, not substrate.
+
 ### --replay Mode (Teaching)
 
 Run a simulated experiment with full narration — no code changes, no risk.
@@ -363,7 +399,7 @@ Recipes are presets, not new machinery — they ride the existing engine (experi
 
 Override inline: `/auto-research --iterations 20 --minutes 60 --tokens 500k reduce API latency`
 
-The three limits form a **triple ceiling**: the loop stops as soon as *any* one is hit (iterations, wall-clock, or cumulative output tokens). The token ceiling makes long runs cost-safe and is the brake that lets a loop run further unattended in future modes.
+The three limits form a **triple ceiling**: the loop stops as soon as *any* one is hit (iterations, wall-clock, or cumulative output tokens). The token ceiling makes long runs cost-safe and is the brake that lets a loop run unattended — in `--unattended` mode it hardens into a mid-run cutoff (see Unattended / Propose-Only Mode).
 
 ### Flags
 
@@ -373,6 +409,9 @@ The three limits form a **triple ceiling**: the loop stops as soon as *any* one 
 | `--until <cond>` | Set the stop-condition: `goal` (default), `streak=N`, `holdout-wins`, or `budget` |
 | `--dry-run` | Show the plan without executing |
 | `--replay` | Teaching mode: narrate what would happen without modifying code |
+| `--unattended` | Background watcher mode: self-schedules, propose-don't-apply, hard token cutoff (see Unattended / Propose-Only Mode) |
+| `--ledger <path>` | Findings-ledger path for unattended mode (default `docs/artifacts/unattended/<goal-slug>.md`) |
+| `--max-wakeups N` | Cap on total unattended wake-ups (default 24); pairs with or replaces `--until <date>` |
 | `--no-confirm` | Skip confirmation (use with caution) |
 | `--iterations N` | Override iteration budget |
 | `--minutes N` | Override time budget |
@@ -381,7 +420,8 @@ The three limits form a **triple ceiling**: the loop stops as soon as *any* one 
 
 ## Safety & Budget Enforcement
 
-- **Explicit confirmation** before every execution (Phase 3)
+- **Explicit confirmation** before every execution (Phase 3). In `--unattended` mode this moves to once-at-setup: the invocation is the confirmation, and nothing is applied thereafter (see Propose-don't-apply).
+- **Propose-don't-apply (unattended mode)** — `--unattended` never mutates source, commits, or pushes; its only write is the findings ledger. Write-routes are degraded to propose-only. This is the invariant that makes background autonomy safe (`references/unattended-mode.md`).
 - **No recursive auto-research** — auto-research must not invoke itself, directly or via any subagent it spawns (CC v2.1.172+ allows nested subagents, so this is an enforced policy, not a platform limitation)
 - **Target skill guardrails** apply — auto-research does not bypass them
 - **Readonly enforcement** from target skill applies unchanged
@@ -403,7 +443,7 @@ Auto-research passes budget to the target skill, never exceeds it:
 User overrides (`--iterations N`, `--minutes N`) take precedence over defaults.
 If both auto-research and the target skill have budgets, the **stricter** one applies.
 
-**The token ceiling (`--tokens` / `max_tokens`) is enforced at the auto-research loop level, not passed per-skill** — it is the cumulative output-token count across all iterations, checked between iterations, and stops the loop when exceeded (the same role as the iteration/minute ceilings). Target skills receive only `--iterations`/`--minutes`; they do not need a token parameter. Per-skill and unattended cost enforcement (a hard mid-run cutoff) is Phase 2 of the loop-capability roadmap.
+**The token ceiling (`--tokens` / `max_tokens`) is enforced at the auto-research loop level, not passed per-skill** — it is the cumulative output-token count across all iterations, checked between iterations, and stops the loop when exceeded (the same role as the iteration/minute ceilings). Target skills receive only `--iterations`/`--minutes`; they do not need a token parameter. In **`--unattended` mode the token ceiling becomes a hard mid-run cutoff** — the cost brake for running unwatched — rather than a between-iteration check (see Unattended / Propose-Only Mode).
 
 ## Validation
 
@@ -419,6 +459,8 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
   extraction logic per target skill, edge cases, disambiguation rules
 - **Recipe Presets**: `${CLAUDE_SKILL_DIR}/references/recipes.md` — Named goal+stop-condition
   templates, their expansions, and how to add a new recipe
+- **Unattended Mode**: `${CLAUDE_SKILL_DIR}/references/unattended-mode.md` — Propose-don't-apply
+  guardrails, the four hard rails, self-scheduling cadence, findings-ledger format, termination
 - **Worked Examples**: `${CLAUDE_SKILL_DIR}/references/worked-examples.md` — Full end-to-end
   examples for each route (optimize, fix, cover, design, build, review, verify)
 - **Self-Improvement**: `${CLAUDE_SKILL_DIR}/references/self-improvement.md` — Skill
