@@ -9,8 +9,8 @@ Phase 2 (first PR) of adopting OrchestKit's loop capabilities in our idiom (capa
 ### Added
 
 - **Unattended / propose-only mode — `/auto-research --unattended <goal>`.** Runs the loop as a background watcher that self-schedules on CC-native primitives (`ScheduleWakeup` session-bound, default; `Cron` / `/schedule` persistent), re-checks state freshly each wake, and reports to a findings ledger. Governed by one safety invariant — **propose-don't-apply**: it never mutates source, commits, or pushes; its only write is the ledger. Write-routes (`/cover`, `/experiment`, `/fix-bug`, `/develop`) are degraded to propose-only (change lands in the ledger as a diff with an `apply with:` line). New `references/unattended-mode.md` with the four hard rails, cadence guidance, ledger format, and termination conditions.
-- **`--ledger <path>`** — findings-ledger path (default `docs/artifacts/unattended/<goal-slug>.md`).
-- **`--max-wakeups N`** — cap on total unattended wake-ups (default 24); pairs with or replaces `--until <date>`. A loop that can't describe how it ends doesn't run unattended.
+- **`--ledger <path>`** — findings-ledger path (default `docs/artifacts/unattended/<goal-slug>.md`, gitignored so propose-only output stays local).
+- **`--max-wakeups N`** (default 24) and **`--deadline <ISO-date>`** — bounded-lifetime caps for an unattended run; `--deadline` is kept distinct from the stop-condition selector `--until` to avoid overloading one flag with two value grammars. A loop that can't describe how it ends doesn't run unattended.
 
 ### Changed
 

@@ -24,7 +24,7 @@ A good unattended goal is a **watcher**: observe some state on an interval, and 
 1. **Propose-don't-apply.** No `Edit`/`Write` to source, no `Bash(git commit*)`, no `Bash(git push*)`. The findings ledger is the only writable artifact. Write-routes (`/cover`, `/experiment`, `/fix-bug`, `/develop`) are *degraded to propose-only*: they generate the change as a diff and write it to the ledger under an `apply with:` line — they do not land it.
 2. **Hard token cap — a mid-run cutoff, not just a between-iteration check.** The token axis of the triple ceiling (`--tokens`) becomes a hard stop the moment cumulative output crosses it. This is the cost brake that lets a loop run unattended without a human watching spend. (In confirmed mode the ceiling is checked between iterations; unattended makes it a hard cutoff.)
 3. **User-initiated only.** The first invocation must come from a human. The loop self-schedules its *next* wake, but it can never bootstrap itself — there is no path by which auto-research starts a paid background loop on its own. This is the no-paid-background-LLM rule.
-4. **Bounded lifetime.** Every unattended run carries an explicit ceiling on total wake-ups — `--max-wakeups N` (default 24) or `--until <ISO-date>`. The loop schedules its *own* next wake and stops scheduling the moment any terminator fires (see Termination). A loop that cannot describe how it ends does not get to run unattended.
+4. **Bounded lifetime.** Every unattended run carries an explicit ceiling on total wake-ups — `--max-wakeups N` (default 24) and/or a calendar cap `--deadline <ISO-date>`. The loop schedules its *own* next wake and stops scheduling the moment any terminator fires (see Termination). A loop that cannot describe how it ends does not get to run unattended.
 
 ## Self-scheduling (CC-native, no daemon)
 
@@ -32,10 +32,10 @@ Two flavors, chosen by lifetime:
 
 | Flavor | Primitive | Lives | Use when |
 |---|---|---|---|
-| **Session-bound** (default) | `ScheduleWakeup` | as long as the CC session | "while I'm working, keep watching X" |
-| **Persistent** | `Cron` / `/schedule` cloud routine | across sessions | "every morning, check for drift" |
+| **Session-bound, adaptive** (default) | `ScheduleWakeup` (the `/loop` dynamic self-pacing primitive) | the CC session | the watcher picks its own next interval from what it finds |
+| **Fixed-interval / persistent** | `CronCreate` — `durable: false` (session) or `durable: true` (across sessions); the `/schedule` path | session or across sessions | a steady cron cadence, optionally surviving the session |
 
-Default to the session-bound `ScheduleWakeup` flavor — it needs no cloud agent and dies cleanly when the session ends. Reach for `Cron`/`/schedule` only when the watch must outlive the session. Either way, **auto-research does not poll continuously**: it sleeps between checks and is re-invoked by the harness.
+Default to `ScheduleWakeup` — it self-paces (tighten to ~270s on an active failure, relax to 1200–1800s when idle), needs no cloud agent, and dies cleanly when the session ends. Reach for `CronCreate` when you want a fixed cron cadence or a watch that must outlive the session (`durable: true`). Note `CronCreate` is fixed-interval by design (its own guidance steers live-watching elsewhere), so the adaptive cadence below applies to the `ScheduleWakeup` flavor. Either way, **auto-research does not poll continuously**: it sleeps between checks and is re-invoked by the harness.
 
 > **User-facing equivalents.** `--unattended` is the goal-driven, propose-only counterpart to wrapping auto-research in `/loop` (session-bound, self-pacing) or `/schedule` (persistent cloud routine) — it adds the four hard rails those plain commands don't impose. An installer who already runs `/loop` will recognize the cadence model; the difference is the propose-don't-apply safety contract.
 
@@ -47,7 +47,7 @@ These are wall-clock schedule intervals (not thinking budgets), so concrete numb
 |---|---|---|
 | Active external state (a CI run, a deploy) | ~270s | stays inside the prompt-cache window |
 | Idle drift (coverage, docs, error backlog) | 1200–1800s | nothing changes faster; don't burn cache 12×/hr |
-| Daily/periodic | `Cron` | persistent routine, not a session wake |
+| Daily/periodic | `CronCreate` | fixed-interval routine, not an adaptive session wake |
 
 **Don't pick 300s** — it's the worst of both: you pay the cache miss without amortizing it. Drop to ~270s (stay cached) or commit to 1200s+ (one miss buys a long wait).
 
@@ -67,6 +67,8 @@ Proposal: token-expiry assertion is off-by-one; see diff below
 Next:     re-scheduled +270s (active failure → tight cadence)
 ```
 
+For a **write-route** proposal, the diff is emitted as a companion `.patch` file beside the ledger (same slug, e.g. `watch-main.patch`) so the `apply with: git apply …` line lands it verbatim after review — the ledger entry is the human-readable record; the patch is the applyable artifact. Nothing is applied automatically.
+
 When a wake finds something **material**, surface it proactively (e.g. `SendUserFile` with `status: proactive`, or a push notification) so the human knows to open the ledger — don't rely on them noticing a silent file write.
 
 ## Termination
@@ -75,7 +77,7 @@ The loop stops scheduling — and the watch ends — when any of these fire:
 
 - **Stop-condition met** — the goal/streak/holdout condition is satisfied (fresh runs only).
 - **Budget exhausted** — any axis of the triple ceiling (iters / minutes / **tokens**) is hit; the token axis is the hard mid-run cutoff.
-- **`--max-wakeups` reached** or **`--until` date passed.**
+- **`--max-wakeups` reached** or **`--deadline` date passed.**
 - **Blocker hit** — write the blocker to the ledger and **stop**. Do not retry-loop on a blocker; that just burns tokens unattended with no human to break the cycle.
 
 In every case the final ledger entry states *why* the watch ended.

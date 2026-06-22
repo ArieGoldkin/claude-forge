@@ -271,12 +271,14 @@ to a findings ledger. The one invariant that makes background autonomy safe:
 1. **Propose-don't-apply** — ledger append is the only writable artifact.
 2. **Hard token cap** — `--tokens` becomes a mid-run cutoff, not just a between-iteration check; it is the cost brake for running unwatched.
 3. **User-initiated only** — the first invocation must be human; the loop self-schedules its next wake but can never bootstrap itself (the no-paid-background-LLM rule).
-4. **Bounded lifetime** — every run carries `--max-wakeups N` (default 24) or `--until <date>`; the loop stops scheduling the moment any terminator fires.
+4. **Bounded lifetime** — every run carries `--max-wakeups N` (default 24) and/or a calendar cap `--deadline <date>`; the loop stops scheduling the moment any terminator fires.
 
-**Self-scheduling** uses `ScheduleWakeup` (session-bound, the default) or `Cron` / `/schedule`
-(persistent across sessions) — no daemon, no polling. The loop sleeps between checks and is
-re-invoked by the harness. **Cadence:** ~270s for active external state (stays in the
-prompt-cache window), 1200–1800s for idle drift; don't pick 300s.
+**Self-scheduling** uses `ScheduleWakeup` — the `/loop` dynamic self-pacing primitive
+(session-bound, the default, picks its own next interval) — or `CronCreate` for a fixed
+cron cadence (`durable: false` session-bound, `durable: true` across sessions; the
+`/schedule` path). No daemon, no polling: the loop sleeps between checks and is re-invoked
+by the harness. **Cadence** (the `ScheduleWakeup` flavor): ~270s for active external state
+(stays in the prompt-cache window), 1200–1800s for idle drift; don't pick 300s.
 
 Confirmation moves from per-change to once-at-setup: the `--unattended` invocation **is** the
 confirmation, so it implies `--no-confirm` for the iterations — but never permission to apply.
@@ -411,7 +413,8 @@ The three limits form a **triple ceiling**: the loop stops as soon as *any* one 
 | `--replay` | Teaching mode: narrate what would happen without modifying code |
 | `--unattended` | Background watcher mode: self-schedules, propose-don't-apply, hard token cutoff (see Unattended / Propose-Only Mode) |
 | `--ledger <path>` | Findings-ledger path for unattended mode (default `docs/artifacts/unattended/<goal-slug>.md`) |
-| `--max-wakeups N` | Cap on total unattended wake-ups (default 24); pairs with or replaces `--until <date>` |
+| `--max-wakeups N` | Cap on total unattended wake-ups (default 24) |
+| `--deadline <date>` | Calendar cap for unattended mode: stop scheduling after this ISO date (distinct from `--until`, which selects the stop-condition) |
 | `--no-confirm` | Skip confirmation (use with caution) |
 | `--iterations N` | Override iteration budget |
 | `--minutes N` | Override time budget |
