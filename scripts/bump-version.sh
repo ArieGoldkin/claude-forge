@@ -11,7 +11,7 @@ set -euo pipefail
 
 PLUGIN="${1:-}"
 VERSION="${2:-}"
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CACHE_BASE="$HOME/.claude/plugins/cache/claude-forge"
 INSTALLED_PLUGINS="$HOME/.claude/plugins/installed_plugins.json"
 
@@ -31,9 +31,13 @@ if [[ ! -f "$PLUGIN_JSON" ]]; then
   exit 1
 fi
 
-# --- Read current version ---
+# --- Read current version + short name ---
+# $PLUGIN is the directory basename (e.g. "continuity-toolkit") used for filesystem
+# paths; the marketplace / cache / installed-plugins identity is the SHORT name
+# (e.g. "ctk") declared in plugin.json. They differ since the v2.0.0 rename.
 CURRENT=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])")
-echo "Bumping $PLUGIN: $CURRENT → $VERSION"
+SHORT_NAME=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['name'])")
+echo "Bumping $PLUGIN ($SHORT_NAME): $CURRENT → $VERSION"
 
 # --- 1. Update plugin.json ---
 python3 - <<PYEOF
@@ -52,19 +56,19 @@ path = '$MARKETPLACE_JSON'
 d = json.load(open(path))
 updated = False
 for p in d['plugins']:
-    if p['name'] == '$PLUGIN':
+    if p['name'] == '$SHORT_NAME':
         p['version'] = '$VERSION'
         updated = True
         break
 if not updated:
-    print(f"  ✗ '$PLUGIN' not found in marketplace.json", file=__import__('sys').stderr)
+    print(f"  ✗ '$SHORT_NAME' not found in marketplace.json", file=__import__('sys').stderr)
     __import__('sys').exit(1)
 open(path, 'w').write(json.dumps(d, indent=2) + '\n')
 print(f"  ✓ .claude-plugin/marketplace.json → $VERSION")
 PYEOF
 
 # --- 3. Patch local cache (if cache dir exists for new version) ---
-CACHE_DIR="$CACHE_BASE/$PLUGIN/$VERSION/.claude-plugin/plugin.json"
+CACHE_DIR="$CACHE_BASE/$SHORT_NAME/$VERSION/.claude-plugin/plugin.json"
 if [[ -f "$CACHE_DIR" ]]; then
   python3 - <<PYEOF
 import json
@@ -83,7 +87,7 @@ if [[ -f "$INSTALLED_PLUGINS" ]]; then
 import json
 path = '$INSTALLED_PLUGINS'
 d = json.load(open(path))
-key = '$PLUGIN@claude-forge'
+key = '$SHORT_NAME@claude-forge'
 if key in d.get('plugins', {}):
     entries = d['plugins'][key]
     for e in entries:

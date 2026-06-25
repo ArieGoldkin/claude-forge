@@ -2,6 +2,15 @@
 
 Monorepo-level changes. Each plugin also keeps its own `CHANGELOG.md` under `plugins/<name>/`.
 
+## 2026-06-25 — move release tooling out of plugins/ + fix version-validation name matching
+
+Moved the repo-maintenance scripts from `plugins/scripts/` to the top-level `scripts/` (next to `validate-manifest-shape.sh`), so the `plugins/` directory contains only actual plugins, and fixed a pre-existing name-matching bug in the version tooling.
+
+- Moved: `auto-bump-version.sh`, `bump-version.sh`, `validate-versions.sh`, `git-hooks/pre-commit`. `git mv` preserved history.
+- Updated `REPO_ROOT` derivation (now one level shallower) and the internal cross-references.
+- **Fixed (pre-existing since the v2.0.0 rename):** `validate-versions.sh` and `bump-version.sh` matched marketplace entries / cache dirs / install keys / the README table by **directory basename** (`continuity-toolkit`) while the manifests use **short names** (`ctk`) — so `validate-versions.sh` silently SKIPped all 5 plugins (validating nothing). Both scripts now derive the short name from `plugin.json` `name` and match on that; the directory basename is used only for filesystem paths. Verified: validate now reports OK for all 5 and correctly FAILs on an injected mismatch.
+- No plugin files changed; no version bumps. CI was unaffected (it uses an explicit plugin matrix, not a `plugins/*` glob).
+
 ## 2026-06-25 — rebranded to Claude Forge
 
 Renamed the suite from **claude-dev-kit** to **Claude Forge**. Functional changes for installers:

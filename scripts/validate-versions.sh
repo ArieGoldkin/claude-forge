@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MARKETPLACE_JSON="$REPO_ROOT/.claude-plugin/marketplace.json"
 README_FILE="$REPO_ROOT/README.md"
 FAILED=0
@@ -23,12 +23,15 @@ while IFS= read -r plugin_dir; do
   [[ -f "$PLUGIN_JSON" ]] || continue
 
   PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])")
+  # Short name (e.g. "ctk") is the marketplace / README / install identity;
+  # the directory basename (e.g. "continuity-toolkit") is only a filesystem path.
+  SHORT_NAME=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON')).get('name', '$PLUGIN_NAME'))")
 
   # --- Check 1: plugin.json vs marketplace.json ---
   MARKET_VER=$(python3 -c "
 import json
 d = json.load(open('$MARKETPLACE_JSON'))
-match = next((p['version'] for p in d['plugins'] if p['name'] == '$PLUGIN_NAME'), None)
+match = next((p['version'] for p in d['plugins'] if p['name'] == '$SHORT_NAME'), None)
 print(match or 'NOT_FOUND')
 ")
 
@@ -77,7 +80,7 @@ print(m.group(1) if m else 'NOT_FOUND')
     README_VER=$(python3 -c "
 import re
 text = open('$README_FILE').read()
-m = re.search(r'\[$PLUGIN_NAME\].*?\|\s*([\d.]+)', text)
+m = re.search(r'\[$SHORT_NAME\].*?\|\s*([\d.]+)', text)
 print(m.group(1) if m else 'NOT_FOUND')
 ")
     if [[ "$README_VER" == "NOT_FOUND" ]]; then
@@ -90,7 +93,7 @@ print(m.group(1) if m else 'NOT_FOUND')
     fi
   fi
 
-  echo "  OK    $PLUGIN_NAME @ $PLUGIN_VER"
+  echo "  OK    $PLUGIN_NAME ($SHORT_NAME) @ $PLUGIN_VER"
 done < <(find "$REPO_ROOT/plugins" -maxdepth 1 -mindepth 1 -type d | sort)
 
 if [[ "$FAILED" -eq 1 ]]; then
