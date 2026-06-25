@@ -1,5 +1,7 @@
 # Engineering Toolkit
 
+[![CI](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+
 Claude Code plugin for engineering practices, quality gates, and workflow orchestration.
 
 ## Installation

@@ -4,6 +4,12 @@
   <img src="docs/assets/claude-forge-logo.jpeg" alt="Claude Forge" width="320" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml"><img src="https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/Claude%20Code-5%20plugins-EA580C" alt="Claude Code · 5 plugins" />
+</p>
+
 > A suite of domain-agnostic Claude Code plugins sharing hook infrastructure via directory-level symlinks.
 
 Monorepo for the **Claude Forge** plugin suite (ctk, dtk, atk, ftk, etk) with shared hook infrastructure.

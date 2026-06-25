@@ -1,5 +1,7 @@
 # atk — AI Toolkit
 
+[![CI](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+
 > **Formerly named `ai-toolkit`.** Renamed to `atk` in v2.0.0 to shorten slash-command prefixes (e.g. `/ai-toolkit:rag-retrieval` → `/atk:rag-retrieval`). The source directory remains `plugins/ai-toolkit/` for repo readability. Existing installations must uninstall `ai-toolkit@claude-forge` and reinstall as `atk@claude-forge`.
 
 Claude Code plugin for AI/LLM development patterns including RAG, embeddings, LangGraph, prompt engineering, and more.

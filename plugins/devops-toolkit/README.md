@@ -1,5 +1,7 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
+[![CI](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+
 > **Formerly named `devops-toolkit`.** Renamed to `dtk` in v2.0.0 to shorten slash-command prefixes (e.g. `/devops-toolkit:aws-cli-toolkit` → `/dtk:aws-cli-toolkit`). The source directory remains `plugins/devops-toolkit/` for repo readability. Existing installations must uninstall `devops-toolkit@claude-forge` and reinstall as `dtk@claude-forge`.
 
 Claude Code plugin for DevOps, infrastructure, and backend development. Provides 18 specialized skills, 2 agents, 13 commands, and 1 hook (repo-access-guard) for secure, efficient development workflows.

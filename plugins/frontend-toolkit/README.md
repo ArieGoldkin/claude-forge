@@ -1,5 +1,7 @@
 # ftk — Frontend Toolkit
 
+[![CI](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieGoldkin/claude-forge/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+
 > **Formerly named `frontend-toolkit`.** Renamed to `ftk` in v2.0.0 to shorten slash-command prefixes (e.g. `/frontend-toolkit:shadcn` → `/ftk:shadcn`). The source directory remains `plugins/frontend-toolkit/` for repo readability. Existing installations must uninstall `frontend-toolkit@claude-forge` and reinstall as `ftk@claude-forge`.
 
 Claude Code plugin for frontend development, UI/UX design, and browser automation.
