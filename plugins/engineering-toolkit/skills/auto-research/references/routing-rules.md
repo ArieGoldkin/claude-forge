@@ -13,6 +13,7 @@ to configure the target skill correctly.
 - [Route: review → /review-mr](#route-review--review-mr)
 - [Route: verify → /verify](#route-verify--verify)
 - [Route: improve-skill → /experiment on SKILL.md](#route-improve-skill--experiment-on-skillmd)
+- [Route: research → /ctk:web-research](#route-research--ctkweb-research)
 - [Disambiguation Rules](#disambiguation-rules)
 
 ---
@@ -189,6 +190,27 @@ to configure the target skill correctly.
 
 ---
 
+## Route: research → /ctk:web-research
+
+**Extract from goal:**
+- Research topic / question (the full goal text becomes the topic)
+- Scope hints (timeframe "in 2026", comparison "X vs Y", source preference "official docs")
+
+**Invocation:**
+```
+/ctk:web-research {topic}
+```
+
+For a deep, multi-source, adversarially-verified report (not a quick lookup), escalate to the `deep-research` harness instead.
+
+**Budget:** Single pass. Not iteration-based; bounded by the web-research skill's own web/MCP fan-out.
+
+**Edge cases:**
+- "Research how WE do X" (internal codebase) is NOT `research` — that's `design` (brainstorming) or a direct codebase read. `research` is for EXTERNAL web/docs.
+- "Compare our options for X" with no external unknown → `design`. With an external landscape to survey → `research`.
+
+---
+
 ## Disambiguation Rules
 
 When a goal matches multiple categories:
@@ -200,3 +222,5 @@ When a goal matches multiple categories:
 5. **Ticket reference → build.** "Implement PROJ-142" → `build`
 6. **MR/PR reference → review.** "Look at !42" → `review`
 7. **When truly ambiguous**, ask one question: "I see this as both {A} and {B}. Which approach: {A description} or {B description}?"
+8. **Skill/prompt target → improve-skill; metric/code target → optimize.** "Optimize the review SKILL.md" / "improve the X skill" → `improve-skill` (skill-file mutation, conservative 5-iter budget, human review gate). "Optimize {metric}" / "optimize {code path}" → `optimize` (10-iter metric loop). Distinguishing signal: the target is a `SKILL.md` / named skill vs a runtime metric or source file.
+9. **External-web question → research; internal-design question → design.** "What's the state of X in 2026" / "survey approaches to Y" → `research` (`/ctk:web-research`). "How should WE build Y" → `design` (`/brainstorming`).

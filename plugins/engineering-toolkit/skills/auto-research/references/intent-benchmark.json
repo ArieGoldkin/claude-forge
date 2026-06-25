@@ -60,6 +60,11 @@
     {"input": "make the brainstorming skill better", "category": "improve-skill", "skill": "/experiment"},
     {"input": "the review skill misses security issues, improve it", "category": "improve-skill", "skill": "/experiment"},
 
+    {"input": "what's the current state of MCP server auth in 2026", "category": "research", "skill": "/ctk:web-research"},
+    {"input": "survey the landscape of SQLite vector search extensions", "category": "research", "skill": "/ctk:web-research"},
+    {"input": "compare options for local embedding models", "category": "research", "skill": "/ctk:web-research"},
+    {"input": "find out about MCP transport security best practices", "category": "research", "skill": "/ctk:web-research"},
+
     {"input": "fix the slow query in the users endpoint", "category": "fix", "skill": "/fix-bug", "note": "fix wins over optimize because user said 'fix'"},
     {"input": "make the API faster", "category": "optimize", "skill": "/experiment", "note": "optimize because no specific bug, just improvement goal"},
     {"input": "write more tests", "category": "cover", "skill": "/cover --target", "note": "cover because about test quantity, not fixing broken tests"},

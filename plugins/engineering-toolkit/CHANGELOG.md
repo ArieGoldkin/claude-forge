@@ -2,6 +2,28 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.8.0] - 2026-06-25 — auto-research: real `research` route + orchestration-contract hardening
+
+> Ports the company work-copy's auto-research process audit (P0 + P1) into Claude Forge, **merged on top of** our existing recipe / triple-ceiling / unattended-mode work (2.7.3–2.7.6) rather than overwriting it. Skill-definition only — no runtime hook behavior changed, no `dist/` rebuild.
+
+### Added
+
+- **`research` route (P0)** — promoted the decision tree's dangling "Generic research" leaf to a first-class `research` intent that hands off to `/ctk:web-research` (escalating to the `deep-research` harness for multi-source, adversarially-verified reports). Adds an intent-table row + signal words, when-to-use + quick-start examples, a `routing-rules.md` route section + TOC entry + disambiguation rules 8/9, 4 `intent-benchmark.json` entries, and heartbeat / Result / budget / Related-Skills coverage. Reconciled "8 intent categories" → 10.
+- **`--resume` flag** — resume an interrupted run from the last reported state.
+- **Model-economics guardrail** — Safety & Budget Enforcement notes auto-research is the highest-fan-out entry point and must not spawn children that undercut the repo's model-economics guidance. Adapted to Claude Forge's advisory "Model economics for subagent dispatch"; the company's *enforceable* governance layer (`enforceAvailableModels` / Fable soft-deny) is not yet in this repo (separate adoption).
+- **Interrupt & clean-state contract** — auto-research performs no rollback of its own; relies on the target skill's clean-exit guarantee, warning for routes (`/develop`, `/brainstorming`) that lack one.
+
+### Changed
+
+- **Fan-out cost front-loaded (P1)** — the Phase-2 plan format and Phase-3 confirm box gained a `Fan-out:` line so a multi-agent dispatch (e.g. `design`→~11 agents) is approved deliberately, not blind.
+- **Canonical multi-agent dispatch phrasing (P1)** — Phase-4 step 1 now says "dispatch all agents in a single response by emitting multiple Agent tool calls in the same message" for fan-out routes (prevents serialization).
+- **Fail-loud blocker surfacing (P1)** — Phase-4 step 4 defines what counts as a blocker and emits a canonical `STATUS:` line alongside the human-readable `Result:` enum (now includes `RESEARCH_COMPLETE`).
+- **`--no-confirm` scoped (P1)** — honored only for read-only/single-pass routes (`verify`, `review`, `research`, `--dry-run`, `--replay`); ignored for write routes.
+
+### Preserved (Claude Forge-specific, absent from the company copy)
+
+- Triple ceiling (iterations / minutes / **tokens**), recipe presets, and unattended / propose-only mode were kept intact — the audit deltas were merged on top, not overwritten.
+
 ## [2.7.8] - 2026-06-25 — rebrand to Claude Forge
 
 Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs, the `continuity-recommendation` hook's install hint (`/plugin install ctk@claude-forge`), and install commands; dist rebuilt. Re-add the marketplace and reinstall as `etk@claude-forge`.
