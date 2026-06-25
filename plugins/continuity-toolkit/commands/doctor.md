@@ -4,7 +4,7 @@ description: Cross-plugin system diagnostics — check installed plugins, hook h
 
 # /doctor - Plugin System Diagnostics
 
-Comprehensive health check across all installed claude-dev-kit. Shows what's installed, what's working, and what needs attention.
+Comprehensive health check across all installed claude-forge. Shows what's installed, what's working, and what needs attention.
 
 **Complements**: `/check-maintenance` (continuity files) and `/continuity-metrics` (session state). This command covers the **plugin system** itself.
 

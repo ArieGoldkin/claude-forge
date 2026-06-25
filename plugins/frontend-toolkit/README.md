@@ -1,6 +1,6 @@
 # ftk — Frontend Toolkit
 
-> **Formerly named `frontend-toolkit`.** Renamed to `ftk` in v2.0.0 to shorten slash-command prefixes (e.g. `/frontend-toolkit:shadcn` → `/ftk:shadcn`). The source directory remains `plugins/frontend-toolkit/` for repo readability. Existing installations must uninstall `frontend-toolkit@claude-dev-kit` and reinstall as `ftk@claude-dev-kit`.
+> **Formerly named `frontend-toolkit`.** Renamed to `ftk` in v2.0.0 to shorten slash-command prefixes (e.g. `/frontend-toolkit:shadcn` → `/ftk:shadcn`). The source directory remains `plugins/frontend-toolkit/` for repo readability. Existing installations must uninstall `frontend-toolkit@claude-forge` and reinstall as `ftk@claude-forge`.
 
 Claude Code plugin for frontend development, UI/UX design, and browser automation.
 
@@ -27,23 +27,23 @@ The `stitch` skill integrates with Google Stitch, providing 10 MCP tools for AI-
 ### From Marketplace (Recommended)
 
 ```bash
-/plugin marketplace add https://github.com/ArieGoldkin/claude-dev-kit.git
-/plugin install ftk@claude-dev-kit
+/plugin marketplace add https://github.com/ArieGoldkin/claude-forge.git
+/plugin install ftk@claude-forge
 ```
 
 ### Via git-subdir (Direct Install)
 
 ```bash
 /plugin install --source git-subdir \
-  --url https://github.com/ArieGoldkin/claude-dev-kit.git \
+  --url https://github.com/ArieGoldkin/claude-forge.git \
   --path plugins/frontend-toolkit
 ```
 
 ### Local Development
 
 ```bash
-git clone git@github.com:ArieGoldkin/claude-dev-kit.git
-claude --plugin-dir ./claude-dev-kit/plugins/frontend-toolkit
+git clone git@github.com:ArieGoldkin/claude-forge.git
+claude --plugin-dir ./claude-forge/plugins/frontend-toolkit
 ```
 
 > **Tip**: Use `/reload-plugins` to hot-reload plugin changes without restarting Claude Code.

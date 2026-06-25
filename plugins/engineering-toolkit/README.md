@@ -7,23 +7,23 @@ Claude Code plugin for engineering practices, quality gates, and workflow orches
 ### From Marketplace (Recommended)
 
 ```bash
-/plugin marketplace add https://github.com/ArieGoldkin/claude-dev-kit.git
-/plugin install etk@claude-dev-kit
+/plugin marketplace add https://github.com/ArieGoldkin/claude-forge.git
+/plugin install etk@claude-forge
 ```
 
 ### Via git-subdir (Direct Install)
 
 ```bash
 /plugin install --source git-subdir \
-  --url https://github.com/ArieGoldkin/claude-dev-kit.git \
+  --url https://github.com/ArieGoldkin/claude-forge.git \
   --path plugins/engineering-toolkit
 ```
 
 ### Local Development
 
 ```bash
-git clone git@github.com:ArieGoldkin/claude-dev-kit.git
-claude --plugin-dir ./claude-dev-kit/plugins/engineering-toolkit
+git clone git@github.com:ArieGoldkin/claude-forge.git
+claude --plugin-dir ./claude-forge/plugins/engineering-toolkit
 ```
 
 > **Tip**: Use `/reload-plugins` to hot-reload plugin changes without restarting Claude Code.
@@ -47,7 +47,7 @@ For real interactive debugging (breakpoints, stepping, variable inspection), ins
 
 ## Repository
 
-https://github.com/ArieGoldkin/claude-dev-kit
+https://github.com/ArieGoldkin/claude-forge
 
 ---
 

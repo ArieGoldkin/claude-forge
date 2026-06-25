@@ -1,12 +1,12 @@
 ---
 name: doctor
-description: "Cross-plugin system diagnostics for the claude-dev-kit ecosystem. Checks installed plugins, hook compilation, duplicate hook detection, continuity system health, environment (Node, npm, VCS CLI), and log sizes. Use when: plugins seem broken, hooks are not firing, after installing or updating plugins, or for periodic health checks. Triggers on: doctor, diagnose plugins, plugin health, hooks not working, system check, plugin status, what is installed, troubleshoot plugins"
+description: "Cross-plugin system diagnostics for the claude-forge ecosystem. Checks installed plugins, hook compilation, duplicate hook detection, continuity system health, environment (Node, npm, VCS CLI), and log sizes. Use when: plugins seem broken, hooks are not firing, after installing or updating plugins, or for periodic health checks. Triggers on: doctor, diagnose plugins, plugin health, hooks not working, system check, plugin status, what is installed, troubleshoot plugins"
 effort: low
 ---
 
 # /doctor
 
-Cross-plugin system diagnostics for the claude-dev-kit ecosystem. Checks what's installed, what's built, what's configured, and what needs attention.
+Cross-plugin system diagnostics for the claude-forge ecosystem. Checks what's installed, what's built, what's configured, and what needs attention.
 
 ## When to Use
 - After installing or updating plugins
@@ -16,7 +16,7 @@ Cross-plugin system diagnostics for the claude-dev-kit ecosystem. Checks what's 
 - Troubleshooting unexpected behavior
 
 ## What It Does
-- Detects all installed claude-dev-kit (marketplace cache + local dev)
+- Detects all installed claude-forge (marketplace cache + local dev)
 - Verifies hook compilation status (dist/bin/run-hook.js exists)
 - Counts hook registrations per plugin, checks for duplicates
 - Verifies continuity system setup (ledger, context monitor, shared-context.json)

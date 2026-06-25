@@ -17,17 +17,17 @@ Session continuity and context management plugin for Claude Code. Provides multi
 
 ```bash
 # Add the marketplace
-/plugin marketplace add https://github.com/ArieGoldkin/claude-dev-kit.git
+/plugin marketplace add https://github.com/ArieGoldkin/claude-forge.git
 
 # Install plugin
-/plugin install ctk@claude-dev-kit
+/plugin install ctk@claude-forge
 ```
 
 ### Via git-subdir (Direct Install)
 
 ```bash
 /plugin install --source git-subdir \
-  --url https://github.com/ArieGoldkin/claude-dev-kit.git \
+  --url https://github.com/ArieGoldkin/claude-forge.git \
   --path plugins/ctk
 ```
 
@@ -35,13 +35,13 @@ Session continuity and context management plugin for Claude Code. Provides multi
 
 ```bash
 # Clone the monorepo
-git clone git@github.com:ArieGoldkin/claude-dev-kit.git
+git clone git@github.com:ArieGoldkin/claude-forge.git
 
 # Build hooks
-cd claude-dev-kit/plugins/ctk/hooks && npm install && npm run build
+cd claude-forge/plugins/ctk/hooks && npm install && npm run build
 
 # Test locally
-claude --plugin-dir ./claude-dev-kit/plugins/ctk
+claude --plugin-dir ./claude-forge/plugins/ctk
 ```
 
 > **Tip**: Use `/reload-plugins` to hot-reload plugin changes without restarting Claude Code.
@@ -162,7 +162,7 @@ The `.claude/` directory is gitignored by default. The continuity data is local 
 
 ## Repository
 
-https://github.com/ArieGoldkin/claude-dev-kit
+https://github.com/ArieGoldkin/claude-forge
 
 ## License
 

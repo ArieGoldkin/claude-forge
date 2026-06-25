@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/ArieGoldkin/claude-dev-kit/shared/configs/permissions/permissions.schema.json",
+  "$id": "https://github.com/ArieGoldkin/claude-forge/shared/configs/permissions/permissions.schema.json",
   "title": "Plugin Permission Profile",
   "description": "JSON Schema for Claude Code permission profiles used by the plugins",
   "type": "object",

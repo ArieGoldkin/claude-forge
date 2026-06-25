@@ -88,8 +88,8 @@ describe('buildWindowTitleSequence', () => {
 
   it('handles HIPAA-flavored branch names without leaking control chars', () => {
     // A defensively-crafted branch name; nothing here should make CC reject the sequence.
-    expect(buildWindowTitleSequence(['claude-dev-kit', 'chore/cleanup'])).toBe(
-      '\x1b]2;claude-dev-kit · chore/cleanup\x07'
+    expect(buildWindowTitleSequence(['claude-forge', 'chore/cleanup'])).toBe(
+      '\x1b]2;claude-forge · chore/cleanup\x07'
     );
   });
 });

@@ -340,7 +340,7 @@ function outputHandoffSummary(projectDir: string): string {
  * Build a window-title escape sequence for the current session, gated on the
  * `CONTINUITY_TERMINAL_TITLE` env var (opt-in, must equal `"1"` exactly).
  *
- * Title shape: `<project basename> · <branch>` — e.g., `claude-dev-kit · main`.
+ * Title shape: `<project basename> · <branch>` — e.g., `claude-forge · main`.
  * Branch is omitted when not in a git repo. Returns empty string when the
  * feature is disabled OR no renderable segments survive sanitization.
  *

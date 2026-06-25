@@ -687,7 +687,7 @@ async function continuityRecommendation(_input) {
     return outputSilentSuccess();
   }
   cleanStaleMarkers();
-  const message = "\u{1F4A1} For full hook coverage (security guardrails, auto-permissions, context monitoring, session persistence), install ctk (continuity toolkit) alongside your other plugins: `/plugin install ctk@claude-dev-kit`. For lighter-weight context restoration without ctk, CC v2.1.108+ has built-in /recap.";
+  const message = "\u{1F4A1} For full hook coverage (security guardrails, auto-permissions, context monitoring, session persistence), install ctk (continuity toolkit) alongside your other plugins: `/plugin install ctk@claude-forge`. For lighter-weight context restoration without ctk, CC v2.1.108+ has built-in /recap.";
   logDebug(HOOK_NAME2, "ctk (continuity plugin) not detected, showing recommendation");
   return outputSuccess(message);
 }

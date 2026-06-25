@@ -45,7 +45,7 @@ export const topicSpec: BlocksSpec = {
   videoSubtitle: "...",       // shown in intro scene only (if intro is used)
   durationSeconds: 60,        // sum of scene.durationFrames must equal this × fps
   fps: 30,                    // typical
-  footer: "claude-dev-kit • <topic>",  // optional, bottom-right corner
+  footer: "claude-forge • <topic>",  // optional, bottom-right corner
   bgPattern: "grid",          // optional: "grid" (default) | "dots" | "diagonal" | "none"
   scenes: [ /* see scene catalog below */ ],
 };

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/ArieGoldkin/claude-dev-kit/shared/configs/rules/error_rules.schema.json",
+  "$id": "https://github.com/ArieGoldkin/claude-forge/shared/configs/rules/error_rules.schema.json",
   "title": "Error Rules Configuration",
   "description": "Schema for the error warner hook configuration",
   "type": "object",

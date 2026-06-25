@@ -1,7 +1,7 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.7
+> **Version**: 2.0.8
 > **Last Updated**: 2026-06-24
 
 ## Overview
@@ -161,23 +161,23 @@ Continuity features (save-state, create-handoff, resume-session, etc.) are provi
 
 ```bash
 # Add the marketplace
-/plugin marketplace add https://github.com/ArieGoldkin/claude-dev-kit.git
+/plugin marketplace add https://github.com/ArieGoldkin/claude-forge.git
 
 # Install plugin (new name: dtk)
-/plugin install dtk@claude-dev-kit
+/plugin install dtk@claude-forge
 ```
 
 ### Local Development
 
 ```bash
 # Clone the monorepo
-git clone git@github.com:ArieGoldkin/claude-dev-kit.git
+git clone git@github.com:ArieGoldkin/claude-forge.git
 
 # Test locally
-claude --plugin-dir ./claude-dev-kit/plugins/devops-toolkit
+claude --plugin-dir ./claude-forge/plugins/devops-toolkit
 ```
 
 ---
 
-**Repository**: https://github.com/ArieGoldkin/claude-dev-kit
+**Repository**: https://github.com/ArieGoldkin/claude-forge
 **Maintainer**: Arie Goldkin

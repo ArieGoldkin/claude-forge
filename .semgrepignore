@@ -1,4 +1,4 @@
-# Semgrep ignore file for claude-dev-kit monorepo
+# Semgrep ignore file for claude-forge monorepo
 # These directories contain example/template code for AI assistance, not production code.
 #
 # Most recent triage (pipeline 2558090496): docs/reviews/2026-05-28_security-pipeline-2558090496-triage.md
