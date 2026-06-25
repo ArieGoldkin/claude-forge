@@ -362,11 +362,11 @@ session.commit()
 -- ✅ CORRECT: Enable RLS for multi-tenant tables
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 
--- Create policy: coaches can only see their own notes
-CREATE POLICY coach_notes_policy ON notes
+-- Create policy: staff can only see their own notes
+CREATE POLICY staff_notes_policy ON notes
 FOR SELECT
-TO coach_role
-USING (coach_id = current_setting('app.current_coach_id')::int);
+TO staff_role
+USING (staff_id = current_setting('app.current_staff_id')::int);
 ```
 
 ### Audit Logging

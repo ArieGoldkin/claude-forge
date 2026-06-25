@@ -212,8 +212,8 @@ logger.info(f"User {user.name} completed activity")  # PII!
 # Filter by user_id (tenant isolation)
 activities = session.query(Activity).filter_by(user_id=user_id).all()
 
-# Filter by coach_id (tenant isolation)
-users = session.query(User).filter_by(coach_id=coach_id).all()
+# Filter by staff_id (tenant isolation)
+users = session.query(User).filter_by(staff_id=staff_id).all()
 ```
 
 ❌ **Bad - No tenant filter (SECURITY VULNERABILITY!)**:
@@ -380,7 +380,7 @@ See `tool-configs/actual-tool-configs.md` for critical gaps.
 - [ ] Try/except for database operations
 - [ ] Clear function names (snake_case)
 - [ ] No PII in logs (user_id only)
-- [ ] Tenant isolation: ALL queries filter by user_id/coach_id
+- [ ] Tenant isolation: ALL queries filter by user_id/staff_id
 - [ ] No string concatenation in SQL (use ORM)
 - [ ] Structured logging with extra fields
 - [ ] Tests include negative tests (tenant isolation)

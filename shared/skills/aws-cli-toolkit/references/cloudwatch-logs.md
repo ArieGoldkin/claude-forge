@@ -78,7 +78,7 @@ aws logs tail --profile acme-dev \
 ```bash
 # Tail multiple services (separate terminals)
 aws logs tail --profile acme-dev /aws/lambda/acme-api-service-dev --since 30m --follow &
-aws logs tail --profile acme-dev /aws/lambda/acme-coach-service-dev --since 30m --follow &
+aws logs tail --profile acme-dev /aws/lambda/acme-staff-service-dev --since 30m --follow &
 aws logs tail --profile acme-dev /aws/lambda/acme-activity-service-dev --since 30m --follow &
 
 # Stop all background tails
@@ -246,7 +246,7 @@ aws logs start-query --profile acme-dev \
 aws logs start-query --profile acme-dev \
   --log-group-names \
     /aws/lambda/acme-api-service-dev \
-    /aws/lambda/acme-coach-service-dev \
+    /aws/lambda/acme-staff-service-dev \
     /aws/lambda/acme-activity-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \

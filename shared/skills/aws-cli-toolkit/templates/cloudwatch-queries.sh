@@ -181,7 +181,7 @@ aws logs start-query --profile acme-dev \
 aws logs start-query --profile acme-dev \
   --log-group-names \
     /aws/lambda/acme-api-service-dev \
-    /aws/lambda/acme-coach-service-dev \
+    /aws/lambda/acme-staff-service-dev \
     /aws/lambda/acme-activity-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \

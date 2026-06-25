@@ -97,10 +97,10 @@ ORDER BY unique_users DESC
 LIMIT 20;
 
 -- =============================================================================
--- COACH QUERIES
+-- STAFF QUERIES
 -- =============================================================================
 
--- Coach workload and capacity
+-- Staff workload and capacity
 SELECT
     c.id,
     c.first_name,
@@ -111,25 +111,25 @@ SELECT
     COUNT(DISTINCT a.id) FILTER (
         WHERE a.status = 'scheduled' AND a.scheduled_at > CURRENT_TIMESTAMP
     ) AS upcoming_appointments
-FROM acme_models.coaches c
+FROM acme_models.staff c
 LEFT JOIN acme_models.users u
-    ON c.id = u.coach_id AND u.status = 'active'
+    ON c.id = u.staff_id AND u.status = 'active'
 LEFT JOIN acme_models.appointments a
-    ON c.id = a.coach_id
+    ON c.id = a.staff_id
 WHERE c.is_active = true
 GROUP BY c.id, c.first_name, c.last_name, c.max_users
 ORDER BY available_capacity DESC;
 
--- Coach notes summary for user
+-- Staff notes summary for user
 SELECT
     n.id,
     n.note_type,
     n.content,
     n.created_at,
-    c.first_name AS coach_first_name,
-    c.last_name AS coach_last_name
+    c.first_name AS staff_first_name,
+    c.last_name AS staff_last_name
 FROM acme_models.notes n
-JOIN acme_models.coaches c ON n.coach_id = c.id
+JOIN acme_models.staff c ON n.staff_id = c.id
 WHERE n.user_id = :user_id
 ORDER BY n.created_at DESC
 LIMIT 10;
@@ -175,7 +175,7 @@ ORDER BY count DESC;
 -- APPOINTMENTS
 -- =============================================================================
 
--- Upcoming appointments for a coach
+-- Upcoming appointments for a staff member
 SELECT
     a.id,
     a.scheduled_at,
@@ -186,12 +186,12 @@ SELECT
     a.meeting_link
 FROM acme_models.appointments a
 JOIN acme_models.users u ON a.user_id = u.id
-WHERE a.coach_id = :coach_id
+WHERE a.staff_id = :staff_id
   AND a.status = 'scheduled'
   AND a.scheduled_at > CURRENT_TIMESTAMP
 ORDER BY a.scheduled_at ASC;
 
--- Appointment completion rate by coach
+-- Appointment completion rate by staff member
 SELECT
     c.first_name,
     c.last_name,
@@ -203,7 +203,7 @@ SELECT
         1
     ) AS completion_rate
 FROM acme_models.appointments a
-JOIN acme_models.coaches c ON a.coach_id = c.id
+JOIN acme_models.staff c ON a.staff_id = c.id
 WHERE a.scheduled_at > CURRENT_DATE - INTERVAL '90 days'
 GROUP BY c.id, c.first_name, c.last_name
 ORDER BY completion_rate DESC;

@@ -103,7 +103,7 @@ aws logs tail --profile acme-dev \
   --since 1h --filter-pattern "ERROR"
 
 # Tail multiple log groups (use separate terminals)
-aws logs tail --profile acme-dev /aws/lambda/acme-coach-service-dev --since 30m &
+aws logs tail --profile acme-dev /aws/lambda/acme-staff-service-dev --since 30m &
 aws logs tail --profile acme-dev /aws/lambda/acme-api-service-dev --since 30m &
 ```
 
