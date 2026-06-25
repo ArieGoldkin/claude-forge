@@ -6,7 +6,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # Step 1: auto-bump any plugin whose source changed but version matches main
-bash "$REPO_ROOT/plugins/scripts/auto-bump-version.sh"
+bash "$REPO_ROOT/scripts/auto-bump-version.sh"
 
 # Step 2: validate all version references are consistent
-exec bash "$REPO_ROOT/plugins/scripts/validate-versions.sh"
+exec bash "$REPO_ROOT/scripts/validate-versions.sh"

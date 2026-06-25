@@ -15,8 +15,8 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BUMP_SCRIPT="$REPO_ROOT/plugins/scripts/bump-version.sh"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUMP_SCRIPT="$REPO_ROOT/scripts/bump-version.sh"
 BASE_BRANCH="${BASE_BRANCH:-main}"
 
 # Staged files in this commit

@@ -11,7 +11,7 @@ set -euo pipefail
 
 PLUGIN="${1:-}"
 VERSION="${2:-}"
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CACHE_BASE="$HOME/.claude/plugins/cache/claude-forge"
 INSTALLED_PLUGINS="$HOME/.claude/plugins/installed_plugins.json"
 
