@@ -1,4 +1,4 @@
-# Skills Security Audit — claude-dev-kit 5-Plugin Suite
+# Skills Security Audit — claude-forge 5-Plugin Suite
 
 **Date**: 2026-06-19
 **Scope**: ctk, dtk, atk, ftk, etk + shared/hooks-infra

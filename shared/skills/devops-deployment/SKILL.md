@@ -142,7 +142,7 @@ When running Claude Code in CI pipelines or Docker containers, use `CLAUDE_CODE_
 
 **Single plugin directory:**
 ```bash
-CLAUDE_CODE_PLUGIN_SEED_DIR="/opt/claude-dev-kit/my-plugin"
+CLAUDE_CODE_PLUGIN_SEED_DIR="/opt/claude-forge/my-plugin"
 ```
 
 **Multiple plugin directories** (v2.1.79+, colon-separated on Unix):
@@ -153,11 +153,11 @@ CLAUDE_CODE_PLUGIN_SEED_DIR="/opt/plugins/ctk:/opt/plugins/dtk:/opt/plugins/wtk"
 **Dockerfile example:**
 ```dockerfile
 # Copy plugin sources into the image
-COPY plugins/continuity-toolkit /opt/claude-dev-kit/continuity-toolkit
-COPY plugins/devops-toolkit /opt/claude-dev-kit/devops-toolkit
+COPY plugins/continuity-toolkit /opt/claude-forge/continuity-toolkit
+COPY plugins/devops-toolkit /opt/claude-forge/devops-toolkit
 
 # Set seed dir so plugins are available without install
-ENV CLAUDE_CODE_PLUGIN_SEED_DIR="/opt/claude-dev-kit/ctk:/opt/claude-dev-kit/devops-toolkit"
+ENV CLAUDE_CODE_PLUGIN_SEED_DIR="/opt/claude-forge/ctk:/opt/claude-forge/devops-toolkit"
 ```
 
 **GitLab CI example:**

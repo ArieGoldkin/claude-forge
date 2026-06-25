@@ -2,6 +2,11 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.6.11] - 2026-06-25 — rebrand to Claude Forge
+
+Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs and the `session-loader` window-title example; dist rebuilt. No behavior change beyond the rename. Re-add the marketplace and reinstall as `ctk@claude-forge`.
+
+
 ## [2.6.10] - 2026-06-24 — strip company-specific domain reference from HIPAA hook
 
 Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.

@@ -2,6 +2,11 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.8] - 2026-06-25 — rebrand to Claude Forge
+
+Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs, the `continuity-recommendation` hook's install hint (`/plugin install ctk@claude-forge`), schema `$id` URLs, and install commands; dist rebuilt. Re-add the marketplace and reinstall as `dtk@claude-forge`.
+
+
 ## [2.0.7] - 2026-06-24 — genericize company-specific domain references
 
 Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.

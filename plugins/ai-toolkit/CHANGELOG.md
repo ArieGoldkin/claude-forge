@@ -2,6 +2,11 @@
 
 All notable changes to the ai-toolkit (`atk`) plugin will be documented in this file.
 
+## [2.0.6] - 2026-06-25 — rebrand to Claude Forge
+
+Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs, the `continuity-recommendation` hook's install hint (`/plugin install ctk@claude-forge`), and install commands; dist rebuilt. Re-add the marketplace and reinstall as `atk@claude-forge`.
+
+
 ## [2.0.5] - 2026-06-24 — genericize company-specific domain references
 
 Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.

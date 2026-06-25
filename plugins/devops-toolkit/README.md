@@ -1,6 +1,6 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
-> **Formerly named `devops-toolkit`.** Renamed to `dtk` in v2.0.0 to shorten slash-command prefixes (e.g. `/devops-toolkit:aws-cli-toolkit` → `/dtk:aws-cli-toolkit`). The source directory remains `plugins/devops-toolkit/` for repo readability. Existing installations must uninstall `devops-toolkit@claude-dev-kit` and reinstall as `dtk@claude-dev-kit`.
+> **Formerly named `devops-toolkit`.** Renamed to `dtk` in v2.0.0 to shorten slash-command prefixes (e.g. `/devops-toolkit:aws-cli-toolkit` → `/dtk:aws-cli-toolkit`). The source directory remains `plugins/devops-toolkit/` for repo readability. Existing installations must uninstall `devops-toolkit@claude-forge` and reinstall as `dtk@claude-forge`.
 
 Claude Code plugin for DevOps, infrastructure, and backend development. Provides 18 specialized skills, 2 agents, 13 commands, and 1 hook (repo-access-guard) for secure, efficient development workflows.
 
@@ -14,10 +14,10 @@ Claude Code plugin for DevOps, infrastructure, and backend development. Provides
 
 ```bash
 # Add the marketplace
-/plugin marketplace add https://github.com/ArieGoldkin/claude-dev-kit.git
+/plugin marketplace add https://github.com/ArieGoldkin/claude-forge.git
 
 # Install the plugin (new name: dtk)
-/plugin install dtk@claude-dev-kit
+/plugin install dtk@claude-forge
 ```
 
 ### Install via git-subdir (Direct Install)
@@ -26,7 +26,7 @@ Install directly from the monorepo without adding a marketplace:
 
 ```bash
 /plugin install --source git-subdir \
-  --url https://github.com/ArieGoldkin/claude-dev-kit.git \
+  --url https://github.com/ArieGoldkin/claude-forge.git \
   --path plugins/devops-toolkit
 ```
 
@@ -34,10 +34,10 @@ Install directly from the monorepo without adding a marketplace:
 
 ```bash
 # Clone the monorepo
-git clone git@github.com:ArieGoldkin/claude-dev-kit.git
+git clone git@github.com:ArieGoldkin/claude-forge.git
 
 # Use with Claude Code
-claude --plugin-dir ./claude-dev-kit/plugins/devops-toolkit
+claude --plugin-dir ./claude-forge/plugins/devops-toolkit
 ```
 
 > **Tip**: Use `/reload-plugins` to hot-reload plugin changes without restarting Claude Code.
@@ -49,15 +49,15 @@ Add to your project's `.claude/settings.json`:
 ```json
 {
   "extraKnownMarketplaces": {
-    "claude-dev-kit": {
+    "claude-forge": {
       "source": {
         "source": "url",
-        "url": "https://github.com/ArieGoldkin/claude-dev-kit.git"
+        "url": "https://github.com/ArieGoldkin/claude-forge.git"
       }
     }
   },
   "enabledPlugins": {
-    "dtk@claude-dev-kit": true
+    "dtk@claude-forge": true
   }
 }
 ```
