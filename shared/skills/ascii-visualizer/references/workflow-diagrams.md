@@ -27,7 +27,7 @@
                          |
               +----------+----------+
               |                     |
-         Admin?                 Member?
+         Admin?                   User?
               |                     |
               v                     v
      +--------+--------+  +--------+--------+
@@ -106,7 +106,7 @@
 ```
   Client          API Gateway        Lambda           Database
     |                  |                |                  |
-    |  POST /member    |                |                  |
+    |  POST /user      |                |                  |
     |----------------->|                |                  |
     |                  | invoke         |                  |
     |                  |--------------->|                  |

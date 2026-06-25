@@ -2,6 +2,15 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.5] - 2026-06-24 — genericize company-specific domain references
+
+Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.
+
+### Changed
+
+- **`explainer-video`**: re-themed the worked examples — member-lifecycle FSM → subscription-lifecycle (asset file renamed) and the event-lambda architecture genericized.
+- **`agentation` + `ai-ui-generation`**: genericized the examples to drop company framing.
+
 ## [2.3.4] - 2026-06-19 — security: trust-boundary notes; MCP dep audit + SDK pin
 
 Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).

@@ -17,7 +17,7 @@
 ### Export Data
 ```bash
 # Export table to CSV
-python scripts/query_builder.py --table member --export-csv member.csv
+python scripts/query_builder.py --table user --export-csv user.csv
 
 # Export with filters
 python scripts/query_builder.py --table events \
@@ -29,15 +29,15 @@ python scripts/query_builder.py --table events \
 ```bash
 # Find orphaned records
 python scripts/query_builder.py --query "
-  SELECT * FROM member_activities ma
-  LEFT JOIN member m ON ma.member_id = m.id
-  WHERE m.id IS NULL
+  SELECT * FROM user_activities ua
+  LEFT JOIN users u ON ua.user_id = u.id
+  WHERE u.id IS NULL
 "
 
 # Check for duplicates
 python scripts/query_builder.py --query "
   SELECT email, COUNT(*)
-  FROM member
+  FROM users
   GROUP BY email
   HAVING COUNT(*) > 1
 "
@@ -64,7 +64,7 @@ python scripts/performance_analyzer.py --suggest-indexes
 **"AccessDeniedException" from Secrets Manager:**
 - Ensure `AWS_PROFILE=acme-dev` is set
 - Run `aws sso login --profile acme-dev`
-- Verify secret ARN matches account (238141764839)
+- Verify secret ARN matches account (123456789012)
 
 **"Database does not exist":**
 - Check `DB_NAME` matches actual database (typically "main", not "arie_dev")

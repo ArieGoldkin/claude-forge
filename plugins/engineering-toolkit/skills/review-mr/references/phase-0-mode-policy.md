@@ -133,8 +133,8 @@ LINT_FRONTEND=$(echo "$POLICY" | jq -r '.commands.lint_frontend // "mise run bio
 LINT_BACKEND=$(echo "$POLICY" | jq -r '.commands.lint_backend // "mise run ruff-check"')
 TEST_FRONTEND=$(echo "$POLICY" | jq -r '.commands.test_frontend // "mise run test-frontend"')
 SECRET_SCAN=$(echo "$POLICY" | jq -r '.commands.secret_scan // "mise run secret-detection"')
-TYPECHECK_MEMBER=$(echo "$POLICY" | jq -r '.commands.typecheck_member // "cd frontend/member && npm run build"')
-TYPECHECK_COACH=$(echo "$POLICY" | jq -r '.commands.typecheck_coach // "cd frontend/coach && npm run build"')
+TYPECHECK_WEB=$(echo "$POLICY" | jq -r '.commands.typecheck_web // "cd frontend/web && npm run build"')
+TYPECHECK_ADMIN=$(echo "$POLICY" | jq -r '.commands.typecheck_admin // "cd frontend/admin && npm run build"')
 ```
 
 ## Dry Run Mode
@@ -152,7 +152,7 @@ if [[ "$ARGUMENTS" == *"--dry-run"* ]]; then
   echo "  - Secret scan: $SECRET_SCAN"
   echo "  - Backend lint: $LINT_BACKEND"
   echo "  - Frontend lint: $LINT_FRONTEND"
-  echo "  - Type check: $TYPECHECK_MEMBER / $TYPECHECK_COACH"
+  echo "  - Type check: $TYPECHECK_WEB / $TYPECHECK_ADMIN"
   echo "  - Frontend tests: $TEST_FRONTEND"
   echo ""
   echo "VCS commands:"

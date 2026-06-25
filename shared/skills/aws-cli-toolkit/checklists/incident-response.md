@@ -45,7 +45,7 @@ aws sso login --profile acme-dev
 
 # Check Lambda status
 aws lambda get-function --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "Configuration.[State,LastUpdateStatus,LastModified]"
 
 # Check RDS status
@@ -55,7 +55,7 @@ aws rds describe-db-instances --profile acme-dev \
 
 # Check for recent deployments
 aws lambda list-versions-by-function --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "Versions[-3:].[Version,LastModified]" \
   --output table
 ```
@@ -67,7 +67,7 @@ aws lambda list-versions-by-function --profile acme-dev \
 ```bash
 # Real-time error log tail
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 30m --filter-pattern "ERROR" --follow
 ```
 
@@ -76,7 +76,7 @@ aws logs tail --profile acme-dev \
 ```bash
 # Find error messages
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -96,7 +96,7 @@ aws logs get-query-results --profile acme-dev \
 ```bash
 # Find logs for a specific request ID
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -113,7 +113,7 @@ aws logs start-query --profile acme-dev \
 ```bash
 # Check for slow executions
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -126,7 +126,7 @@ aws logs start-query --profile acme-dev \
 
 # Check function timeout setting
 aws lambda get-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "[Timeout,MemorySize]"
 ```
 
@@ -137,7 +137,7 @@ aws lambda get-function-configuration --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Throttles \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 60 --statistics Sum
@@ -146,7 +146,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name ConcurrentExecutions \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 60 --statistics Maximum
@@ -188,9 +188,9 @@ aws secretsmanager describe-secret --profile acme-dev \
 
 # Check Lambda role permissions
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names secretsmanager:GetSecretValue \
-  --resource-arns "arn:aws:secretsmanager:us-east-1:238141764839:secret:acme/dev/database*"
+  --resource-arns "arn:aws:secretsmanager:us-east-1:123456789012:secret:acme/dev/database*"
 ```
 
 ### Memory Exhaustion
@@ -198,7 +198,7 @@ aws iam simulate-principal-policy --profile acme-dev \
 ```bash
 # Check memory usage
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -208,7 +208,7 @@ aws logs start-query --profile acme-dev \
 
 # Compare with allocated memory
 aws lambda get-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "MemorySize"
 ```
 
@@ -219,17 +219,17 @@ aws lambda get-function-configuration --profile acme-dev \
 ```bash
 # Increase function timeout
 aws lambda update-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --timeout 60
 
 # Increase memory (also increases CPU)
 aws lambda update-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --memory-size 1024
 
 # Increase reserved concurrency
 aws lambda put-function-concurrency --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --reserved-concurrent-executions 200
 ```
 
@@ -238,15 +238,15 @@ aws lambda put-function-concurrency --profile acme-dev \
 ```bash
 # If recent deployment caused issues, rollback alias
 aws lambda update-alias --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --name live \
   --function-version PREVIOUS_VERSION
 
 # Or redeploy previous code
 aws lambda update-function-code --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --s3-bucket acme-deployments-dev \
-  --s3-key functions/member-service/function-previous.zip
+  --s3-key functions/api-service/function-previous.zip
 ```
 
 ## CloudWatch Alarms Status
@@ -295,7 +295,7 @@ aws cloudwatch describe-alarms --profile acme-dev \
 ```bash
 # Export relevant logs
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time INCIDENT_START_TIME \
   --end-time INCIDENT_END_TIME \
   --query-string '

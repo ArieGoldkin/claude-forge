@@ -40,15 +40,15 @@ If it's a style preference or a per-feature rule, it probably belongs in a linte
 ## Worked example (delete before sharing, or keep as a guide)
 
 ```markdown
-### [CANDIDATE] Privacy: Member-scoped queries filter by member_id
+### [CANDIDATE] Privacy: User-scoped queries filter by user_id
 
-Every DB query touching member-scoped tables MUST filter by `member_id` (or the
-auth subject). Cross-member reads/writes are forbidden.
+Every DB query touching user-scoped tables MUST filter by `user_id` (or the
+auth subject). Cross-user reads/writes are forbidden.
 
-- **Violation:** cross-member data leak; HIPAA breach.
+- **Violation:** cross-user data leak; HIPAA breach.
 - **Proposed enforcement:** [Code] + [Hook/Grep]
 - **Proposed evidence:** I think the canonical pattern is in the lifecycle handler
-  (`Member.id == member_id`) — exact file:line [UNVERIFIED], please confirm.
+  (`User.id == user_id`) — exact file:line [UNVERIFIED], please confirm.
 - **3-question self-check:** pass — concrete failure, deploy-blocker, project-wide.
 - **Contributor:** AG · 2026-06-08
 ```

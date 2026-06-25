@@ -50,7 +50,7 @@ When multiple agents report the same `File:Line`:
 - **Type**: issue [blocking]
 - **Confidence**: 95
 - **Blocking**: yes
-- **File:Line**: lambdas/member/activity/handler.py:47
+- **File:Line**: lambdas/users/activity/handler.py:47
 - **Evidence**: `grep -n "    engine = get_db_engine"` confirms engine creation inside handler body
 
 Engine creation inside lambda_handler causes ~200ms cold-start penalty per invocation.
@@ -63,7 +63,7 @@ Move `engine = get_db_engine()` to module level.
 - **Type**: security [blocking]
 - **Confidence**: 80
 - **Blocking**: yes
-- **File:Line**: lambdas/member/profile/handler.py:23
+- **File:Line**: lambdas/users/profile/handler.py:23
 - **Evidence**: Code reads `event["requestContext"]["authorizer"]["claims"]["sub"]` directly
 
 Must use `get_username_from_event()` instead of raw claims access.
@@ -76,7 +76,7 @@ Direct claims access bypasses username validation and normalization.
 - **Type**: suggestion
 - **Confidence**: 60
 - **Blocking**: no
-- **File:Line**: frontend/member/src/features/dashboard/ActivityList.tsx:89
+- **File:Line**: frontend/web/src/features/dashboard/ActivityList.tsx:89
 - **Evidence**: Visual inspection — list renders without visible pagination
 
 Consider adding pagination if the activity list can grow beyond ~50 items.

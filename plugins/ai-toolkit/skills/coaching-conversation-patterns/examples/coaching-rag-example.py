@@ -1,8 +1,10 @@
 """
-Example: AI Health Coaching with RAG Context
+Example: AI Coaching with RAG Context
 
 This example demonstrates a complete coaching conversation flow
 with RAG-based context retrieval, safety checks, and quality evaluation.
+It uses a fitness scenario for concreteness, but the same flow applies to
+any coaching domain (study habits, career, customer onboarding, etc.).
 """
 
 from datetime import datetime
@@ -12,8 +14,8 @@ from anthropic import Anthropic
 
 # --- Models ---
 
-class MemberProfile(BaseModel):
-    member_id: str
+class UserProfile(BaseModel):
+    user_id: str
     first_name: str
     primary_goals: list[str]
     why_statement: str | None
@@ -21,7 +23,7 @@ class MemberProfile(BaseModel):
 
 
 class ConversationTurn(BaseModel):
-    role: str  # "member" or "coach"
+    role: str  # "user" or "coach"
     content: str
     timestamp: datetime
 
@@ -77,19 +79,19 @@ def detect_medical_request(message: str) -> bool:
 # --- RAG Context Retrieval ---
 
 async def get_coaching_context(
-    member_id: str,
+    user_id: str,
     message: str,
     vector_db,  # Your vector database client
 ) -> dict:
     """Retrieve relevant context for personalized coaching."""
 
-    # 1. Get member profile from database
-    profile = await get_member_profile(member_id)
+    # 1. Get user profile from database
+    profile = await get_user_profile(user_id)
 
     # 2. Search past conversations (semantic search)
     past_conversations = await vector_db.search(
         query=message,
-        filter={"member_id": member_id, "type": "conversation"},
+        filter={"user_id": user_id, "type": "conversation"},
         top_k=3
     )
 
@@ -101,7 +103,7 @@ async def get_coaching_context(
     )
 
     # 4. Get recent progress on goals
-    goal_progress = await get_goal_progress(member_id)
+    goal_progress = await get_goal_progress(user_id)
 
     return {
         "profile": profile,
@@ -111,11 +113,11 @@ async def get_coaching_context(
     }
 
 
-async def get_member_profile(member_id: str) -> MemberProfile:
-    """Fetch member profile from database."""
+async def get_user_profile(user_id: str) -> UserProfile:
+    """Fetch user profile from database."""
     # Replace with actual database call
-    return MemberProfile(
-        member_id=member_id,
+    return UserProfile(
+        user_id=user_id,
         first_name="Sarah",
         primary_goals=["Walk 10,000 steps daily", "Reduce stress"],
         why_statement="I want to have more energy for my kids",
@@ -123,7 +125,7 @@ async def get_member_profile(member_id: str) -> MemberProfile:
     )
 
 
-async def get_goal_progress(member_id: str) -> dict:
+async def get_goal_progress(user_id: str) -> dict:
     """Fetch recent goal progress."""
     # Replace with actual database call
     return {
@@ -137,17 +139,17 @@ async def get_goal_progress(member_id: str) -> dict:
 # --- Response Generation ---
 
 COACHING_SYSTEM_PROMPT = """
-You are a supportive health coach. Your role is to help members achieve their
-health and health goals through empathetic, evidence-based coaching conversations.
+You are a supportive coach. Your role is to help users achieve their
+goals through empathetic, evidence-based coaching conversations.
 
 Core principles:
 1. Lead with empathy - always acknowledge feelings first
-2. Empower, don't prescribe - help members find their own solutions
-3. Stay in your lane - never provide medical advice
+2. Empower, don't prescribe - help users find their own solutions
+3. Stay in your lane - never give advice outside your scope (e.g. medical, legal, financial)
 4. Safety first - take crisis mentions seriously
 
-Member context:
-{member_context}
+User context:
+{user_context}
 
 Recent conversation:
 {recent_turns}
@@ -158,14 +160,14 @@ Respond with warmth, curiosity, and support. Keep responses concise (2-3 paragra
 
 async def generate_coaching_response(
     client: Anthropic,
-    member_message: str,
+    user_message: str,
     context: dict,
     recent_turns: list[ConversationTurn]
 ) -> str:
     """Generate coaching response with context."""
 
-    # Format member context
-    member_context = f"""
+    # Format user context
+    user_context = f"""
 Name: {context['profile'].first_name}
 Goals: {', '.join(context['profile'].primary_goals)}
 Why: {context['profile'].why_statement}
@@ -184,11 +186,11 @@ Trend: {context['goal_progress']['trend']}
         model="claude-sonnet-4-20250514",
         max_tokens=500,
         system=COACHING_SYSTEM_PROMPT.format(
-            member_context=member_context,
+            user_context=user_context,
             recent_turns=turns_text
         ),
         messages=[
-            {"role": "user", "content": member_message}
+            {"role": "user", "content": user_message}
         ]
     )
 
@@ -200,7 +202,7 @@ Trend: {context['goal_progress']['trend']}
 EMPATHY_EVAL_PROMPT = """
 Rate this coaching response for empathy (1-10).
 
-Member message: {member_message}
+User message: {user_message}
 Coach response: {coach_response}
 
 Criteria:
@@ -215,7 +217,7 @@ Return JSON: {{"score": <int>, "reasoning": "<str>"}}
 
 async def evaluate_response(
     client: Anthropic,
-    member_message: str,
+    user_message: str,
     coach_response: str
 ) -> QualityEvaluation:
     """Evaluate coaching response quality."""
@@ -226,7 +228,7 @@ async def evaluate_response(
         messages=[{
             "role": "user",
             "content": EMPATHY_EVAL_PROMPT.format(
-                member_message=member_message,
+                user_message=user_message,
                 coach_response=coach_response
             )
         }]
@@ -247,7 +249,7 @@ async def evaluate_response(
 # --- Main Coaching Flow ---
 
 async def handle_coaching_message(
-    member_id: str,
+    user_id: str,
     message: str,
     recent_turns: list[ConversationTurn],
     client: Anthropic,
@@ -296,7 +298,7 @@ I've notified your coach, who will reach out soon. You're not alone.""",
 
 Questions about medications are really important to get right - your doctor or pharmacist would be the best person to ask.
 
-What I can help with is supporting your overall health journey. Is there something in that area I can help you think through?""",
+What I can help with is supporting your overall journey. Is there something in that area I can help you think through?""",
             tone="supportive",
             safety_check=SafetyCheck(
                 passed=True,
@@ -313,7 +315,7 @@ What I can help with is supporting your overall health journey. Is there somethi
         )
 
     # 3. Retrieve context
-    context = await get_coaching_context(member_id, message, vector_db)
+    context = await get_coaching_context(user_id, message, vector_db)
 
     # 4. Generate response
     response_text = await generate_coaching_response(
@@ -370,7 +372,7 @@ async def main():
             timestamp=datetime.now()
         ),
         ConversationTurn(
-            role="member",
+            role="user",
             content="Not great honestly. I only walked twice this week.",
             timestamp=datetime.now()
         )
@@ -378,8 +380,8 @@ async def main():
 
     # Handle new message
     response = await handle_coaching_message(
-        member_id="mem_123",
-        message="I feel like I'm failing at this whole health thing.",
+        user_id="usr_123",
+        message="I feel like I'm failing at this whole thing.",
         recent_turns=recent_turns,
         client=client,
         vector_db=vector_db

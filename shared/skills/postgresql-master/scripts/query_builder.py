@@ -5,9 +5,9 @@ PostgreSQL Query Builder
 Build and execute safe, parameterized queries with export capabilities.
 
 Usage:
-    source .env.db && python query_builder.py --table member --limit 10
-    source .env.db && python query_builder.py --table member --where "created_at > '2025-01-01'" --limit 10
-    source .env.db && python query_builder.py --query "SELECT * FROM member WHERE email = :email" --params '{"email": "user@example.com"}'
+    source .env.db && python query_builder.py --table user --limit 10
+    source .env.db && python query_builder.py --table user --where "created_at > '2025-01-01'" --limit 10
+    source .env.db && python query_builder.py --query "SELECT * FROM users WHERE email = :email" --params '{"email": "user@example.com"}'
     source .env.db && python query_builder.py --table events --where "event_type = 'login'" --export-csv events.csv
 """
 
@@ -45,7 +45,7 @@ def get_connection():
 
 def build_select_query(
     table: str,
-    schema: str = "acme_operational",
+    schema: str = "acme_models",
     where: str = None,
     columns: str = "*",
     limit: int = None,
@@ -190,8 +190,8 @@ def main():
     parser.add_argument(
         "--schema",
         type=str,
-        default="acme_operational",
-        help="Schema name (default: acme_operational)"
+        default="acme_models",
+        help="Schema name (default: acme_models)"
     )
     parser.add_argument(
         "--params",

@@ -101,7 +101,7 @@ Based on observations, form a concrete hypothesis about the root cause. Write it
 
 Before proceeding to Step 3 (ACT), follow the shared loader at `skills/code-review-playbook/references/load-business-invariants.md` with `mode: planning`. The loader handles file present / missing / sparse / user-skipped cases including the create-or-skip prompt.
 
-If `status: loaded`: ask "does this hypothesis's *fix shape* (not just the diagnosis) risk violating any rule?" For example, a hypothesis that says "we need to query coach data without filtering by member_id" would touch invariant **I.1** (tenant isolation). Surface any matches as a one-liner before ACT:
+If `status: loaded`: ask "does this hypothesis's *fix shape* (not just the diagnosis) risk violating any rule?" For example, a hypothesis that says "we need to query records without filtering by tenant_id" would touch invariant **I.1** (tenant isolation). Surface any matches as a one-liner before ACT:
 
 > "Hypothesis touches **I.X** ([rule]). Verify the planned action preserves the rule before proceeding to ACT."
 

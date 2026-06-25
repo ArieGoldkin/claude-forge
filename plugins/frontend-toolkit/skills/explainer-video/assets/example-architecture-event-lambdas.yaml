@@ -12,16 +12,16 @@ fps: 30
 
 services:
   # === Ingress (left, x=120) ===
-  - id: api_gateway_member
-    label: "API Gateway (member)"
+  - id: api_gateway_web
+    label: "API Gateway (web)"
     role: ingress
     position: { x: 120, y: 280 }
-  - id: api_gateway_coach
-    label: "API Gateway (coach)"
+  - id: api_gateway_admin
+    label: "API Gateway (admin)"
     role: ingress
     position: { x: 120, y: 540 }
-  - id: api_gateway_sf
-    label: "API Gateway (Salesforce)"
+  - id: api_gateway_crm
+    label: "API Gateway (CRM)"
     role: ingress
     position: { x: 120, y: 800 }
 
@@ -38,8 +38,8 @@ services:
     label: "case-creator"
     role: lambda
     position: { x: 560, y: 560 }
-  - id: sparks_engine
-    label: "sparks-engine"
+  - id: scoring_engine
+    label: "scoring-engine"
     role: lambda
     position: { x: 560, y: 740 }
 
@@ -62,7 +62,7 @@ services:
     label: "Cognito (3 pools)"
     role: external
     position: { x: 1500, y: 200 }
-  - id: salesforce
+  - id: crm
     label: "Salesforce CRM"
     role: external
     position: { x: 1500, y: 400 }
@@ -77,26 +77,26 @@ services:
 
 connections:
   # Ingress → core
-  - { from: api_gateway_member, to: lifecycle_handler, type: sync, label: "POST /lifecycle" }
-  - { from: api_gateway_member, to: case_creator, type: sync, label: "POST /case" }
-  - { from: api_gateway_coach, to: case_creator, type: sync }
-  - { from: api_gateway_sf, to: carrier_events, type: sync, label: "carrier webhook" }
+  - { from: api_gateway_web, to: lifecycle_handler, type: sync, label: "POST /lifecycle" }
+  - { from: api_gateway_web, to: case_creator, type: sync, label: "POST /case" }
+  - { from: api_gateway_admin, to: case_creator, type: sync }
+  - { from: api_gateway_crm, to: carrier_events, type: sync, label: "carrier webhook" }
 
   # Core → queues
   - { from: lifecycle_handler, to: lifecycle_topic, type: event, label: "lifecycle changed" }
   - { from: carrier_events, to: lifecycle_topic, type: event }
-  - { from: carrier_events, to: sf_sync_queue, type: async, label: "needs SF sync" }
-  - { from: lifecycle_handler, to: sparks_engine, type: async }
+  - { from: carrier_events, to: sf_sync_queue, type: async, label: "needs CRM sync" }
+  - { from: lifecycle_handler, to: scoring_engine, type: async }
 
   # Queues fan out
   - { from: lifecycle_topic, to: cognito, type: event, label: "disable on cancelled" }
-  - { from: sf_sync_queue, to: salesforce, type: async }
+  - { from: sf_sync_queue, to: crm, type: async }
 
   # All core handlers persist to RDS
   - { from: lifecycle_handler, to: rds, type: sync }
   - { from: case_creator, to: rds, type: sync }
   - { from: carrier_events, to: rds, type: sync }
-  - { from: sparks_engine, to: rds, type: sync, label: "audit: append-only" }
+  - { from: scoring_engine, to: rds, type: sync, label: "audit: append-only" }
 
   # Observability fan-in
   - { from: lifecycle_handler, to: cloudwatch, type: async, label: "logs + metrics" }
@@ -106,18 +106,18 @@ connections:
 
 reveal_order:
   # Stage 0: gateways (0s-6s)
-  - [api_gateway_member, api_gateway_coach, api_gateway_sf]
+  - [api_gateway_web, api_gateway_admin, api_gateway_crm]
   # Stage 1: core handlers (6s-15s)
-  - [lifecycle_handler, carrier_events, case_creator, sparks_engine]
+  - [lifecycle_handler, carrier_events, case_creator, scoring_engine]
   # Stage 2: queues (15s-24s)
   - [lifecycle_topic, sf_sync_queue, events_kinesis]
   # Stage 3: integrations + DB (24s-36s)
-  - [cognito, salesforce, rds, cloudwatch]
+  - [cognito, crm, rds, cloudwatch]
   # Stage 4: connections animate in groups (36s-75s)
 
 narration:
-  - { segment: "The platform exposes three API gateways — one each for members, coaches, and Salesforce.", start_seconds: 0 }
-  - { segment: "Behind them sit the core Lambda handlers: lifecycle, carrier events, case creator, and the Sparks engine.", start_seconds: 7 }
+  - { segment: "The platform exposes three API gateways — one each for the web app, the admin console, and the CRM.", start_seconds: 0 }
+  - { segment: "Behind them sit the core Lambda handlers: lifecycle, carrier events, case creator, and the scoring engine.", start_seconds: 7 }
   - { segment: "Handlers don't call each other directly. They publish to SNS topics and SQS FIFO queues.", start_seconds: 16 }
-  - { segment: "Cognito holds three separate user pools — one per audience. Salesforce is the system of record for case data. RDS holds member data including the append-only audit trail.", start_seconds: 25 }
-  - { segment: "Now watch the data flow: a member request enters via API Gateway, the lifecycle handler updates state, an event publishes to SNS, downstream subscribers fan out to Cognito, Salesforce, and the audit log.", start_seconds: 36 }
+  - { segment: "An identity provider holds separate user pools per audience. The CRM is the system of record for case data. RDS holds application data including the append-only audit trail.", start_seconds: 25 }
+  - { segment: "Now watch the data flow: a request enters via API Gateway, the lifecycle handler updates state, an event publishes to SNS, downstream subscribers fan out to the identity provider, the CRM, and the audit log.", start_seconds: 36 }

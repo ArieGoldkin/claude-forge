@@ -118,7 +118,6 @@ const CONTEXT_RULES: readonly ContextRule[] = [
       /\bhealth score\b/i,
       /\bfall risk\b/i,
       /\bcare plan\b/i,
-      /\bhealth coach/i,
       /\bhealth program\b/i,
     ],
     context:

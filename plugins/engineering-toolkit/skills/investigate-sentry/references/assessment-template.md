@@ -100,6 +100,6 @@ Apply these to ALL output in the assessment:
 - **User IDs**: Show only last 12 characters (e.g., `a3b62fcd88b4`), never full IDs
 - **No emails or names**: Strip from Sentry user objects
 - **No IP addresses**: Strip from event context
-- **No request/response bodies**: May contain PHI (assessment scores, care plans, health data)
+- **No request/response bodies**: May contain PHI or other sensitive user data
 - **No breadcrumb payloads**: Summarize breadcrumb types and timing, not content
 - **Release hashes**: First 8 characters only (sufficient for identification)

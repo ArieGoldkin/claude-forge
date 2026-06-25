@@ -8,17 +8,17 @@
 
 # Real-time log tail
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 30m --follow
 
 # Tail with error filter
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "ERROR"
 
 # Tail with request ID filter
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "REQUEST_ID_HERE"
 
 # ==============================================================================
@@ -27,7 +27,7 @@ aws logs tail --profile acme-dev \
 
 # Recent errors (last hour)
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -39,7 +39,7 @@ aws logs start-query --profile acme-dev \
 
 # Error count by type
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -52,7 +52,7 @@ aws logs start-query --profile acme-dev \
 
 # Errors with stack traces
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -68,7 +68,7 @@ aws logs start-query --profile acme-dev \
 
 # Lambda execution stats
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -82,7 +82,7 @@ aws logs start-query --profile acme-dev \
 
 # Cold start analysis
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -95,7 +95,7 @@ aws logs start-query --profile acme-dev \
 
 # Memory usage analysis
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -107,7 +107,7 @@ aws logs start-query --profile acme-dev \
 
 # Slow requests (> 5 seconds)
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -124,7 +124,7 @@ aws logs start-query --profile acme-dev \
 
 # Find all logs for a request ID
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -133,14 +133,14 @@ aws logs start-query --profile acme-dev \
     | sort @timestamp asc
   '
 
-# Find logs by member ID (Powertools structured logging)
+# Find logs by user ID (Powertools structured logging)
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
-    fields @timestamp, level, message, member_id
-    | filter member_id = "MEMBER_ID_HERE"
+    fields @timestamp, level, message, user_id
+    | filter user_id = "USER_ID_HERE"
     | sort @timestamp desc
   '
 
@@ -150,7 +150,7 @@ aws logs start-query --profile acme-dev \
 
 # Invocations per hour
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -161,7 +161,7 @@ aws logs start-query --profile acme-dev \
 
 # Error rate by hour
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -180,8 +180,8 @@ aws logs start-query --profile acme-dev \
 # Query across all acme services
 aws logs start-query --profile acme-dev \
   --log-group-names \
-    /aws/lambda/acme-member-service-dev \
-    /aws/lambda/acme-coach-service-dev \
+    /aws/lambda/acme-api-service-dev \
+    /aws/lambda/acme-staff-service-dev \
     /aws/lambda/acme-activity-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
@@ -202,7 +202,7 @@ aws logs get-query-results --profile acme-dev \
 
 # Check query status
 aws logs describe-queries --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --status Running
 
 # Cancel running query
@@ -217,7 +217,7 @@ aws logs stop-query --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Invocations \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
@@ -227,7 +227,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Duration \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \

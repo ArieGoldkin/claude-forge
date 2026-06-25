@@ -27,13 +27,13 @@ $LINT_BACKEND
 $LINT_FRONTEND
 # Capture: BIOME_EXIT_CODE=$?
 
-# TypeScript type checking (member app)
-$TYPECHECK_MEMBER
-# Capture: TSC_MEMBER_EXIT_CODE=$?
+# TypeScript type checking (web app)
+$TYPECHECK_WEB
+# Capture: TSC_WEB_EXIT_CODE=$?
 
-# TypeScript type checking (coach app)
-$TYPECHECK_COACH
-# Capture: TSC_COACH_EXIT_CODE=$?
+# TypeScript type checking (admin app)
+$TYPECHECK_ADMIN
+# Capture: TSC_ADMIN_EXIT_CODE=$?
 ```
 
 ## 3d. Test Execution

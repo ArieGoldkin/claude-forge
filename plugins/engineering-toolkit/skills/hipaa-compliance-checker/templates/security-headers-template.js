@@ -71,8 +71,8 @@ const hipaaSecurityHeaders = (req, res, next) => {
   res.setHeader('Permissions-Policy', permissionsPolicy);
 
   // Cache Control for PHI
-  if (req.path.includes('/api/') || req.path.includes('/patient/') || req.path.includes('/member/')) {
-    // No caching for API endpoints or member data
+  if (req.path.includes('/api/') || req.path.includes('/patient/') || req.path.includes('/user/')) {
+    // No caching for API endpoints or user data
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -287,7 +287,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 add_header Permissions-Policy "camera=self, microphone=self, geolocation=self, payment=self, usb=none, bluetooth=none" always;
 
 # Prevent caching of sensitive endpoints
-location ~ ^/(api|patient|member)/ {
+location ~ ^/(api|patient|user)/ {
     add_header Cache-Control "no-store, no-cache, must-revalidate, private" always;
     add_header Pragma "no-cache" always;
     add_header Expires "0" always;

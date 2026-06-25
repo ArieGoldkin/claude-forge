@@ -90,7 +90,7 @@ A 60-second narrated video is ~600-900 characters of text → ~$0.02-0.05 per re
 
 Remotion's `Root.tsx` registers all `<Composition id="..." />` IDs in a single global namespace. Two compositions with the same ID — even in different folders — silently overwrite each other. The render against `<CompositionId>` will pick whichever one was registered last.
 
-**Convention**: topic-prefixed PascalCase (e.g., `ReviewMrPipeline`, `EventLambdaTopology`, `MrCreationSequence`, `MemberLifecycleFsm`). Never reuse a generic name like `MainComposition` or `Demo`.
+**Convention**: topic-prefixed PascalCase (e.g., `ReviewMrPipeline`, `EventLambdaTopology`, `MrCreationSequence`, `SubscriptionLifecycleFsm`). Never reuse a generic name like `MainComposition` or `Demo`.
 
 When adding a new composition to an existing project's `Root.tsx`, grep for the new ID first:
 

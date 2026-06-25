@@ -31,15 +31,15 @@ acme-platform/
 │   ├── src/
 │   │   ├── handlers/              # Lambda entry points
 │   │   │   ├── auth.py            # POST /auth/login, /auth/register
-│   │   │   ├── members.py         # CRUD /members
-│   │   │   └── assessments.py     # GET/POST /assessments
+│   │   │   ├── users.py           # CRUD /users
+│   │   │   └── orders.py          # GET/POST /orders
 │   │   ├── services/              # Business logic (no HTTP)
-│   │   │   ├── scoring.py         # Risk scoring engine
+│   │   │   ├── pricing.py         # Pricing engine
 │   │   │   └── notifications.py   # Email/SMS dispatch
 │   │   ├── models/                # SQLAlchemy ORM models
 │   │   │   ├── base.py            # DeclarativeBase + mixins
-│   │   │   ├── member.py          # Member + tenant isolation
-│   │   │   └── assessment.py      # Assessment + scoring data
+│   │   │   ├── user.py            # User + tenant isolation
+│   │   │   └── order.py           # Order + line items
 │   │   └── lib/                   # Shared utilities
 │   │       ├── db.py              # Connection pool + session
 │   │       └── auth.py            # JWT validation helpers
@@ -66,14 +66,14 @@ acme-api/
 │   ├── handlers/
 │   │   └── ...                    # (5 files)
 │   ├── services/
-│   │   ├── scoring.py             # <-- Focus: risk scoring
-│   │   │   ├── calculate_risk()   #     Main entry point
-│   │   │   ├── weight_factors()   #     Factor weighting
-│   │   │   └── normalize()        #     Score normalization
+│   │   ├── pricing.py             # <-- Focus: order pricing
+│   │   │   ├── calculate_total()  #     Main entry point
+│   │   │   ├── apply_discounts()  #     Discount rules
+│   │   │   └── normalize()        #     Total normalization
 │   │   └── ...                    # (3 other services)
 │   └── ...
 └── tests/
-    └── test_scoring.py            # <-- Related tests
+    └── test_pricing.py            # <-- Related tests
 ```
 
 ## 4. Monorepo

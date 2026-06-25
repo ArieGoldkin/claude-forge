@@ -2,6 +2,14 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.6.10] - 2026-06-24 — strip company-specific domain reference from HIPAA hook
+
+Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.
+
+### Changed
+
+- **Removed the `health coach` keyword from the HIPAA context-injector hook's health-domain rule** (the rest of the rule is unchanged) and rebuilt the tracked `dist/`. No behavior change beyond the dropped keyword.
+
 ## [2.6.9] - 2026-06-19 — web-research: trust boundary + internal MCP sources
 
 Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).

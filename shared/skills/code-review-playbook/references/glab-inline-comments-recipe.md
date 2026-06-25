@@ -248,8 +248,8 @@ print(f'#${N} {\"INLINE\" if ok else \"FAILED\"}: {p.get(\"new_path\")}:{p.get(\
 ```
 #1  INLINE: utils/database/operational_utils.py:89   disc=c6d9fd2d521f
 #2  INLINE: utils/database/operational_utils.py:611  disc=a7f723ef20d2
-#3  INLINE: lambdas/coach/cs-get-all-actions/main.tf:85       disc=6f137bbe60b1
-#4  INLINE: lambdas/member/action-page/main.tf:90             disc=f0500ad24673
+#3  INLINE: lambdas/admin/get-all-actions/main.tf:85         disc=6f137bbe60b1
+#4  INLINE: lambdas/users/action-page/main.tf:90             disc=f0500ad24673
 #5  INLINE: infra/vars/production-v3.tfvars:31                disc=6e69b3dde347
 #6  INLINE: utils/config/enabled_tags.py:37                   disc=358b8f719e38
 #7  INLINE: utils/database/test_tag_filter.py:36              disc=2b4fd294566e

@@ -2,6 +2,15 @@
 
 All notable changes to the ai-toolkit (`atk`) plugin will be documented in this file.
 
+## [2.0.5] - 2026-06-24 — genericize company-specific domain references
+
+Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.
+
+### Changed
+
+- **`coaching-conversation-patterns`** (skill + command): removed health/wellness-company framing from the examples (member → user, etc.).
+- **`prompt-caching`**: genericized the worked examples to drop the same company framing.
+
 ## [2.0.4] - 2026-06-19 — security: remove eval() example; RAG injection guidance
 
 Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).

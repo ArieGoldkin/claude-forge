@@ -117,4 +117,4 @@ Required on Contact object (rename fields to match your domain):
 
 ## Adopting for Your Domain
 
-Rename `External_User_ID__c`, `User_Status__c`, and `Tags__c` to match your domain's terminology (e.g., `Member_ID__c`, `Patient_ID__c`, `Customer_ID__c`). The patterns (upsert by external ID, HMAC webhook verification, Bulk API with >200 records) remain the same regardless of domain.
+Rename `External_User_ID__c`, `User_Status__c`, and `Tags__c` to match your domain's terminology (e.g., `Account_ID__c`, `Patient_ID__c`, `Customer_ID__c`). The patterns (upsert by external ID, HMAC webhook verification, Bulk API with >200 records) remain the same regardless of domain.

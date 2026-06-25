@@ -70,19 +70,19 @@ function ActivityPage() {
 ```tsx
 import { use } from 'react';
 
-function MemberProfile({ memberPromise }: { memberPromise: Promise<Member> }) {
-  const member = use(memberPromise);  // Suspends until ready
+function UserProfile({ userPromise }: { userPromise: Promise<User> }) {
+  const user = use(userPromise);  // Suspends until ready
 
-  return <div>{member.name}</div>;
+  return <div>{user.name}</div>;
 }
 
 // Parent with Suspense
 function App() {
-  const memberPromise = fetchMember(memberId);
+  const userPromise = fetchUser(userId);
 
   return (
     <Suspense fallback={<LoadingSpinner />}>
-      <MemberProfile memberPromise={memberPromise} />
+      <UserProfile userPromise={userPromise} />
     </Suspense>
   );
 }
@@ -90,14 +90,14 @@ function App() {
 
 ❌ **Bad - Old useEffect pattern**:
 ```tsx
-function MemberProfile({ memberId }: { memberId: string }) {
-  const [member, setMember] = useState<Member | null>(null);
+function UserProfile({ userId }: { userId: string }) {
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    fetchMember(memberId).then(setMember);  // Don't use useEffect for data
-  }, [memberId]);
+    fetchUser(userId).then(setUser);  // Don't use useEffect for data
+  }, [userId]);
 
-  return <div>{member?.name}</div>;
+  return <div>{user?.name}</div>;
 }
 ```
 
@@ -105,15 +105,15 @@ function MemberProfile({ memberId }: { memberId: string }) {
 
 ✅ **Good - TanStack Query with proper keys**:
 ```tsx
-function useActivities(memberId: string) {
+function useActivities(userId: string) {
   return useQuery({
-    queryKey: ['member', memberId, 'activities'],  // Hierarchical key
-    queryFn: () => fetchMemberActivities(memberId),
+    queryKey: ['user', userId, 'activities'],  // Hierarchical key
+    queryFn: () => fetchUserActivities(userId),
   });
 }
 
 function ActivityList() {
-  const { data: activities, error, isLoading } = useActivities(memberId);
+  const { data: activities, error, isLoading } = useActivities(userId);
 
   if (error) return <ErrorMessage error={error} />;
   if (isLoading) return <LoadingSpinner />;
@@ -131,7 +131,7 @@ const createActivity = useMutation({
   onSuccess: () => {
     // Invalidate specific query
     queryClient.invalidateQueries({
-      queryKey: ['member', memberId, 'activities']
+      queryKey: ['user', userId, 'activities']
     });
   },
 });
@@ -201,8 +201,8 @@ function ActivityCard({ activity }: ActivityCardProps) {
   - `activity-card` (container)
   - `activity-card-title` (element within card)
   - `activity-complete-btn` (button action)
-  - `member-profile-form` (form)
-  - `member-profile-submit-btn` (form submit)
+  - `user-profile-form` (form)
+  - `user-profile-submit-btn` (form submit)
 
 See `.claude/instructions/test-selectors.md` for complete patterns.
 
@@ -258,17 +258,17 @@ function ActivityCard({ activity }: ActivityCardProps) {
 ```tsx
 useEffect(() => {
   const interval = setInterval(() => {
-    refreshData(memberId);
+    refreshData(userId);
   }, 5000);
 
   return () => clearInterval(interval);
-}, [memberId, refreshData]);  // All dependencies listed
+}, [userId, refreshData]);  // All dependencies listed
 ```
 
 ❌ **Bad - Missing deps**:
 ```tsx
 useEffect(() => {
-  refreshData(memberId);  // memberId not in deps!
+  refreshData(userId);  // userId not in deps!
 }, []);  // Empty deps
 ```
 
@@ -280,7 +280,7 @@ useEffect(() => {
 
 ✅ **Good - Expensive calculations**:
 ```tsx
-function MemberStats({ activities }: { activities: Activity[] }) {
+function UserStats({ activities }: { activities: Activity[] }) {
   const stats = useMemo(() => {
     // Expensive calculation
     return calculateDetailedStats(activities);
@@ -360,12 +360,12 @@ function ActivityCard({ activity }: ActivityCardProps) {
 
 ❌ **Bad - PII in local storage**:
 ```tsx
-localStorage.setItem('memberEmail', member.email);  // PII!
+localStorage.setItem('userEmail', user.email);  // PII!
 ```
 
 ✅ **Good - Only IDs**:
 ```tsx
-localStorage.setItem('memberId', member.id);  // Not PII
+localStorage.setItem('userId', user.id);  // Not PII
 ```
 
 ### Feature-Based Structure

@@ -19,37 +19,37 @@ Token-optimized reference for Python code quality standards in platform (AWS Lam
 
 ✅ **Good - Under 50 lines**:
 ```python
-def get_member_activities(member_id: str, session: Session) -> list[Activity]:
-    """Fetch activities for a member with tenant isolation."""
+def get_user_activities(user_id: str, session: Session) -> list[Activity]:
+    """Fetch activities for a user with tenant isolation."""
     try:
         activities = session.query(Activity).filter_by(
-            member_id=member_id
+            user_id=user_id
         ).all()
         return activities
     except NoResultFound:
-        logger.warning("No activities found", extra={"member_id": member_id})
+        logger.warning("No activities found", extra={"user_id": user_id})
         return []
 ```
 
 ❌ **Bad - Over 50 lines, high complexity**:
 ```python
-def process_member_data(member_id):  # 80+ lines with nested logic
-    if member_id:
-        member = get_member(member_id)
-        if member:
-            if member.email:
-                if validate_email(member.email):
-                    if member.subscriptions:
-                        for sub in member.subscriptions:
+def process_user_data(user_id):  # 80+ lines with nested logic
+    if user_id:
+        user = get_user(user_id)
+        if user:
+            if user.email:
+                if validate_email(user.email):
+                    if user.subscriptions:
+                        for sub in user.subscriptions:
                             if sub.active:
                                 # ... 60 more lines
 ```
 
 **Fix**: Extract to smaller functions:
 ```python
-def process_member_data(member_id: str) -> ProcessedMember:
-    member = validate_and_fetch_member(member_id)
-    active_subs = get_active_subscriptions(member)
+def process_user_data(user_id: str) -> ProcessedUser:
+    user = validate_and_fetch_user(user_id)
+    active_subs = get_active_subscriptions(user)
     return process_subscriptions(active_subs)
 ```
 
@@ -61,9 +61,9 @@ def process_member_data(member_id: str) -> ProcessedMember:
 
 ✅ **Good**:
 ```python
-def fetch_member(member_id: str, include_deleted: bool = False) -> Member | None:
-    """Fetch member by ID."""
-    query = session.query(Member).filter_by(id=member_id)
+def fetch_user(user_id: str, include_deleted: bool = False) -> User | None:
+    """Fetch user by ID."""
+    query = session.query(User).filter_by(id=user_id)
     if not include_deleted:
         query = query.filter_by(deleted=False)
     return query.first()
@@ -71,8 +71,8 @@ def fetch_member(member_id: str, include_deleted: bool = False) -> Member | None
 
 ❌ **Bad - No type hints**:
 ```python
-def fetch_member(member_id, include_deleted=False):  # No hints!
-    query = session.query(Member).filter_by(id=member_id)
+def fetch_user(user_id, include_deleted=False):  # No hints!
+    query = session.query(User).filter_by(id=user_id)
     # ...
 ```
 
@@ -80,7 +80,7 @@ def fetch_member(member_id, include_deleted=False):  # No hints!
 
 | Scenario | Type Hint |
 |----------|-----------|
-| Optional return | `Member \| None` or `Optional[Member]` |
+| Optional return | `User \| None` or `Optional[User]` |
 | List of objects | `list[Activity]` |
 | Dictionary | `dict[str, Any]` |
 | Union types | `str \| int` or `Union[str, int]` |
@@ -168,12 +168,12 @@ app = APIGatewayRestResolver()
 @app.get("/activities")
 @tracer.capture_method
 def get_activities():
-    """Get activities for authenticated member."""
-    # Extract member_id from JWT (validated by authorizer)
-    member_id = app.current_event.request_context.authorizer.claims["sub"]
+    """Get activities for authenticated user."""
+    # Extract user_id from JWT (validated by authorizer)
+    user_id = app.current_event.request_context.authorizer.claims["sub"]
 
     # Query with tenant isolation
-    activities = session.query(Activity).filter_by(member_id=member_id).all()
+    activities = session.query(Activity).filter_by(user_id=user_id).all()
 
     # Return Pydantic models
     return [ActivityResponse.from_orm(a) for a in activities]
@@ -189,7 +189,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
 ✅ **Good**:
 ```python
 logger.info("Activity created", extra={
-    "member_id": member_id,
+    "user_id": user_id,
     "activity_id": activity_id,
     "action": "create_activity"
 })
@@ -197,8 +197,8 @@ logger.info("Activity created", extra={
 
 ❌ **Bad**:
 ```python
-print(f"Activity created for {member.email}")  # PII in logs!
-logger.info(f"Member {member.name} completed activity")  # PII!
+print(f"Activity created for {user.email}")  # PII in logs!
+logger.info(f"User {user.name} completed activity")  # PII!
 ```
 
 ---
@@ -209,16 +209,16 @@ logger.info(f"Member {member.name} completed activity")  # PII!
 
 ✅ **Good - Always filter by tenant**:
 ```python
-# Filter by member_id (tenant isolation)
-activities = session.query(Activity).filter_by(member_id=member_id).all()
+# Filter by user_id (tenant isolation)
+activities = session.query(Activity).filter_by(user_id=user_id).all()
 
-# Filter by coach_id (tenant isolation)
-members = session.query(Member).filter_by(coach_id=coach_id).all()
+# Filter by staff_id (tenant isolation)
+users = session.query(User).filter_by(staff_id=staff_id).all()
 ```
 
 ❌ **Bad - No tenant filter (SECURITY VULNERABILITY!)**:
 ```python
-# Returns ALL activities across ALL members - data breach!
+# Returns ALL activities across ALL users - data breach!
 all_activities = session.query(Activity).all()
 ```
 
@@ -227,14 +227,14 @@ all_activities = session.query(Activity).all()
 ✅ **Good - Parameterized queries**:
 ```python
 activities = session.query(Activity).filter(
-    Activity.member_id == member_id,
+    Activity.user_id == user_id,
     Activity.created_at >= start_date
 ).all()
 ```
 
 ❌ **Bad - String concatenation (SQL injection risk!)**:
 ```python
-query = f"SELECT * FROM activities WHERE member_id = '{member_id}'"  # DON'T!
+query = f"SELECT * FROM activities WHERE user_id = '{user_id}'"  # DON'T!
 session.execute(query)
 ```
 
@@ -246,33 +246,33 @@ session.execute(query)
 
 ❌ **Bad - Duplication**:
 ```python
-def get_member_activities(member_id: str) -> list[Activity]:
-    return session.query(Activity).filter_by(member_id=member_id).all()
+def get_user_activities(user_id: str) -> list[Activity]:
+    return session.query(Activity).filter_by(user_id=user_id).all()
 
-def get_member_goals(member_id: str) -> list[Goal]:
-    return session.query(Goal).filter_by(member_id=member_id).all()
+def get_user_goals(user_id: str) -> list[Goal]:
+    return session.query(Goal).filter_by(user_id=user_id).all()
 ```
 
 ✅ **Good - Generic function**:
 ```python
-def get_member_entities(
+def get_user_entities(
     model: type[Base],
-    member_id: str
+    user_id: str
 ) -> list[Base]:
-    return session.query(model).filter_by(member_id=member_id).all()
+    return session.query(model).filter_by(user_id=user_id).all()
 
 # Usage
-activities = get_member_entities(Activity, member_id)
-goals = get_member_entities(Goal, member_id)
+activities = get_user_entities(Activity, user_id)
+goals = get_user_entities(Goal, user_id)
 ```
 
 ### Clear Naming
 
 | Type | Convention | Example |
 |------|-----------|---------|
-| Variables | `snake_case` | `member_data`, `is_active` |
+| Variables | `snake_case` | `user_data`, `is_active` |
 | Functions | `snake_case` | `fetch_activities()`, `validate_email()` |
-| Classes | `PascalCase` | `ActivityList`, `MemberProfile` |
+| Classes | `PascalCase` | `ActivityList`, `UserProfile` |
 | Constants | `SCREAMING_SNAKE_CASE` | `MAX_RETRIES`, `API_BASE_URL` |
 | Private | `_leading_underscore` | `_internal_helper()` |
 
@@ -285,14 +285,14 @@ goals = get_member_entities(Goal, member_id)
 ✅ **Good**:
 ```python
 def create_activity(
-    member_id: str,
+    user_id: str,
     action_id: str,
     completed_at: datetime
 ) -> Activity:
-    """Create a new activity for a member.
+    """Create a new activity for a user.
 
     Args:
-        member_id: UUID of the member
+        user_id: UUID of the user
         action_id: UUID of the action being completed
         completed_at: Timestamp when activity was completed
 
@@ -311,7 +311,7 @@ def create_activity(
 - ✅ Public functions/classes (always)
 - ✅ Complex logic (when not self-evident)
 - ❌ Simple getters/setters (self-documenting)
-- ❌ Obvious functions (`get_member_by_id` doesn't need docstring)
+- ❌ Obvious functions (`get_user_by_id` doesn't need docstring)
 
 ---
 
@@ -321,14 +321,14 @@ def create_activity(
 
 ❌ **Bad**:
 ```python
-logger.info(f"Member {member.name} completed activity")  # Name is PII
-print(f"Processing {member.email}")  # Email is PII
+logger.info(f"User {user.name} completed activity")  # Name is PII
+print(f"Processing {user.email}")  # Email is PII
 ```
 
 ✅ **Good**:
 ```python
 logger.info("Activity completed", extra={
-    "member_id": member_id,
+    "user_id": user_id,
     "activity_id": activity_id
 })
 ```
@@ -337,15 +337,15 @@ logger.info("Activity completed", extra={
 
 ✅ **Good - Negative tests required**:
 ```python
-def test_member_cannot_access_other_member_data():
+def test_user_cannot_access_other_user_data():
     """Verify tenant isolation."""
-    # Create activity for member A
-    activity_a = create_activity(member_id="member-a")
+    # Create activity for user A
+    activity_a = create_activity(user_id="user-a")
 
-    # Member B tries to access
+    # User B tries to access
     response = client.get(
         f"/activities/{activity_a.id}",
-        headers=auth_for_member_b()
+        headers=auth_for_user_b()
     )
 
     assert response.status_code == 403  # Forbidden
@@ -379,8 +379,8 @@ See `tool-configs/actual-tool-configs.md` for critical gaps.
 - [ ] Pydantic models for request/response
 - [ ] Try/except for database operations
 - [ ] Clear function names (snake_case)
-- [ ] No PII in logs (member_id only)
-- [ ] Tenant isolation: ALL queries filter by member_id/coach_id
+- [ ] No PII in logs (user_id only)
+- [ ] Tenant isolation: ALL queries filter by user_id/staff_id
 - [ ] No string concatenation in SQL (use ORM)
 - [ ] Structured logging with extra fields
 - [ ] Tests include negative tests (tenant isolation)

@@ -17,7 +17,7 @@
 - [Production Readiness](#production-readiness)
 - [Sign-Off](#sign-off)
 
-Use this checklist to validate your AI health coaching implementation before production deployment.
+Use this checklist to validate your AI coaching implementation before production deployment. It applies to any coaching/conversational domain; health-specific items (e.g. HIPAA) apply only when you handle sensitive data.
 
 ---
 
@@ -30,9 +30,9 @@ Use this checklist to validate your AI health coaching implementation before pro
   - [ ] Human escalation paths established
 
 - [ ] **Compliance Review**
-  - [ ] HIPAA compliance requirements understood
+  - [ ] Applicable regulatory requirements understood (e.g. HIPAA for health data, GDPR/CCPA for personal data)
   - [ ] Data handling policies defined
-  - [ ] PHI logging restrictions documented
+  - [ ] Sensitive-data logging restrictions documented
   - [ ] Consent mechanisms designed
 
 ---
@@ -58,24 +58,24 @@ Use this checklist to validate your AI health coaching implementation before pro
   - [ ] Urgent: Same-day review scheduled
   - [ ] Concerning: Flagged for next review
 
-### Medical Advice Prevention
+### Out-of-Scope Advice Prevention (medical shown as example)
 
 - [ ] **Detection Implemented**
-  - [ ] Diagnosis-seeking patterns detected
-  - [ ] Medication questions flagged
-  - [ ] Treatment requests caught
-  - [ ] Symptom interpretation blocked
+  - [ ] Out-of-scope advice patterns detected (e.g. diagnosis-seeking for health)
+  - [ ] Regulated-topic questions flagged (e.g. medication, legal, financial)
+  - [ ] Prescriptive/treatment requests caught
+  - [ ] Interpretation of professional assessments blocked
 
 - [ ] **Redirect Responses**
-  - [ ] Empathetic redirect for diagnosis questions
-  - [ ] Clear redirect for medication questions
-  - [ ] Healthcare provider referral included
+  - [ ] Empathetic redirect for out-of-scope questions
+  - [ ] Clear redirect for regulated-topic questions
+  - [ ] Referral to the appropriate qualified professional included
   - [ ] Offer to help in appropriate ways
 
 ### Response Validation
 
 - [ ] **Pre-Send Safety Check**
-  - [ ] Medical advice detection (LLM)
+  - [ ] Out-of-scope advice detection (LLM)
   - [ ] Harmful suggestion detection
   - [ ] Dismissive language check
   - [ ] Over-promising detection
@@ -97,10 +97,10 @@ Use this checklist to validate your AI health coaching implementation before pro
   - [ ] Celebratory sentiment detected
 
 - [ ] **Tone Calibration**
-  - [ ] Warm tone for discouraged members
-  - [ ] Energetic tone for motivated members
-  - [ ] Calm tone for anxious members
-  - [ ] Understanding tone for frustrated members
+  - [ ] Warm tone for discouraged users
+  - [ ] Energetic tone for motivated users
+  - [ ] Calm tone for anxious users
+  - [ ] Understanding tone for frustrated users
   - [ ] Matching energy for celebrations
 
 - [ ] **EARS Framework**
@@ -112,7 +112,7 @@ Use this checklist to validate your AI health coaching implementation before pro
 - [ ] **Language Quality**
   - [ ] No dismissive phrases ("at least", "just")
   - [ ] No toxic positivity ("stay positive!")
-  - [ ] Member's name used appropriately
+  - [ ] User's name used appropriately
   - [ ] Warm, supportive language throughout
 
 ---
@@ -172,13 +172,13 @@ Use this checklist to validate your AI health coaching implementation before pro
 ## RAG Integration
 
 - [ ] **Context Retrieval**
-  - [ ] Member profile retrieved
+  - [ ] User profile retrieved
   - [ ] Past conversations searchable
   - [ ] Goal progress included
   - [ ] Relevant guidelines found
 
 - [ ] **Personalization**
-  - [ ] Member's name used
+  - [ ] User's name used
   - [ ] Goals referenced
   - [ ] Past progress mentioned
   - [ ] Communication style matched
@@ -186,7 +186,7 @@ Use this checklist to validate your AI health coaching implementation before pro
 - [ ] **Context Sufficiency**
   - [ ] Sufficiency check implemented
   - [ ] Abstention when context insufficient
-  - [ ] No hallucination of member history
+  - [ ] No hallucination of user history
 
 ---
 
@@ -277,11 +277,11 @@ Use this checklist to validate your AI health coaching implementation before pro
 - [ ] **Fallback Handling**
   - [ ] LLM errors handled gracefully
   - [ ] Fallback to human coach available
-  - [ ] Member notified of technical issues
+  - [ ] User notified of technical issues
   - [ ] Retry logic implemented
 
 - [ ] **Compliance**
-  - [ ] No PHI in logs
+  - [ ] No sensitive personal data in logs (e.g. PHI for health domains)
   - [ ] Consent tracked
   - [ ] Data retention policies applied
   - [ ] Audit trail maintained
@@ -308,4 +308,4 @@ Use this checklist to validate your AI health coaching implementation before pro
 
 ---
 
-**Remember**: This checklist represents minimum requirements. When in doubt, add more safety measures. People's wellbeing depends on getting this right.
+**Remember**: This checklist represents minimum requirements. When in doubt, add more safety measures. People's wellbeing can depend on getting this right.

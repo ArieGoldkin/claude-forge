@@ -52,7 +52,7 @@ Each phase has a human checkpoint. Respond with: **yes**, **adjust**, **skip**, 
 
 **Modify existing code:**
 ```
-/develop brownfield "Add caching to member profile endpoint"
+/develop brownfield "Add caching to user profile endpoint"
 ```
 
 **Fix a bug:**

@@ -260,32 +260,30 @@ curl -X POST -d '{"username":"test","password":"test"}' $LOGIN_ENDPOINT
 
 ### 12. Health Platform Specific Requirements
 
-#### Member Data Protection
-- [ ] **Member Consent Management**: Granular consent for health data use
-- [ ] **Coach Access Controls**: Appropriate coach access to member PHI
+#### User Data Protection
+- [ ] **Consent Management**: Granular consent for health data use
+- [ ] **Provider Access Controls**: Appropriate authorized-provider access to user PHI
 - [ ] **Progress Tracking Security**: Secure handling of health progress data
 - [ ] **Third-Party Integration Security**: Secure APIs for health device integration
-- [ ] **Member Portal Security**: Secure member-facing application controls
+- [ ] **User Portal Security**: Secure user-facing application controls
 
-**Verification Method**: Test member portal security, review consent workflows, validate coach access
+**Verification Method**: Test user portal security, review consent workflows, validate provider access
 
 **Evidence Required**:
 - Consent management system screenshots
-- Coach access control matrix
+- Provider access control matrix
 - Third-party integration security documentation
-- Member portal security assessment
+- User portal security assessment
 
-#### Coaching Platform Compliance
-- [ ] **Coach Certification Tracking**: Validation of coach credentials and training
-- [ ] **Session Documentation Security**: Secure storage of coaching session notes
-- [ ] **Communication Encryption**: Secure coach-member communication channels
-- [ ] **Crisis Intervention Procedures**: Emergency protocols for member safety
-- [ ] **Quality Assurance Monitoring**: Compliant monitoring of coaching quality
+#### Session & Communication Security
+- [ ] **Session Documentation Security**: Secure storage of session notes and records
+- [ ] **Communication Encryption**: Secure provider-user communication channels
+- [ ] **Crisis Intervention Procedures**: Emergency protocols for user safety
+- [ ] **Quality Assurance Monitoring**: Compliant monitoring of service quality
 
-**Verification Method**: Review coach certification processes, test communication security
+**Verification Method**: Review documentation handling, test communication security
 
 **Evidence Required**:
-- Coach certification verification procedures
 - Session documentation encryption implementation
 - Communication channel security configuration
 - Crisis intervention protocol documentation

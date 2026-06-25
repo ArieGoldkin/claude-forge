@@ -51,24 +51,24 @@ session = SessionLocal()
 
 ```bash
 python scripts/inspect_schema.py --list-tables
-python scripts/inspect_schema.py --table member --details
-python scripts/inspect_schema.py --table member --relationships
+python scripts/inspect_schema.py --table user --details
+python scripts/inspect_schema.py --table user --relationships
 python scripts/inspect_schema.py --export-schema
 ```
 
 ### 3. Query Data Safely
 
 ```bash
-python scripts/query_builder.py --table member --where "created_at > '2025-01-01'" --limit 10
-python scripts/query_builder.py --query "SELECT m.*, s.* FROM member m JOIN subscription s ON m.id = s.member_id"
+python scripts/query_builder.py --table user --where "created_at > '2025-01-01'" --limit 10
+python scripts/query_builder.py --query "SELECT u.*, s.* FROM users u JOIN subscription s ON u.id = s.user_id"
 python scripts/query_builder.py --table events --where "event_type = 'login'" --export-csv
 ```
 
 ### 4. Create Migrations
 
 ```bash
-python scripts/migration_helper.py --auto-generate "Add acme_score to member"
-python scripts/migration_helper.py --create "Add index on member_activities"
+python scripts/migration_helper.py --auto-generate "Add last_login_at to user"
+python scripts/migration_helper.py --create "Add index on user_activities"
 python scripts/migration_helper.py --validate
 python scripts/migration_helper.py --dry-run
 ```
@@ -76,8 +76,8 @@ python scripts/migration_helper.py --dry-run
 ### 5. Analyze Performance
 
 ```bash
-python scripts/performance_analyzer.py --query "SELECT * FROM member WHERE email LIKE '%@example.com'"
-python scripts/performance_analyzer.py --suggest-indexes --table member
+python scripts/performance_analyzer.py --query "SELECT * FROM users WHERE email LIKE '%@example.com'"
+python scripts/performance_analyzer.py --suggest-indexes --table user
 python scripts/performance_analyzer.py --analyze-file queries.sql
 ```
 
@@ -100,12 +100,12 @@ python scripts/performance_analyzer.py --analyze-file queries.sql
 # ✅ GOOD: Parameterized query
 from sqlalchemy import text
 result = session.execute(
-    text("SELECT * FROM member WHERE email = :email"),
+    text("SELECT * FROM users WHERE email = :email"),
     {"email": user_email}
 )
 
 # ❌ BAD: String interpolation (SQL injection risk!)
-query = f"SELECT * FROM member WHERE email = '{user_email}'"
+query = f"SELECT * FROM users WHERE email = '{user_email}'"
 ```
 
 **Read `${CLAUDE_SKILL_DIR}/references/sql-patterns.md` for production-grade patterns.**
@@ -152,16 +152,16 @@ For any project, understand the schema before making changes:
 **Project uses SQLAlchemy 2.0+ with declarative models:**
 
 ```python
-from utils.database.models.acme_operational import Member, Subscription
+from utils.database.models.acme_models import User, Subscription
 from sqlalchemy import select
 
 # Modern SQLAlchemy 2.0 query style
-stmt = select(Member).where(Member.email == "user@example.com")
-member = session.scalars(stmt).first()
+stmt = select(User).where(User.email == "user@example.com")
+user = session.scalars(stmt).first()
 
 # Relationships
-member.subscriptions  # Access related subscriptions
-member.events  # Access member events
+user.subscriptions  # Access related subscriptions
+user.events  # Access user events
 ```
 
 **Read `${CLAUDE_SKILL_DIR}/references/orm-patterns.md` for:*

@@ -1,4 +1,4 @@
-# Empathetic Response Patterns for Health Coaching
+# Empathetic Response Patterns for Coaching
 
 ## Table of Contents
 
@@ -20,18 +20,18 @@
   - [Phrases That Build Connection](#phrases-that-build-connection)
   - [Phrases to Avoid](#phrases-to-avoid)
 - [Personalization Patterns](#personalization-patterns)
-  - [Using Member's Name](#using-members-name)
+  - [Using the User's Name](#using-the-users-name)
   - [Referencing History](#referencing-history)
 - [Empathy Evaluation](#empathy-evaluation)
   - [LLM-as-Judge Prompt](#llm-as-judge-prompt)
   - [Minimum Empathy Threshold](#minimum-empathy-threshold)
 - [Example Conversations](#example-conversations)
-  - [Example 1: Discouraged Member](#example-1-discouraged-member)
+  - [Example 1: Discouraged User](#example-1-discouraged-user)
   - [Example 2: Anxious About Starting](#example-2-anxious-about-starting)
 
 ## Overview
 
-Empathy is the foundation of effective health coaching. This document provides patterns, templates, and techniques for generating responses that make members feel heard, validated, and supported.
+Empathy is the foundation of effective coaching. This document provides patterns, templates, and techniques for generating responses that make users feel heard, validated, and supported.
 
 ---
 
@@ -77,7 +77,7 @@ Offer a gentle next step or continued presence.
 
 ## Tone Calibration Matrix
 
-| Member Sentiment | Detected Signals | Recommended Tone | Language Examples |
+| User Sentiment | Detected Signals | Recommended Tone | Language Examples |
 |-----------------|------------------|------------------|-------------------|
 | **Discouraged** | "failed", "can't", "gave up", "disappointed" | Warm, validating | "It's okay to have setbacks...", "One tough week doesn't erase your progress..." |
 | **Motivated** | "excited", "can't wait", "ready", "!!" | Energetic, celebratory | "I love that energy!", "You're on fire!", "Let's channel that momentum!" |
@@ -90,7 +90,7 @@ Offer a gentle next step or continued presence.
 ```python
 from enum import Enum
 
-class MemberSentiment(Enum):
+class UserSentiment(Enum):
     DISCOURAGED = "discouraged"
     MOTIVATED = "motivated"
     ANXIOUS = "anxious"
@@ -99,30 +99,30 @@ class MemberSentiment(Enum):
     CELEBRATORY = "celebratory"
 
 SENTIMENT_SIGNALS = {
-    MemberSentiment.DISCOURAGED: [
+    UserSentiment.DISCOURAGED: [
         r"\b(fail(ed)?|can'?t|gave\s*up|disappointed|hopeless|pointless)\b",
         r"\b(what'?s\s*the\s*point|why\s*bother)\b"
     ],
-    MemberSentiment.MOTIVATED: [
+    UserSentiment.MOTIVATED: [
         r"\b(excited|can'?t\s*wait|ready|pumped|let'?s\s*(do|go))\b",
         r"!{2,}",  # Multiple exclamation marks
     ],
-    MemberSentiment.ANXIOUS: [
+    UserSentiment.ANXIOUS: [
         r"\b(worried|stress(ed)?|overwhelm(ed)?|nervous|anxious|scared)\b",
         r"\b(what\s*if|afraid)\b"
     ],
-    MemberSentiment.FRUSTRATED: [
+    UserSentiment.FRUSTRATED: [
         r"\b(annoy(ed|ing)|frustrat(ed|ing)|why\s*(isn'?t|won'?t|can'?t))\b",
         r"\b(nothing\s*works|tired\s*of|sick\s*of)\b"
     ],
-    MemberSentiment.CELEBRATORY: [
+    UserSentiment.CELEBRATORY: [
         r"\b(did\s*it|finally|proud|achieved|accomplish(ed)?|success)\b",
         r"\b(🎉|🙌|💪|🎊)"  # Celebration emojis
     ]
 }
 
-def detect_sentiment(message: str) -> MemberSentiment:
-    """Detect primary sentiment from member message."""
+def detect_sentiment(message: str) -> UserSentiment:
+    """Detect primary sentiment from user message."""
     message_lower = message.lower()
 
     for sentiment, patterns in SENTIMENT_SIGNALS.items():
@@ -130,7 +130,7 @@ def detect_sentiment(message: str) -> MemberSentiment:
             if re.search(pattern, message_lower):
                 return sentiment
 
-    return MemberSentiment.NEUTRAL
+    return UserSentiment.NEUTRAL
 ```
 
 ---
@@ -205,7 +205,7 @@ Hey {name}, just checking in.
 """
 Hey Sarah, just checking in.
 
-I noticed it's been a little while since we connected. No pressure at all - life happens, and sometimes health takes a backseat. That's completely normal.
+I noticed it's been a little while since we connected. No pressure at all - life happens, and sometimes this work takes a backseat. That's completely normal.
 
 I'm here whenever you're ready, whether that's to dive back in or just to chat.
 
@@ -260,7 +260,7 @@ Would you be open to exploring what might be getting in the way? Sometimes small
 "It sounds like..."
 "I'm hearing that..."
 "That makes sense because..."
-"Many members find that..."
+"Many people find that..."
 "What would it look like if...?"
 ```
 
@@ -279,33 +279,33 @@ Would you be open to exploring what might be getting in the way? Sometimes small
 
 ## Personalization Patterns
 
-### Using Member's Name
+### Using the User's Name
 - Use first name 1-2 times per message
 - Never more than 3 times (feels forced)
 - Use at opening and/or key emotional moment
 
 ### Referencing History
 ```python
-def build_personalized_context(member: Member) -> str:
+def build_personalized_context(user: User) -> str:
     """Build personalized context for response generation."""
     context_parts = []
 
     # Recent wins
-    if member.recent_achievements:
+    if user.recent_achievements:
         context_parts.append(
-            f"Recent achievement: {member.recent_achievements[0]}"
+            f"Recent achievement: {user.recent_achievements[0]}"
         )
 
     # Stated values
-    if member.why_statement:
+    if user.why_statement:
         context_parts.append(
-            f"Their 'why': {member.why_statement}"
+            f"Their 'why': {user.why_statement}"
         )
 
     # Preferred communication style
-    if member.communication_preference:
+    if user.communication_preference:
         context_parts.append(
-            f"Prefers: {member.communication_preference}"
+            f"Prefers: {user.communication_preference}"
         )
 
     return "\n".join(context_parts)
@@ -320,7 +320,7 @@ def build_personalized_context(member: Member) -> str:
 EMPATHY_EVALUATION_PROMPT = """
 Rate this coaching response for empathy on a scale of 1-10.
 
-Member message: {member_message}
+User message: {user_message}
 Coach response: {coach_response}
 
 Scoring criteria:
@@ -345,8 +345,8 @@ Scoring criteria:
   * 2: Specific, caring questions
 
 - Appropriate tone match (0-1 point)
-  * 0: Tone mismatch (e.g., celebratory when member is sad)
-  * 1: Tone matches member's emotional state
+  * 0: Tone mismatch (e.g., celebratory when the user is sad)
+  * 1: Tone matches the user's emotional state
 
 Return:
 - score: int (1-10)
@@ -365,16 +365,20 @@ Return:
 
 ## Example Conversations
 
-### Example 1: Discouraged Member
+### Example 1: Discouraged User
+
+This example uses a fitness scenario, but the same empathy structure applies to
+any domain (a stalled study plan, a sales target that didn't move, etc.).
+
 ```
-Member: "I tried so hard this week but still didn't lose any weight. I feel like giving up."
+User: "I tried so hard this week but still didn't see any results. I feel like giving up."
 
 Good Response:
-"I hear you, and I want to acknowledge how frustrating that must feel. Putting in real effort and not seeing the scale move is genuinely discouraging.
+"I hear you, and I want to acknowledge how frustrating that must feel. Putting in real effort and not seeing the needle move is genuinely discouraging.
 
-Here's something worth knowing: the scale is just one measure, and it often lags behind the real changes happening in your body. Your effort this week matters - it's building habits and making changes that don't always show up immediately.
+Here's something worth knowing: that one metric is just one measure, and it often lags behind the real changes already underway. Your effort this week matters - it's building habits and making changes that don't always show up immediately.
 
-What did your week actually look like? I'd love to celebrate the effort you put in, even if the scale isn't cooperating yet."
+What did your week actually look like? I'd love to celebrate the effort you put in, even if the results aren't showing yet."
 
 Why it works:
 - Opens with empathy ("I hear you")
@@ -386,7 +390,7 @@ Why it works:
 
 ### Example 2: Anxious About Starting
 ```
-Member: "I'm nervous about starting this program. What if I fail like I have before?"
+User: "I'm nervous about starting this program. What if I fail like I have before?"
 
 Good Response:
 "Those nerves make complete sense. Starting something new, especially when you've had experiences that didn't go the way you hoped, takes real courage.
@@ -399,7 +403,7 @@ Why it works:
 - Validates nervousness as reasonable
 - Reframes past "failures" gently
 - Points out what's different
-- Gives control back to member
+- Gives control back to the user
 - Low-pressure invitation
 ```
 

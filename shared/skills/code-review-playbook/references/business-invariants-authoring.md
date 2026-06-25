@@ -93,7 +93,7 @@ do it, and update the tag. The contract gets stronger. Don't add new `[Conventio
 
 ## What to do with audit findings
 
-When you discover concrete violations (V.1 broken in 5 lambdas, VII.1 broken in `Member.__repr__`):
+When you discover concrete violations (V.1 broken in 5 lambdas, VII.1 broken in `User.__repr__`):
 
 1. **File a ticket per violation** with file:line + invariant ID + suggested fix.
 2. **Do NOT** add a "violations found" table to the invariants file. The contract is forward-facing; tickets carry the backward-facing cleanup.
@@ -135,7 +135,7 @@ Drawn from real first-draft invariants files, with the corrected shape next to e
 ### Anti-pattern 2 — Open questions inline with rules
 
 ```markdown
-### IV.1 — Sparks are idempotent by event_id
+### IV.1 — Webhook events are idempotent by event_id
 ...
 - **[UNVERIFIED]** — verify with team: where is the dedup key? Recommend a `unique` index.
 ```
@@ -176,7 +176,7 @@ A whole section with 9 numbered TODOs.
 ### I.4 — Auth events are properly audited
 ```
 
-**Fix:** "properly" is vague. Sharpen: "Every login, logout, token-issue, MFA event AND every PHI read/write writes one row to `Event` with timestamp + actor + resource." Concreteness is non-negotiable; if you can't be concrete, file a ticket to figure out what concrete looks like first.
+**Fix:** "properly" is vague. Sharpen: "Every login, logout, token-issue, MFA event AND every sensitive-data read/write writes one row to `Event` with timestamp + actor + resource." Concreteness is non-negotiable; if you can't be concrete, file a ticket to figure out what concrete looks like first.
 
 ## Authoring checklist
 
@@ -203,7 +203,7 @@ The same file is loaded at two distinct moments in the development workflow.
 
 1. For each rule: scans the diff for code paths in the rule's domain.
 2. For each candidate hit: reads enough surrounding context to confirm violation vs. false positive.
-3. Emits findings citing the rule ID (`Violates I.1: SELECT in coach_lookup.py:42 does not filter by member_id`).
+3. Emits findings citing the rule ID (`Violates I.1: SELECT in order_lookup.py:42 does not filter by tenant_id`).
 
 **Planning-time (`/etk:brainstorming`, `/etk:develop`, `/etk:fix-bug`)** — loads the file at the moment of design convergence (not session start) so invariants shape the work before code is written:
 

@@ -3,17 +3,17 @@
   "title": "CoachingConversationState",
   "description": "Schema for tracking AI coaching conversation state across turns and sessions",
   "type": "object",
-  "required": ["session_id", "member_id", "started_at", "turns"],
+  "required": ["session_id", "user_id", "started_at", "turns"],
   "properties": {
     "session_id": {
       "type": "string",
       "format": "uuid",
       "description": "Unique identifier for this coaching session"
     },
-    "member_id": {
+    "user_id": {
       "type": "string",
       "format": "uuid",
-      "description": "Identifier for the member being coached"
+      "description": "Identifier for the user being coached"
     },
     "started_at": {
       "type": "string",
@@ -107,7 +107,7 @@
         },
         "role": {
           "type": "string",
-          "enum": ["member", "coach", "system"],
+          "enum": ["user", "coach", "system"],
           "description": "Who sent this message"
         },
         "content": {
@@ -123,7 +123,7 @@
           "type": "string",
           "enum": ["positive", "neutral", "concerned", "distressed"],
           "nullable": true,
-          "description": "Detected sentiment for member messages"
+          "description": "Detected sentiment for user messages"
         },
         "topics": {
           "type": "array",
@@ -262,7 +262,7 @@
         },
         "description": {
           "type": "string",
-          "description": "What the member committed to do"
+          "description": "What the user committed to do"
         },
         "created_at": {
           "type": "string",

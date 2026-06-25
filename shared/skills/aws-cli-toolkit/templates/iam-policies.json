@@ -13,7 +13,7 @@
               "logs:CreateLogStream",
               "logs:PutLogEvents"
             ],
-            "Resource": "arn:aws:logs:us-east-1:238141764839:log-group:/aws/lambda/acme-*"
+            "Resource": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/acme-*"
           },
           {
             "Sid": "SecretsManagerRead",
@@ -21,7 +21,7 @@
             "Action": [
               "secretsmanager:GetSecretValue"
             ],
-            "Resource": "arn:aws:secretsmanager:us-east-1:238141764839:secret:acme/*"
+            "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:acme/*"
           },
           {
             "Sid": "VPCNetworkInterfaces",
@@ -34,7 +34,7 @@
             "Resource": "*",
             "Condition": {
               "StringEquals": {
-                "ec2:Vpc": "arn:aws:ec2:us-east-1:238141764839:vpc/vpc-acme"
+                "ec2:Vpc": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-acme"
               }
             }
           }
@@ -98,7 +98,7 @@
               "rds:DescribeDBClusters",
               "rds:DescribeDBSnapshots"
             ],
-            "Resource": "arn:aws:rds:us-east-1:238141764839:db:acme-*"
+            "Resource": "arn:aws:rds:us-east-1:123456789012:db:acme-*"
           }
         ]
       }
@@ -119,7 +119,7 @@
               "logs:StartQuery",
               "logs:GetQueryResults"
             ],
-            "Resource": "arn:aws:logs:us-east-1:238141764839:log-group:/aws/lambda/acme-*"
+            "Resource": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/acme-*"
           },
           {
             "Sid": "CloudWatchMetricsRead",
@@ -146,7 +146,7 @@
             "Action": [
               "lambda:InvokeFunction"
             ],
-            "Resource": "arn:aws:lambda:us-east-1:238141764839:function:acme-*"
+            "Resource": "arn:aws:lambda:us-east-1:123456789012:function:acme-*"
           }
         ]
       }

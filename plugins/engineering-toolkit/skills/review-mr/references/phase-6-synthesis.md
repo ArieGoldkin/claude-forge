@@ -6,7 +6,7 @@ After agents return (Standard / Deep mode) or after Phase 3 quality checks (Quic
 
 1. Collect all findings from all launched agents (cap at `$MAX_FINDINGS_PER_AGENT` per agent).
 2. Deduplicate: same `File:Line` across agents → keep highest confidence.
-3. **Bundle same-root-cause findings.** When N findings across files share a single root cause (e.g., 28 stray `console.log` statements, 22 PascalCase folders forking the convention, missing `member_id` filter across 6 query sites), collapse them to ONE consolidated finding with a `file:line` list in the body. Decision criterion: *"Would the author fix these as one task, or as N independent tasks?"* If one task, bundle. If N tasks, keep separate. Bundling reduces noise and surfaces the pattern.
+3. **Bundle same-root-cause findings.** When N findings across files share a single root cause (e.g., 28 stray `console.log` statements, 22 PascalCase folders forking the convention, missing `user_id` filter across 6 query sites), collapse them to ONE consolidated finding with a `file:line` list in the body. Decision criterion: *"Would the author fix these as one task, or as N independent tasks?"* If one task, bundle. If N tasks, keep separate. Bundling reduces noise and surfaces the pattern.
 4. If `$SORT_BY_CONFIDENCE`: sort findings by confidence descending.
 5. Filter: exclude findings below `$CONFIDENCE_THRESHOLD` (from `review-policy.json`).
 6. If `$SHOW_FILTERED_COUNT`: report "X findings filtered (confidence < $CONFIDENCE_THRESHOLD)".

@@ -2,39 +2,39 @@
 -- Use these as starting points for common operations
 
 -- =============================================================================
--- MEMBER QUERIES
+-- USER QUERIES
 -- =============================================================================
 
--- Get active members with subscriptions
-SELECT m.id, m.email, m.first_name, m.last_name, s.plan_type, s.end_date
-FROM acme_operational.members m
-JOIN acme_operational.subscriptions s ON m.id = s.member_id
-WHERE m.status = 'active'
+-- Get active users with subscriptions
+SELECT u.id, u.email, u.first_name, u.last_name, s.plan_type, s.end_date
+FROM acme_models.users u
+JOIN acme_models.subscriptions s ON u.id = s.user_id
+WHERE u.status = 'active'
   AND s.status = 'active'
   AND s.end_date > CURRENT_DATE
-ORDER BY m.created_at DESC;
+ORDER BY u.created_at DESC;
 
--- Find members by email pattern
+-- Find users by email pattern
 SELECT id, email, first_name, last_name, created_at
-FROM acme_operational.members
+FROM acme_models.users
 WHERE email ILIKE :email_pattern  -- e.g., '%@example.com'
 ORDER BY created_at DESC
 LIMIT 100;
 
--- Get member profile with latest activity
+-- Get user profile with latest activity
 SELECT
-    m.id,
-    m.email,
-    m.first_name,
-    m.last_name,
-    m.status,
+    u.id,
+    u.email,
+    u.first_name,
+    u.last_name,
+    u.status,
     MAX(e.created_at) AS last_activity_at,
-    COUNT(DISTINCT ma.activity_id) AS actions_started
-FROM acme_operational.members m
-LEFT JOIN acme_operational.events e ON m.id = e.member_id
-LEFT JOIN acme_operational.member_activities ma ON m.id = ma.member_id
-WHERE m.id = :member_id
-GROUP BY m.id, m.email, m.first_name, m.last_name, m.status;
+    COUNT(DISTINCT ua.activity_id) AS actions_started
+FROM acme_models.users u
+LEFT JOIN acme_models.events e ON u.id = e.user_id
+LEFT JOIN acme_models.user_activities ua ON u.id = ua.user_id
+WHERE u.id = :user_id
+GROUP BY u.id, u.email, u.first_name, u.last_name, u.status;
 
 -- =============================================================================
 -- SUBSCRIPTION QUERIES
@@ -42,14 +42,14 @@ GROUP BY m.id, m.email, m.first_name, m.last_name, m.status;
 
 -- Find expiring subscriptions (next 30 days)
 SELECT
-    m.email,
-    m.first_name,
-    m.last_name,
+    u.email,
+    u.first_name,
+    u.last_name,
     s.plan_type,
     s.end_date,
     s.auto_renew
-FROM acme_operational.subscriptions s
-JOIN acme_operational.members m ON s.member_id = m.id
+FROM acme_models.subscriptions s
+JOIN acme_models.users u ON s.user_id = u.id
 WHERE s.status = 'active'
   AND s.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'
 ORDER BY s.end_date ASC;
@@ -59,78 +59,78 @@ SELECT
     status,
     COUNT(*) AS count,
     COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS percentage
-FROM acme_operational.subscriptions
+FROM acme_models.subscriptions
 GROUP BY status
 ORDER BY count DESC;
 
 -- =============================================================================
--- PROGRESS TRACKING
+-- ACTIVITY TRACKING
 -- =============================================================================
 
--- Member progress by focus area
+-- User activity by category
 SELECT
-    fa.name AS focus_area,
-    COUNT(DISTINCT ma.activity_id) AS actions_started,
-    COUNT(ma.first_completion_at) AS actions_completed,
+    c.name AS category,
+    COUNT(DISTINCT ua.activity_id) AS actions_started,
+    COUNT(ua.first_completion_at) AS actions_completed,
     ROUND(
-        COUNT(ma.first_completion_at) * 100.0 / NULLIF(COUNT(DISTINCT ma.activity_id), 0),
+        COUNT(ua.first_completion_at) * 100.0 / NULLIF(COUNT(DISTINCT ua.activity_id), 0),
         1
     ) AS completion_percentage
-FROM acme_operational.member_activities ma
-JOIN acme_operational.healthy_actions ha ON ma.activity_id = ha.id
-JOIN acme_operational.focus_areas fa ON ha.focus_area_id = fa.id
-WHERE ma.member_id = :member_id
-GROUP BY fa.id, fa.name
+FROM acme_models.user_activities ua
+JOIN acme_models.actions a ON ua.activity_id = a.id
+JOIN acme_models.categories c ON a.category_id = c.id
+WHERE ua.user_id = :user_id
+GROUP BY c.id, c.name
 ORDER BY completion_percentage DESC;
 
--- Most popular healthy actions
+-- Most popular actions
 SELECT
-    ha.title,
-    fa.name AS focus_area,
-    COUNT(DISTINCT ma.member_id) AS unique_members,
-    COUNT(ma.first_completion_at) AS completions
-FROM acme_operational.healthy_actions ha
-JOIN acme_operational.focus_areas fa ON ha.focus_area_id = fa.id
-LEFT JOIN acme_operational.member_activities ma ON ha.id = ma.activity_id
-GROUP BY ha.id, ha.title, fa.name
-ORDER BY unique_members DESC
+    a.title,
+    c.name AS category,
+    COUNT(DISTINCT ua.user_id) AS unique_users,
+    COUNT(ua.first_completion_at) AS completions
+FROM acme_models.actions a
+JOIN acme_models.categories c ON a.category_id = c.id
+LEFT JOIN acme_models.user_activities ua ON a.id = ua.activity_id
+GROUP BY a.id, a.title, c.name
+ORDER BY unique_users DESC
 LIMIT 20;
 
 -- =============================================================================
--- COACH QUERIES
+-- STAFF QUERIES
 -- =============================================================================
 
--- Coach workload and capacity
+-- Staff workload and capacity
 SELECT
     c.id,
     c.first_name,
     c.last_name,
-    c.max_members,
-    COUNT(DISTINCT m.id) AS active_members,
-    c.max_members - COUNT(DISTINCT m.id) AS available_capacity,
+    c.max_users,
+    COUNT(DISTINCT u.id) AS active_users,
+    c.max_users - COUNT(DISTINCT u.id) AS available_capacity,
     COUNT(DISTINCT a.id) FILTER (
         WHERE a.status = 'scheduled' AND a.scheduled_at > CURRENT_TIMESTAMP
     ) AS upcoming_appointments
-FROM acme_operational.coaches c
-LEFT JOIN acme_operational.members m
-    ON c.id = m.coach_id AND m.status = 'active'
-LEFT JOIN acme_operational.appointments a
-    ON c.id = a.coach_id
+FROM acme_models.staff c
+LEFT JOIN acme_models.users u
+    ON c.id = u.staff_id AND u.status = 'active'
+LEFT JOIN acme_models.appointments a
+    ON c.id = a.staff_id
 WHERE c.is_active = true
-GROUP BY c.id, c.first_name, c.last_name, c.max_members
+GROUP BY c.id, c.first_name, c.last_name, c.max_users
 ORDER BY available_capacity DESC;
 
--- Coach notes summary for member
+-- Staff notes summary for user
 SELECT
     n.id,
     n.note_type,
     n.content,
     n.created_at,
-    c.first_name AS coach_first_name,
-    c.last_name AS coach_last_name
-FROM acme_operational.notes n
-JOIN acme_operational.coaches c ON n.coach_id = c.id
-WHERE n.member_id = :member_id
+    c.first_name AS staff_first_name,
+    c.last_name AS staff_last_name
+FROM acme_models.notes n
+JOIN acme_models.staff c ON n.staff_id = c.id
+WHERE n.user_id = :user_id
 ORDER BY n.created_at DESC
 LIMIT 10;
 
@@ -138,22 +138,22 @@ LIMIT 10;
 -- EVENTS AND ANALYTICS
 -- =============================================================================
 
--- Member engagement timeline (last 30 days)
+-- User engagement timeline (last 30 days)
 SELECT
     DATE_TRUNC('day', created_at) AS date,
     event_type,
     COUNT(*) AS event_count
-FROM acme_operational.events
-WHERE member_id = :member_id
+FROM acme_models.events
+WHERE user_id = :user_id
   AND created_at > CURRENT_DATE - INTERVAL '30 days'
 GROUP BY date, event_type
 ORDER BY date DESC, event_count DESC;
 
--- Daily active members
+-- Daily active users
 SELECT
     DATE(created_at) AS date,
-    COUNT(DISTINCT member_id) AS unique_members
-FROM acme_operational.events
+    COUNT(DISTINCT user_id) AS unique_users
+FROM acme_models.events
 WHERE event_type = 'login'
   AND created_at > CURRENT_DATE - INTERVAL '30 days'
 GROUP BY date
@@ -163,10 +163,10 @@ ORDER BY date DESC;
 SELECT
     event_type,
     COUNT(*) AS count,
-    COUNT(DISTINCT member_id) AS unique_members,
+    COUNT(DISTINCT user_id) AS unique_users,
     MIN(created_at) AS first_occurrence,
     MAX(created_at) AS last_occurrence
-FROM acme_operational.events
+FROM acme_models.events
 WHERE created_at > CURRENT_DATE - INTERVAL '7 days'
 GROUP BY event_type
 ORDER BY count DESC;
@@ -175,23 +175,23 @@ ORDER BY count DESC;
 -- APPOINTMENTS
 -- =============================================================================
 
--- Upcoming appointments for a coach
+-- Upcoming appointments for a staff member
 SELECT
     a.id,
     a.scheduled_at,
     a.duration,
-    m.first_name AS member_first_name,
-    m.last_name AS member_last_name,
-    m.email AS member_email,
+    u.first_name AS user_first_name,
+    u.last_name AS user_last_name,
+    u.email AS user_email,
     a.meeting_link
-FROM acme_operational.appointments a
-JOIN acme_operational.members m ON a.member_id = m.id
-WHERE a.coach_id = :coach_id
+FROM acme_models.appointments a
+JOIN acme_models.users u ON a.user_id = u.id
+WHERE a.staff_id = :staff_id
   AND a.status = 'scheduled'
   AND a.scheduled_at > CURRENT_TIMESTAMP
 ORDER BY a.scheduled_at ASC;
 
--- Appointment completion rate by coach
+-- Appointment completion rate by staff member
 SELECT
     c.first_name,
     c.last_name,
@@ -202,8 +202,8 @@ SELECT
         COUNT(*) FILTER (WHERE a.status = 'completed') * 100.0 / COUNT(*),
         1
     ) AS completion_rate
-FROM acme_operational.appointments a
-JOIN acme_operational.coaches c ON a.coach_id = c.id
+FROM acme_models.appointments a
+JOIN acme_models.staff c ON a.staff_id = c.id
 WHERE a.scheduled_at > CURRENT_DATE - INTERVAL '90 days'
 GROUP BY c.id, c.first_name, c.last_name
 ORDER BY completion_rate DESC;
@@ -212,21 +212,21 @@ ORDER BY completion_rate DESC;
 -- DATA QUALITY CHECKS
 -- =============================================================================
 
--- Find members without subscriptions
-SELECT m.id, m.email, m.status, m.created_at
-FROM acme_operational.members m
-LEFT JOIN acme_operational.subscriptions s ON m.id = s.member_id
+-- Find users without subscriptions
+SELECT u.id, u.email, u.status, u.created_at
+FROM acme_models.users u
+LEFT JOIN acme_models.subscriptions s ON u.id = s.user_id
 WHERE s.id IS NULL;
 
--- Find orphaned records (member_activities without members)
-SELECT ma.id, ma.member_id, ma.activity_id
-FROM acme_operational.member_activities ma
-LEFT JOIN acme_operational.members m ON ma.member_id = m.id
-WHERE m.id IS NULL;
+-- Find orphaned records (user_activities without users)
+SELECT ua.id, ua.user_id, ua.activity_id
+FROM acme_models.user_activities ua
+LEFT JOIN acme_models.users u ON ua.user_id = u.id
+WHERE u.id IS NULL;
 
 -- Detect duplicate emails
 SELECT email, COUNT(*) AS count
-FROM acme_operational.members
+FROM acme_models.users
 GROUP BY email
 HAVING COUNT(*) > 1;
 
@@ -242,7 +242,7 @@ SELECT
     pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
     pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename) - pg_relation_size(schemaname||'.'||tablename)) AS indexes_size
 FROM pg_tables
-WHERE schemaname = 'acme_operational'
+WHERE schemaname = 'acme_models'
 ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 
 -- Index usage statistics
@@ -254,5 +254,5 @@ SELECT
     idx_tup_read,
     pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
 FROM pg_stat_user_indexes
-WHERE schemaname = 'acme_operational'
+WHERE schemaname = 'acme_models'
 ORDER BY idx_scan DESC;

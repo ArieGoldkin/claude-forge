@@ -7,8 +7,8 @@ Integrates with acme platform's database utilities.
 
 Usage:
     source .env.db && python inspect_schema.py --list-tables
-    source .env.db && python inspect_schema.py --table member --details
-    source .env.db && python inspect_schema.py --table member --relationships
+    source .env.db && python inspect_schema.py --table user --details
+    source .env.db && python inspect_schema.py --table user --relationships
     source .env.db && python inspect_schema.py --export-schema
     source .env.db && python inspect_schema.py --table-sizes
     source .env.db && python inspect_schema.py --list-databases
@@ -45,7 +45,7 @@ def get_connection() -> Engine:
     return get_db_engine(db_secret, db_name, db_host, db_port)
 
 
-def list_tables(engine: Engine, schema: str = "acme_operational"):
+def list_tables(engine: Engine, schema: str = "acme_models"):
     """List all tables in the schema."""
     inspector = inspect(engine)
     tables = inspector.get_table_names(schema=schema)
@@ -68,7 +68,7 @@ def list_tables(engine: Engine, schema: str = "acme_operational"):
         print(f"   • {table:<30} ({count:,} rows)")
 
 
-def show_table_details(engine: Engine, table: str, schema: str = "acme_operational"):
+def show_table_details(engine: Engine, table: str, schema: str = "acme_models"):
     """Show detailed information about a table."""
     inspector = inspect(engine)
 
@@ -113,7 +113,7 @@ def show_table_details(engine: Engine, table: str, schema: str = "acme_operation
     print(f"   Size: {size}")
 
 
-def show_relationships(engine: Engine, table: str, schema: str = "acme_operational"):
+def show_relationships(engine: Engine, table: str, schema: str = "acme_models"):
     """Show foreign key relationships for a table."""
     inspector = inspect(engine)
 
@@ -153,7 +153,7 @@ def show_relationships(engine: Engine, table: str, schema: str = "acme_operation
         print("\n   No foreign key relationships found")
 
 
-def export_schema(engine: Engine, schema: str = "acme_operational"):
+def export_schema(engine: Engine, schema: str = "acme_models"):
     """Export full schema as JSON."""
     inspector = inspect(engine)
     tables = inspector.get_table_names(schema=schema)
@@ -178,7 +178,7 @@ def export_schema(engine: Engine, schema: str = "acme_operational"):
     print(f"\n✅ Schema exported to: {output_file}")
 
 
-def show_table_sizes(engine: Engine, schema: str = "acme_operational"):
+def show_table_sizes(engine: Engine, schema: str = "acme_models"):
     """Show sizes of all tables."""
     with engine.connect() as conn:
         result = conn.execute(text(f"""
@@ -268,8 +268,8 @@ def main():
     parser.add_argument(
         "--schema",
         type=str,
-        default="acme_operational",
-        help="Schema name (default: acme_operational)"
+        default="acme_models",
+        help="Schema name (default: acme_models)"
     )
 
     args = parser.parse_args()

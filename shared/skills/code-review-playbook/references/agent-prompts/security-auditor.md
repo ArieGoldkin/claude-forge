@@ -38,14 +38,14 @@ DEEP SECURITY CHECKS:
      manager. No credentials echoed to logs, error bodies, or test fixtures.
 
 5. **PII / PHI in Logs, Errors & Stack Traces (OWASP A09 Logging Failures)**
-   - **HIPAA: never log PHI.** No member identifiers, health data, or raw
+   - **HIPAA: never log PHI.** No user identifiers, health data, or raw
      request bodies in `console.log`/`logger.*`/exception messages/stack
      traces returned to clients. Require **structured logging with field
      scrubbing** (allow-listed fields, redaction of sensitive keys) rather
      than free-text interpolation of objects.
 
 6. **Tenant Isolation / Row-Level Security (OWASP A01)**
-   - Every query against a PHI table filters by tenant/member/user ID; no
+   - Every query against a PHI table filters by tenant/user ID; no
      cross-tenant read or write path. RLS or an explicit WHERE clause — not an
      application-layer "we always pass the right ID" assumption. Verify tests
      assert isolation, not just the happy path.

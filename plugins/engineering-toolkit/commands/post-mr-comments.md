@@ -246,8 +246,8 @@ Posting 5 of 12 findings to !${MR_NUMBER}:
 
   #1  blocking  utils/database/foo.py:89   conf=95
   #2  blocking  utils/database/foo.py:611  conf=90
-  #3  blocking  lambdas/coach/main.tf:85   conf=88
-  #4  issue     lambdas/member/main.tf:90  conf=82
+  #3  blocking  lambdas/admin/main.tf:85   conf=88
+  #4  issue     lambdas/users/main.tf:90   conf=82
   #5  issue     infra/vars/prod.tfvars:31  conf=75
 
 Already posted (skipped): 0

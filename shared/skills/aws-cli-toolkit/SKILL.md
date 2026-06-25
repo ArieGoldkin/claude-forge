@@ -52,7 +52,7 @@ aws sts get-caller-identity --profile acme-dev
 [profile acme-dev]
 sso_start_url = https://my-org.awsapps.com/start
 sso_region = us-east-1
-sso_account_id = 238141764839
+sso_account_id = 123456789012
 sso_role_name = DeveloperAccess
 region = us-east-1
 output = json
@@ -77,14 +77,14 @@ aws lambda list-functions --profile acme-dev \
 
 # Invoke function synchronously
 aws lambda invoke --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --payload '{"action": "health_check"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
 
 # View recent logs
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 30m --follow
 ```
 
@@ -94,17 +94,17 @@ aws logs tail --profile acme-dev \
 ```bash
 # Tail Lambda logs with follow mode
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --follow
 
 # Filter for errors only
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "ERROR"
 
 # Tail multiple log groups (use separate terminals)
-aws logs tail --profile acme-dev /aws/lambda/acme-coach-service-dev --since 30m &
-aws logs tail --profile acme-dev /aws/lambda/acme-member-service-dev --since 30m &
+aws logs tail --profile acme-dev /aws/lambda/acme-staff-service-dev --since 30m &
+aws logs tail --profile acme-dev /aws/lambda/acme-api-service-dev --since 30m &
 ```
 
 ### 4. Secrets Manager
@@ -130,7 +130,7 @@ aws secretsmanager list-secrets --profile acme-dev \
 aws s3 ls --profile acme-dev | grep acme
 
 # Sync deployment artifacts
-aws s3 sync ./dist s3://acme-deployments-dev/functions/member-service/ \
+aws s3 sync ./dist s3://acme-deployments-dev/functions/api-service/ \
   --profile acme-dev
 
 # Generate presigned URL (1 hour expiry)
@@ -184,8 +184,8 @@ See also `checklists/incident-response.md` for production incident debugging wor
 
 | Resource | Pattern | Example |
 |----------|---------|---------|
-| Lambda | `acme-<service>-<env>` | `acme-member-service-dev` |
-| Log Group | `/aws/lambda/acme-<service>-<env>` | `/aws/lambda/acme-member-service-dev` |
+| Lambda | `acme-<service>-<env>` | `acme-api-service-dev` |
+| Log Group | `/aws/lambda/acme-<service>-<env>` | `/aws/lambda/acme-api-service-dev` |
 | Secret | `acme/<env>/<service>` | `acme/dev/database` |
 | S3 Bucket | `acme-<purpose>-<env>` | `acme-deployments-dev` |
 | RDS | `acme-db-<env>` | `acme-db-dev` |
@@ -195,7 +195,7 @@ See also `checklists/incident-response.md` for production incident debugging wor
 
 | Profile | Account | Purpose |
 |---------|---------|---------|
-| `acme-dev` | 238141764839 | Development and testing |
+| `acme-dev` | 123456789012 | Development and testing |
 | `acme-staging` | (TBD) | Pre-production validation |
 | `acme-prod` | (TBD) | Production workloads |
 

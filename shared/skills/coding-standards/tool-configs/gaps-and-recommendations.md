@@ -365,7 +365,7 @@ npx biome check frontend/ --diagnostic-level=error
 npx biome check frontend/ --fix
 
 # Verify TypeScript still compiles
-cd frontend/member && npm run build
+cd frontend/web && npm run build
 ```
 
 ### Backend
@@ -383,8 +383,8 @@ uv run pytest
 ### Coverage
 ```bash
 # Verify coverage thresholds work
-cd frontend/member && npm run test:coverage
-cd lambdas/member/get-member-data && uv run pytest --cov --cov-fail-under=80
+cd frontend/web && npm run test:coverage
+cd lambdas/users/get-user-data && uv run pytest --cov --cov-fail-under=80
 ```
 
 ---

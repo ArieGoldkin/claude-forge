@@ -63,18 +63,18 @@ Place in the project root or `.auto-research/` directory:
 # Auto-Research Program
 
 ## Goal
-Reduce the p95 API response time for /api/members endpoint below 200ms.
+Reduce the p95 API response time for /api/users endpoint below 200ms.
 
 ## Strategy
 - **Intent**: optimize
-- **Skill**: /experiment src/api/members/ --metric "npm run bench:members -- --json | jq '.p95'" --minimize --goal 200 --unit ms
+- **Skill**: /experiment src/api/users/ --metric "npm run bench:users -- --json | jq '.p95'" --minimize --goal 200 --unit ms
 - **Metric**: p95 latency (minimize)
 - **Budget**: 15 iterations / 60 minutes
 
 ## Target
-- **Files**: src/api/members/handler.ts, src/api/members/queries.ts
-- **Readonly**: src/api/members/types.ts, tests/
-- **Scope**: src/api/members/
+- **Files**: src/api/users/handler.ts, src/api/users/queries.ts
+- **Readonly**: src/api/users/types.ts, tests/
+- **Scope**: src/api/users/
 
 ## Constraints
 - Do not change the public API contract

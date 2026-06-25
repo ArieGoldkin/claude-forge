@@ -105,7 +105,7 @@ New String: "agent_decisions": {
   "timestamp": "2025-12-29T15:45:00.000Z",
   "suggested_resolution": "1. Run pg_dump backup, 2. Get approval, 3. Apply migration",
   "priority": "high",
-  "dependencies": ["members table", "sessions table"]
+  "dependencies": ["users table", "sessions table"]
 }
 ```
 

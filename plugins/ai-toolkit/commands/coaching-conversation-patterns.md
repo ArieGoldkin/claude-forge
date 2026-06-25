@@ -1,5 +1,5 @@
 ---
-description: AI health coaching conversation patterns for empathetic, safe, and effective member interactions. Use when building conversational coaching features, 
+description: AI coaching & conversational support — empathetic interactions, safety guardrails, motivational interviewing, SMART goals, crisis handling. Applicable to coaching, therapy, education, customer support.
 ---
 
 # coaching-conversation-patterns

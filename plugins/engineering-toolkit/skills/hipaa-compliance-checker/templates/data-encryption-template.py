@@ -609,8 +609,8 @@ Example usage in a health application:
 # 1. Initialize encryption
 phi_encryption = PHIEncryption()
 
-# 2. Encrypt sensitive member health data
-member_health_data = {
+# 2. Encrypt sensitive user health data
+user_health_data = {
     "weight": 165,
     "blood_pressure": "120/80",
     "medications": ["Lisinopril"],
@@ -618,9 +618,9 @@ member_health_data = {
 }
 
 encrypted_data = phi_encryption.encrypt_phi_data(
-    plaintext=member_health_data,
-    user_id="member_12345",
-    data_type="member_health_profile"
+    plaintext=user_health_data,
+    user_id="user_12345",
+    data_type="user_health_profile"
 )
 
 # 3. Store encrypted data in database
@@ -629,16 +629,16 @@ encrypted_data = phi_encryption.encrypt_phi_data(
 # 4. Retrieve and decrypt when authorized
 decrypted_data = phi_encryption.decrypt_phi_data(
     encrypted_data=encrypted_data,
-    user_id="coach_67890",  # Authorized coach
-    data_type="member_health_profile"
+    user_id="staff_67890",  # Authorized staff
+    data_type="user_health_profile"
 )
 
 # 5. Use with SQLAlchemy models
-class MemberHealthProfile(Base):
-    __tablename__ = 'member_health_profiles'
+class UserHealthProfile(Base):
+    __tablename__ = 'user_health_profiles'
 
     id = Column(Integer, primary_key=True)
-    member_id = Column(String(50), nullable=False)
+    user_id = Column(String(50), nullable=False)
 
     # Automatically encrypted fields
     health_conditions = Column(EncryptedPHIField())

@@ -39,8 +39,8 @@
     "lint_backend": "mise run ruff-check",
     "test_frontend": "mise run test-frontend",
     "secret_scan": "mise run secret-detection",
-    "typecheck_member": "cd frontend/member && npm run build",
-    "typecheck_coach": "cd frontend/coach && npm run build"
+    "typecheck_web": "cd frontend/web && npm run build",
+    "typecheck_admin": "cd frontend/admin && npm run build"
   },
   "vcs": {
     "provider": "auto"

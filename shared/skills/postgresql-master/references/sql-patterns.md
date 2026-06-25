@@ -24,15 +24,15 @@ from sqlalchemy import text
 
 email = user_input  # User-provided value
 result = session.execute(
-    text("SELECT * FROM member WHERE email = :email"),
+    text("SELECT * FROM users WHERE email = :email"),
     {"email": email}
 )
 
 # ✅ CORRECT: ORM query (automatically parameterized)
-member = session.query(Member).filter(Member.email == email).first()
+user = session.query(User).filter(User.email == email).first()
 
 # ❌ WRONG: String interpolation (SQL injection vulnerability!)
-query = f"SELECT * FROM member WHERE email = '{email}'"  # NEVER DO THIS
+query = f"SELECT * FROM users WHERE email = '{email}'"  # NEVER DO THIS
 result = session.execute(text(query))
 ```
 
@@ -40,23 +40,23 @@ result = session.execute(text(query))
 
 ```sql
 -- ✅ CORRECT: Use IS NULL / IS NOT NULL
-SELECT * FROM member WHERE active_goal_id IS NULL;
+SELECT * FROM users WHERE active_goal_id IS NULL;
 
 -- ❌ WRONG: NULL comparisons don't work with = or !=
-SELECT * FROM member WHERE active_goal_id = NULL;  -- Returns no results!
+SELECT * FROM users WHERE active_goal_id = NULL;  -- Returns no results!
 ```
 
 ### Case-Insensitive Search
 
 ```sql
 -- ✅ CORRECT: Use ILIKE for case-insensitive LIKE
-SELECT * FROM member WHERE email ILIKE '%@example.com';
+SELECT * FROM users WHERE email ILIKE '%@example.com';
 
 -- ✅ CORRECT: Use LOWER() for exact case-insensitive matches
-SELECT * FROM member WHERE LOWER(email) = LOWER(:email);
+SELECT * FROM users WHERE LOWER(email) = LOWER(:email);
 
 -- ⚠️ WARNING: LOWER() prevents index usage - add functional index if frequent:
-CREATE INDEX idx_member_email_lower ON member (LOWER(email));
+CREATE INDEX idx_user_email_lower ON users (LOWER(email));
 ```
 
 ### Date Range Queries
@@ -80,18 +80,18 @@ WHERE created_at BETWEEN '2025-01-01' AND '2025-01-31';  -- Misses 23:59:59
 
 ```sql
 -- ✅ CORRECT: Keyset pagination (cursor-based)
-SELECT * FROM member
+SELECT * FROM users
 WHERE id > :last_id
 ORDER BY id
 LIMIT 100;
 
 -- ⚠️ ACCEPTABLE: Offset pagination (only for small offsets)
-SELECT * FROM member
+SELECT * FROM users
 ORDER BY id
 LIMIT 100 OFFSET 0;
 
 -- ❌ WRONG: Large offset pagination (very slow for large offsets)
-SELECT * FROM member
+SELECT * FROM users
 ORDER BY id
 LIMIT 100 OFFSET 10000;  -- Scans 10,100 rows to return 100
 ```
@@ -100,10 +100,10 @@ LIMIT 100 OFFSET 10000;  -- Scans 10,100 rows to return 100
 
 ```sql
 -- ✅ CORRECT: Select only needed columns
-SELECT id, email, first_name FROM member;
+SELECT id, email, first_name FROM users;
 
 -- ❌ WRONG: SELECT * unnecessarily transfers large data
-SELECT * FROM member;  -- Returns all columns even if not needed
+SELECT * FROM users;  -- Returns all columns even if not needed
 ```
 
 ### Batch Operations
@@ -112,19 +112,19 @@ SELECT * FROM member;  -- Returns all columns even if not needed
 # ✅ CORRECT: Bulk insert
 from sqlalchemy import insert
 
-members_data = [
+users_data = [
     {"email": "user1@example.com", "first_name": "User1"},
     {"email": "user2@example.com", "first_name": "User2"},
     # ... 1000 more
 ]
 
-session.execute(insert(Member), members_data)
+session.execute(insert(User), users_data)
 session.commit()
 
 # ❌ WRONG: Individual inserts in loop
-for data in members_data:
-    member = Member(**data)
-    session.add(member)
+for data in users_data:
+    user = User(**data)
+    session.add(user)
     session.commit()  # Commits after EACH insert (very slow!)
 ```
 
@@ -132,12 +132,12 @@ for data in members_data:
 
 ```sql
 -- ✅ CORRECT: COUNT(*) with WHERE (uses index)
-SELECT COUNT(*) FROM member WHERE status = 'active';
+SELECT COUNT(*) FROM users WHERE status = 'active';
 
 -- ✅ CORRECT: Approximate count for large tables (very fast)
 SELECT reltuples::bigint AS estimate
 FROM pg_class
-WHERE relname = 'member';
+WHERE relname = 'users';
 
 -- ❌ WRONG: COUNT(*) on large table without WHERE (table scan)
 SELECT COUNT(*) FROM events;  -- May take minutes on large tables
@@ -155,16 +155,16 @@ from sqlalchemy.orm import Session
 
 with Session(engine) as session:
     try:
-        # Step 1: Update member
-        member = session.query(Member).filter(Member.id == member_id).first()
-        member.status = 'inactive'
+        # Step 1: Update user
+        user = session.query(User).filter(User.id == user_id).first()
+        user.status = 'inactive'
 
         # Step 2: Cancel subscription
-        subscription = member.subscriptions[0]
+        subscription = user.subscriptions[0]
         subscription.status = 'cancelled'
 
         # Step 3: Log event
-        event = Event(member_id=member_id, event_type='cancellation')
+        event = Event(user_id=user_id, event_type='cancellation')
         session.add(event)
 
         # Commit all or nothing
@@ -174,11 +174,11 @@ with Session(engine) as session:
         raise
 
 # ❌ WRONG: Multiple commits (not atomic)
-session.add(member)
+session.add(user)
 session.commit()  # Committed, can't rollback
 
 session.add(subscription)
-session.commit()  # If this fails, member already changed!
+session.commit()  # If this fails, user already changed!
 ```
 
 ### Isolation Levels
@@ -206,60 +206,60 @@ with engine.connect().execution_options(
 
 ```python
 # ❌ WRONG: N+1 queries (1 query + N queries for related data)
-members = session.query(Member).all()  # 1 query
-for member in members:
-    print(member.subscriptions)  # N queries (one per member)
+users = session.query(User).all()  # 1 query
+for user in users:
+    print(user.subscriptions)  # N queries (one per user)
 
 # ✅ CORRECT: Eager loading with joinedload
 from sqlalchemy.orm import joinedload
 
-members = session.query(Member).options(
-    joinedload(Member.subscriptions)
+users = session.query(User).options(
+    joinedload(User.subscriptions)
 ).all()  # Single query with JOIN
 
 # ✅ CORRECT: Eager loading with selectinload (better for one-to-many)
 from sqlalchemy.orm import selectinload
 
-members = session.query(Member).options(
-    selectinload(Member.subscriptions)
-).all()  # 2 queries total (Member + Subscriptions), no N+1
+users = session.query(User).options(
+    selectinload(User.subscriptions)
+).all()  # 2 queries total (User + Subscriptions), no N+1
 ```
 
 ### Implicit Cartesian Products
 
 ```sql
 -- ❌ WRONG: Missing JOIN condition (cartesian product!)
-SELECT * FROM member, subscription;  -- Returns member x subscription rows
+SELECT * FROM users, subscription;  -- Returns users x subscription rows
 
 -- ✅ CORRECT: Explicit JOIN with ON condition
-SELECT * FROM member
-JOIN subscription ON member.id = subscription.member_id;
+SELECT * FROM users
+JOIN subscription ON users.id = subscription.user_id;
 ```
 
 ### Redundant Subqueries
 
 ```sql
 -- ❌ WRONG: Redundant subquery
-SELECT * FROM member
-WHERE id IN (SELECT member_id FROM member_subscription WHERE status = 'active');
+SELECT * FROM users
+WHERE id IN (SELECT user_id FROM user_subscription WHERE status = 'active');
 
 -- ✅ CORRECT: Direct JOIN (faster, clearer)
-SELECT m.* FROM member m
-JOIN member_subscription ms ON m.id = ms.member_id
-WHERE ms.status = 'active';
+SELECT u.* FROM users u
+JOIN user_subscription us ON u.id = us.user_id
+WHERE us.status = 'active';
 ```
 
 ### Using OR with Different Columns
 
 ```sql
 -- ⚠️ SLOW: OR prevents index usage
-SELECT * FROM member
+SELECT * FROM users
 WHERE first_name = 'John' OR last_name = 'Doe';  -- Can't use index efficiently
 
 -- ✅ BETTER: UNION (uses indexes on both columns)
-SELECT * FROM member WHERE first_name = 'John'
+SELECT * FROM users WHERE first_name = 'John'
 UNION
-SELECT * FROM member WHERE last_name = 'Doe';
+SELECT * FROM users WHERE last_name = 'Doe';
 ```
 
 ---
@@ -288,12 +288,12 @@ VALUES ('login', NOW());
 SELECT * FROM appointments
 WHERE scheduled_at > CURRENT_TIMESTAMP + INTERVAL '7 days';
 
-SELECT * FROM member_subscription
+SELECT * FROM user_subscription
 WHERE end_date < CURRENT_DATE - INTERVAL '30 days';
 
 -- ✅ CORRECT: Date truncation
 SELECT DATE_TRUNC('month', created_at) AS month, COUNT(*)
-FROM member
+FROM users
 GROUP BY month
 ORDER BY month DESC;
 ```
@@ -305,11 +305,11 @@ ORDER BY month DESC;
 from datetime import datetime, timezone
 
 now_utc = datetime.now(timezone.utc)
-member.created_at = now_utc
+user.created_at = now_utc
 
 # ✅ CORRECT: Convert to timezone for display
 SELECT created_at AT TIME ZONE 'America/New_York' AS local_time
-FROM member;
+FROM users;
 ```
 
 ---
@@ -362,11 +362,11 @@ session.commit()
 -- ✅ CORRECT: Enable RLS for multi-tenant tables
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 
--- Create policy: coaches can only see their own notes
-CREATE POLICY coach_notes_policy ON notes
+-- Create policy: staff can only see their own notes
+CREATE POLICY staff_notes_policy ON notes
 FOR SELECT
-TO coach_role
-USING (coach_id = current_setting('app.current_coach_id')::int);
+TO staff_role
+USING (staff_id = current_setting('app.current_staff_id')::int);
 ```
 
 ### Audit Logging
@@ -394,8 +394,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER member_audit_trigger
-AFTER UPDATE ON member
+CREATE TRIGGER user_audit_trigger
+AFTER UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 ```
 
@@ -408,10 +408,10 @@ FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
 ```sql
 -- ✅ CORRECT: Analyze slow queries with EXPLAIN
 EXPLAIN ANALYZE
-SELECT m.*, s.*
-FROM member m
-JOIN member_subscription ms ON m.id = ms.member_id
-WHERE ms.status = 'active';
+SELECT u.*, s.*
+FROM users u
+JOIN user_subscription us ON u.id = us.user_id
+WHERE us.status = 'active';
 
 -- Look for:
 -- - Sequential Scans (should be Index Scans)

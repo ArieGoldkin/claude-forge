@@ -58,17 +58,17 @@ Query optimization, indexing strategies, and caching patterns for PostgreSQL.
 
 ```sql
 -- B-tree index (default, most common)
-CREATE INDEX idx_member_email ON member(email);
+CREATE INDEX idx_user_email ON users(email);
 
 -- Partial index (only index subset of rows)
-CREATE INDEX idx_active_member_subscription ON member_subscription(member_id)
+CREATE INDEX idx_active_user_subscription ON user_subscription(user_id)
 WHERE status = 'active';
 
 -- Composite index (multi-column)
-CREATE INDEX idx_events_member_type ON events(member_id, event_type);
+CREATE INDEX idx_events_user_type ON events(user_id, event_type);
 
 -- Functional index (for computed values)
-CREATE INDEX idx_member_email_lower ON member(LOWER(email));
+CREATE INDEX idx_user_email_lower ON users(LOWER(email));
 
 -- GIN index (for JSON/array columns)
 CREATE INDEX idx_events_data_gin ON events USING GIN (event_data);
@@ -84,10 +84,10 @@ WHERE idx_scan = 0
 ORDER BY pg_relation_size(indexrelid) DESC;
 
 -- Rebuild bloated indexes
-REINDEX INDEX idx_member_email;
+REINDEX INDEX idx_user_email;
 
 -- Analyze table statistics (helps query planner)
-ANALYZE member;
+ANALYZE users;
 ```
 
 ---
@@ -98,9 +98,9 @@ ANALYZE member;
 
 ```sql
 EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
-SELECT m.* FROM member m
-JOIN member_subscription ms ON m.id = ms.member_id
-WHERE ms.status = 'active';
+SELECT u.* FROM users u
+JOIN user_subscription us ON u.id = us.user_id
+WHERE us.status = 'active';
 ```
 
 **Key metrics to watch:**
@@ -124,11 +124,11 @@ WHERE created_at >= '2025-01-01' AND created_at < '2026-01-01';
 **2. Use covering indexes**:
 ```sql
 -- Query needs: id, email, created_at
-CREATE INDEX idx_member_covering ON member(status, created_at)
+CREATE INDEX idx_user_covering ON users(status, created_at)
 INCLUDE (id, email);
 
 -- Query can be satisfied entirely from index (no table lookup)
-SELECT id, email, created_at FROM member
+SELECT id, email, created_at FROM users
 WHERE status = 'active'
 ORDER BY created_at DESC
 LIMIT 100;
@@ -183,23 +183,23 @@ engine = create_engine(
 from functools import lru_cache
 
 @lru_cache(maxsize=100)
-def get_focus_areas():
-    """Cache focus areas (rarely change)"""
-    return session.query(FocusArea).all()
+def get_categories():
+    """Cache categories (rarely change)"""
+    return session.query(Category).all()
 
 # Cache with TTL using external cache (Redis)
 import redis
 cache = redis.Redis(host='localhost', port=6379)
 
-def get_member_stats(member_id):
-    cache_key = f"member_stats:{member_id}"
+def get_user_stats(user_id):
+    cache_key = f"user_stats:{user_id}"
     cached = cache.get(cache_key)
 
     if cached:
         return json.loads(cached)
 
     # Query database
-    stats = calculate_member_stats(member_id)
+    stats = calculate_user_stats(user_id)
 
     # Cache for 1 hour
     cache.setex(cache_key, 3600, json.dumps(stats))
@@ -211,20 +211,20 @@ def get_member_stats(member_id):
 
 ```sql
 -- Use materialized views for expensive aggregations
-CREATE MATERIALIZED VIEW member_stats_mv AS
+CREATE MATERIALIZED VIEW user_stats_mv AS
 SELECT
-    member_id,
+    user_id,
     COUNT(DISTINCT activity_id) AS actions_started,
     COUNT(first_completion_at) AS actions_completed,
     MAX(start_at) AS last_activity
-FROM member_activities
-GROUP BY member_id;
+FROM user_activities
+GROUP BY user_id;
 
 -- Refresh periodically (e.g., nightly)
-REFRESH MATERIALIZED VIEW member_stats_mv;
+REFRESH MATERIALIZED VIEW user_stats_mv;
 
 -- Query is instant
-SELECT * FROM member_stats_mv WHERE member_id = 123;
+SELECT * FROM user_stats_mv WHERE user_id = 123;
 ```
 
 ---

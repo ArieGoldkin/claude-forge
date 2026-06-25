@@ -8,7 +8,7 @@ The render step takes a Composition + spec and produces an `.mp4`. The publish s
 npx remotion render <CompositionId> out/<name>.mp4 --codec h264 --crf 23
 ```
 
-Where `<CompositionId>` matches what you passed to `<Composition id="..." />` in `src/Root.tsx`. Convention: PascalCase derived from the topic (e.g., `ReviewMrPipeline`, `EventLambdaTopology`, `MrCreationSequence`, `MemberLifecycleFsm`).
+Where `<CompositionId>` matches what you passed to `<Composition id="..." />` in `src/Root.tsx`. Convention: PascalCase derived from the topic (e.g., `ReviewMrPipeline`, `EventLambdaTopology`, `MrCreationSequence`, `SubscriptionLifecycleFsm`).
 
 ### Flags worth setting
 

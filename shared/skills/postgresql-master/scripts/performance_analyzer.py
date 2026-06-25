@@ -5,11 +5,11 @@ PostgreSQL Performance Analyzer
 Analyze query performance, suggest indexes, and provide optimization recommendations.
 
 Usage:
-    source .env.db && python performance_analyzer.py --query "SELECT * FROM member WHERE email = 'user@example.com'"
-    source .env.db && python performance_analyzer.py --suggest-indexes --table member
+    source .env.db && python performance_analyzer.py --query "SELECT * FROM users WHERE email = 'user@example.com'"
+    source .env.db && python performance_analyzer.py --suggest-indexes --table user
     source .env.db && python performance_analyzer.py --index-usage
     source .env.db && python performance_analyzer.py --slow-queries
-    source .env.db && python performance_analyzer.py --table-stats --table member
+    source .env.db && python performance_analyzer.py --table-stats --table user
 """
 
 import os
@@ -84,7 +84,7 @@ def analyze_query(engine, query: str):
             sys.exit(1)
 
 
-def suggest_indexes(engine, table: str, schema: str = "acme_operational"):
+def suggest_indexes(engine, table: str, schema: str = "acme_models"):
     """Suggest indexes based on missing indexes and query patterns."""
     print(f"\n💡 Index Suggestions for {schema}.{table}")
     print("=" * 80)
@@ -170,7 +170,7 @@ def suggest_indexes(engine, table: str, schema: str = "acme_operational"):
                     print(f"      CREATE INDEX idx_{table}_{col} ON {schema}.{table}({col});")
 
 
-def show_index_usage(engine, schema: str = "acme_operational"):
+def show_index_usage(engine, schema: str = "acme_models"):
     """Show index usage statistics."""
     print(f"\n📇 Index Usage Statistics for {schema}")
     print("=" * 80)
@@ -215,7 +215,7 @@ def show_index_usage(engine, schema: str = "acme_operational"):
                 print(f"   • {row.indexname} on {row.tablename} (Size: {row.index_size})")
 
 
-def show_table_stats(engine, table: str, schema: str = "acme_operational"):
+def show_table_stats(engine, table: str, schema: str = "acme_models"):
     """Show detailed table statistics."""
     print(f"\n📊 Table Statistics for {schema}.{table}")
     print("=" * 80)
@@ -333,8 +333,8 @@ def main():
     parser.add_argument(
         "--schema",
         type=str,
-        default="acme_operational",
-        help="Schema name (default: acme_operational)"
+        default="acme_models",
+        help="Schema name (default: acme_models)"
     )
     parser.add_argument(
         "--index-usage",

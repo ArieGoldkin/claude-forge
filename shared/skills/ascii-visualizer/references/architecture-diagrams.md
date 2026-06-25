@@ -24,7 +24,7 @@
 
 ```
 +----------+     +----------+     +----------+
-| API      |---->| Auth     |     | Member   |
+| API      |---->| Auth     |     | Order    |
 | Gateway  |     | Service  |     | Service  |
 +----------+     +----------+     +----------+
      |                                 ^
@@ -34,7 +34,7 @@
                       |
                       v
                  +-----------+
-                 | Scoring   |
+                 | Pricing   |
                  | Service   |
                  +-----------+
 ```
@@ -103,17 +103,17 @@
 ```
 +-------------------------------------------------------+
 |                    API Layer (REST)                     |
-|  /members  /assessments  /coaching  /reports           |
+|  /users  /orders  /products  /reports                  |
 +-------------------------------------------------------+
                           |
 +-------------------------------------------------------+
 |                  Service Layer                          |
-|  AuthService  MemberService  ScoringService            |
+|  AuthService  OrderService  PricingService             |
 +-------------------------------------------------------+
                           |
 +-------------------------------------------------------+
 |                  Domain Layer                           |
-|  Member  Assessment  CoachingSession  RiskScore         |
+|  User  Order  Product  Invoice                          |
 +-------------------------------------------------------+
                           |
 +-------------------------------------------------------+

@@ -45,7 +45,7 @@ Pre-deployment validation checklist for Alembic migrations.
 
 ### 1. Model Changes
 
-- [ ] **Update ORM models** in `utils/database/models/acme_operational/`
+- [ ] **Update ORM models** in `utils/database/models/acme_models/`
 - [ ] **Add/update relationships** if needed
 - [ ] **Add validation** (nullable, defaults, constraints)
 - [ ] **Update docstrings** to document changes
@@ -159,7 +159,7 @@ Pre-deployment validation checklist for Alembic migrations.
 
 - [ ] **Check application logs** - No database errors
 - [ ] **Verify schema changes** - Use `inspect_schema.py`
-- [ ] **Test critical flows** - Member creation, login, progress tracking
+- [ ] **Test critical flows** - User creation, login, activity tracking
 - [ ] **Monitor database metrics** - CPU, connections, query performance
 - [ ] **Check for slow queries** - CloudWatch RDS metrics
 

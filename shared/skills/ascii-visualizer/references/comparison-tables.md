@@ -55,7 +55,7 @@
 | Service          | Status   | Uptime   | Notes  |
 +------------------+----------+----------+--------+
 | Auth API         |  [OK]    | 99.99%   |        |
-| Member Service   |  [OK]    | 99.95%   |        |
+| User Service     |  [OK]    | 99.95%   |        |
 | Scoring Engine   | [WARN]   | 99.80%   | p95 up |
 | Report Generator | [DOWN]   | 98.50%   | OOM    |
 | Notification Svc |  [OK]    | 99.97%   |        |

@@ -5,8 +5,8 @@ Alembic Migration Helper
 Generate, validate, and manage Alembic database migrations.
 
 Usage:
-    source .env.db && python migration_helper.py --auto-generate "Add acme_score to members"
-    source .env.db && python migration_helper.py --create "Add index on member_activities"
+    source .env.db && python migration_helper.py --auto-generate "Add last_login_at to user"
+    source .env.db && python migration_helper.py --create "Add index on user_activities"
     source .env.db && python migration_helper.py --validate
     source .env.db && python migration_helper.py --dry-run
     source .env.db && python migration_helper.py --current

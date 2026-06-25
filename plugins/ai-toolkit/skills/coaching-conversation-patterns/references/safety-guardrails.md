@@ -1,4 +1,4 @@
-# Safety Guardrails for AI Health Coaching
+# Safety Guardrails for AI Coaching
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@
 
 ## Overview
 
-Safety is non-negotiable in health coaching. This document provides comprehensive patterns for detecting, handling, and escalating safety concerns in AI-generated coaching responses.
+Safety is non-negotiable in any user-facing coaching or support AI. This document provides comprehensive patterns for detecting, handling, and escalating safety concerns in AI-generated coaching responses. Crisis handling applies to any support AI; medical, legal, and financial advice are shown as examples of out-of-scope topics — adapt the out-of-scope set to your domain.
 
 ---
 
@@ -74,7 +74,7 @@ CRISIS_PATTERNS = {
 
 def detect_crisis(message: str) -> tuple[bool, CrisisSeverity | None, list[str]]:
     """
-    Detect crisis indicators in member message.
+    Detect crisis indicators in a user message.
 
     Returns:
         (is_crisis, severity, matched_patterns)
@@ -130,37 +130,43 @@ You matter, and there are people who want to help.""",
 }
 
 async def handle_crisis(
-    member_id: str,
+    user_id: str,
     message: str,
     severity: CrisisSeverity
 ) -> CrisisResponse:
     """Handle crisis with appropriate escalation."""
     response = CRISIS_RESPONSES[severity]
 
-    # Log crisis event (HIPAA-compliant, no PHI in logs)
+    # Log crisis event (no message content or sensitive data in logs;
+    # in regulated domains, follow the applicable compliance regime, e.g. HIPAA)
     await log_crisis_event(
-        member_id=member_id,
+        user_id=user_id,
         severity=severity.value,
         action_taken=response.escalation_action
     )
 
     # Notify human coach
     await notify_coach(
-        member_id=member_id,
+        user_id=user_id,
         urgency=severity.value,
         requires_response=True
     )
 
     # If immediate, also notify supervisor
     if severity == CrisisSeverity.IMMEDIATE:
-        await notify_supervisor(member_id=member_id)
+        await notify_supervisor(user_id=user_id)
 
     return response
 ```
 
 ---
 
-## Medical Advice Detection
+## Out-of-Scope Advice Detection (Example: Medical)
+
+Medical advice is used here as a worked example of an out-of-scope topic. The
+same detect-and-redirect pattern applies to legal, financial, or any other
+domain your system is not licensed to advise on — swap the patterns and
+redirect copy accordingly.
 
 ### What Constitutes Medical Advice
 - Diagnosing conditions or symptoms
@@ -195,7 +201,7 @@ MEDICAL_ADVICE_PATTERNS = {
 
 def detect_medical_request(message: str) -> tuple[bool, str | None]:
     """
-    Detect if member is seeking medical advice.
+    Detect if the user is seeking medical advice.
 
     Returns:
         (is_medical, category)
@@ -214,16 +220,16 @@ def detect_medical_request(message: str) -> tuple[bool, str | None]:
 ```python
 MEDICAL_REDIRECTS = {
     "diagnosis_seeking": """I understand you're looking for answers about what you're
-experiencing. While I can support your health journey, I'm not able to provide
+experiencing. While I can support your journey, I'm not able to provide
 medical diagnoses.
 
 For questions about specific symptoms or conditions, I'd recommend:
 - Reaching out to your primary care provider
 - Using a telehealth service for convenient access to medical professionals
-- Discussing your concerns with your health coach, who can help you
+- Discussing your concerns with your coach, who can help you
   prepare questions for your healthcare provider
 
-Is there something related to your health goals I can help you with?""",
+Is there something related to your goals I can help you with?""",
 
     "medication_related": """Questions about medications are really important to get right,
 and I want to make sure you get accurate information from someone qualified.
@@ -233,7 +239,7 @@ For medication questions, please:
 - Use your pharmacy's consultation service
 - Reach out to your healthcare provider's nurse line
 
-I'm here to support your overall health journey in other ways.
+I'm here to support your overall journey in other ways.
 What else can I help you with today?""",
 
     "treatment_seeking": """It sounds like you're looking for guidance on treatment options.
@@ -243,7 +249,7 @@ knows your full medical history.
 Your coach can help you:
 - Prepare questions for your healthcare provider
 - Think through what matters most to you in your care
-- Stay on track with health goals alongside any treatment
+- Stay on track with your goals alongside any treatment
 
 Would you like to explore any of those areas?""",
 }
@@ -267,16 +273,16 @@ class SafetyValidation(BaseModel):
 SAFETY_VALIDATION_PROMPT = """
 Evaluate this coaching response for safety issues.
 
-Member message: {member_message}
+User message: {user_message}
 Coach response: {coach_response}
 
 Check for these issues:
-1. **Medical advice** - Does it diagnose, prescribe, or recommend treatments?
-2. **Harmful suggestions** - Does it encourage dangerous behaviors (extreme diets, overexercise)?
+1. **Out-of-scope advice** - Does it diagnose, prescribe, or give advice the system isn't licensed for (e.g., medical, legal, financial)?
+2. **Harmful suggestions** - Does it encourage dangerous behaviors (domain-specific, e.g. extreme diets/overexercise for fitness, reckless spending for finance)?
 3. **Dismissive language** - Does it minimize concerns or invalidate feelings?
 4. **Over-promising** - Does it guarantee outcomes or make unrealistic claims?
 5. **Inappropriate boundaries** - Does it cross professional coaching boundaries?
-6. **Triggering content** - Could it trigger someone with ED, trauma, etc.?
+6. **Triggering content** - Could it trigger someone dealing with trauma or another sensitive experience?
 
 Return a SafetyValidation with:
 - passed: true if no issues found
@@ -287,13 +293,13 @@ Return a SafetyValidation with:
 """
 
 async def validate_response_safety(
-    member_message: str,
+    user_message: str,
     coach_response: str
 ) -> SafetyValidation:
     """Validate coaching response before sending."""
     result = await llm.with_structured_output(SafetyValidation).ainvoke(
         SAFETY_VALIDATION_PROMPT.format(
-            member_message=member_message,
+            user_message=user_message,
             coach_response=coach_response
         )
     )
@@ -302,17 +308,20 @@ async def validate_response_safety(
 
 ### Harmful Suggestion Detection
 ```python
+# The diet/exercise patterns below are fitness-domain examples; replace them with
+# patterns for whatever risky behaviors apply to your domain. The mindset patterns
+# at the end are domain-neutral and apply to any coaching context.
 HARMFUL_PATTERNS = [
-    # Extreme diet suggestions
+    # Extreme diet suggestions (fitness-domain example)
     r"\b(very\s*low\s*calorie|under\s*\d{3}\s*calories|fast(ing)?\s*for\s*\d+\s*days)\b",
     r"\b(cut\s*out\s*(all|entire)\s*(food\s*groups?|carbs?|fats?))\b",
 
-    # Dangerous exercise advice
+    # Dangerous exercise advice (fitness-domain example)
     r"\b(exercise\s*(through|despite)\s*(pain|injury))\b",
     r"\b(no\s*(rest|recovery)\s*days?)\b",
     r"\b(work\s*out\s*(every|all)\s*day)\b",
 
-    # Unhealthy mindsets
+    # Shame-inducing mindsets (domain-neutral)
     r"\b(no\s*excuses?|push\s*through\s*(everything|anything))\b",
     r"\b(if\s*you\s*really\s*wanted\s*(it|to))\b",  # Shame-inducing
 ]
@@ -333,7 +342,7 @@ def check_harmful_suggestions(response: str) -> list[str]:
 
 ## Logging and Audit
 
-### Safety Event Logging (HIPAA-Compliant)
+### Safety Event Logging (Privacy-Conscious)
 ```python
 from datetime import datetime
 import structlog
@@ -341,16 +350,17 @@ import structlog
 logger = structlog.get_logger()
 
 async def log_safety_event(
-    member_id: str,  # Only identifier logged
+    user_id: str,  # Only identifier logged
     event_type: str,
     severity: str,
     action_taken: str,
-    # Never log: message content, PHI, health details
+    # Never log: message content or any sensitive personal data.
+    # In regulated domains, follow the applicable regime (e.g. HIPAA for health data).
 ) -> None:
     """Log safety event for audit trail."""
     logger.info(
         "safety_event",
-        member_id=member_id,
+        user_id=user_id,
         event_type=event_type,
         severity=severity,
         action_taken=action_taken,
@@ -359,7 +369,7 @@ async def log_safety_event(
 
 # Example usage
 await log_safety_event(
-    member_id="mem_123",
+    user_id="usr_123",
     event_type="crisis_detected",
     severity="immediate",
     action_taken="coach_escalation"

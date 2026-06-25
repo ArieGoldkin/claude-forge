@@ -2,6 +2,16 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.7] - 2026-06-24 — genericize company-specific domain references
+
+Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin.
+
+### Changed
+
+- **`salesforce-integration-patterns`**: genericized the skill/command description and instruction examples (member/subscription framing → neutral domain).
+- **`aws-cli-toolkit`**: replaced a hardcoded AWS account ID with the standard `123456789012` placeholder across the examples.
+- **Shared skills** (`postgresql`, `coding-standards`, `ascii-visualizer`): genericized example data to a neutral domain.
+
 ## [2.0.6] - 2026-06-19 — security: SOQL-injection example fix; drop dangling reference links
 
 Skills-security audit hardening (`docs/reviews/2026-06-19_skills-security-audit.md`).

@@ -5133,7 +5133,6 @@ var CONTEXT_RULES = [
       /\bhealth score\b/i,
       /\bfall risk\b/i,
       /\bcare plan\b/i,
-      /\bhealth coach/i,
       /\bhealth program\b/i
     ],
     context: "Health domain: Assessment scores and care plans contain PHI. Apply HIPAA safeguards to health data. Use de-identified data for analytics and reporting."

@@ -43,7 +43,7 @@ phases:
 
   - id: phase_5
     name: "Phase 5: Agent Fan-out (★)"
-    description: "10 agents dispatched in parallel — Code Quality, Security, DB, Testing, Frontend, Lambda, Coaching, HIPAA, Docs, AND Agent #10 Business Context Reviewer (loads .claude/business-invariants.md)"
+    description: "10 agents dispatched in parallel — Code Quality, Security, DB, Testing, Frontend, Lambda, Performance, HIPAA, Docs, AND Agent #10 Business Context Reviewer (loads .claude/business-invariants.md)"
     duration_frames: 540        # 18s — biggest moment, agent fan-out is the centerpiece
     visual_style: diagram
     accent_color: "#a371f7"

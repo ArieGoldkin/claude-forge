@@ -1,4 +1,4 @@
-# Coaching Methodologies for AI Health Coaching
+# Coaching Methodologies for AI Coaching
 
 ## Table of Contents
 
@@ -13,7 +13,7 @@
 
 ## Overview
 
-This document covers evidence-based coaching methodologies adapted for AI-powered health coaching. These techniques support behavioral change while respecting the boundaries of AI coaching.
+This document covers evidence-based coaching methodologies adapted for AI-powered coaching across domains (fitness, education, career, health, customer support). These techniques support behavioral change while respecting the boundaries of AI coaching.
 
 ---
 
@@ -21,9 +21,9 @@ This document covers evidence-based coaching methodologies adapted for AI-powere
 
 ### Core Principles (RULE)
 - **R**esist the righting reflex - Don't rush to fix or advise
-- **U**nderstand member's motivations - Explore their "why"
+- **U**nderstand the user's motivations - Explore their "why"
 - **L**isten with empathy - Reflect and validate
-- **E**mpower the member - They have the answers
+- **E**mpower the user - They have the answers
 
 ### The Four Processes
 
@@ -33,8 +33,8 @@ Build rapport and establish trust.
 ```python
 ENGAGING_PROMPTS = [
     "Tell me a bit about what brought you here today.",
-    "What's most important to you when it comes to your health?",
-    "How has your health journey been going so far?",
+    "What's most important to you about what you're working on?",
+    "How has your journey been going so far?",
 ]
 ```
 
@@ -44,13 +44,13 @@ Identify the target behavior or goal.
 ```python
 FOCUSING_PROMPTS = [
     "Of all the things we could work on, what feels most important right now?",
-    "If you could change one thing about your health, what would it be?",
+    "If you could change one thing about your situation, what would it be?",
     "What's getting in the way of where you want to be?",
 ]
 ```
 
 #### 3. Evoking
-Draw out the member's own motivations for change.
+Draw out the user's own motivations for change.
 
 ```python
 EVOKING_PROMPTS = [
@@ -77,11 +77,11 @@ PLANNING_PROMPTS = [
 
 #### Open-ended Questions
 ```
-Instead of: "Did you exercise this week?"
-Use: "How did your movement feel this week?"
+Instead of: "Did you practice this week?"
+Use: "How did your practice feel this week?"
 
-Instead of: "Do you want to eat healthier?"
-Use: "What does eating well mean to you?"
+Instead of: "Do you want to improve?"
+Use: "What does progress mean to you?"
 ```
 
 #### Affirmations
@@ -154,7 +154,7 @@ class SMARTGoal(BaseModel):
         description="By when? (deadline, milestones, check-in points)"
     )
 
-    # Health-specific additions
+    # Optional additions
     barriers: list[str] = Field(
         default=[],
         description="Anticipated obstacles and how to address them"
@@ -197,20 +197,24 @@ SMART_GOAL_PROMPTS = {
 ```
 
 ### Goal Refinement Example
+
+This example uses a fitness goal, but the same refinement flow applies to any
+domain (study habits, career milestones, customer onboarding, etc.).
+
 ```
-Member: "I want to exercise more."
+User: "I want to exercise more."
 
 Coach: "That's a great intention! Let's make it more concrete so we can really track your progress.
 
 When you picture 'exercising more,' what does that actually look like? What type of movement, and how often?"
 
-Member: "Maybe walking... like 3 times a week?"
+User: "Maybe walking... like 3 times a week?"
 
-Coach: "Walking is great - it's accessible and has real health benefits. Three times a week sounds manageable.
+Coach: "Walking is great - it's accessible and easy to build on. Three times a week sounds manageable.
 
 Let me ask: how long would each walk be, and where would you do it?"
 
-Member: "Maybe 20 minutes around my neighborhood, probably in the morning before work."
+User: "Maybe 20 minutes around my neighborhood, probably in the morning before work."
 
 Coach: "Perfect. So here's what I'm hearing:
 
@@ -412,22 +416,22 @@ CHECKIN_STRUCTURE = [
 - Suggest coping strategies
 
 ### What AI Coaching Should NOT Do
-- Provide therapy or mental health treatment
-- Diagnose conditions
-- Prescribe treatments or medications
-- Make promises about health outcomes
+- Provide advice outside the system's scope (e.g., medical, legal, or financial advice unless explicitly licensed)
+- Diagnose conditions or interpret professional assessments
+- Prescribe treatments or other regulated remedies
+- Make promises about specific outcomes
 - Replace human judgment for complex situations
 - Handle crisis situations without human backup
 
 ### Escalation Triggers
 ```python
 ESCALATION_TRIGGERS = [
-    "Member expresses safety concerns",
-    "Member requests medical advice",
-    "Member shows signs of crisis",
-    "Member expresses dissatisfaction with AI coaching",
+    "User expresses safety concerns",
+    "User requests advice outside the system's scope",
+    "User shows signs of crisis",
+    "User expresses dissatisfaction with AI coaching",
     "Complex situation requiring human judgment",
-    "Member specifically requests human coach",
+    "User specifically requests a human",
 ]
 ```
 

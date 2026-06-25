@@ -60,7 +60,7 @@
     {"input": "make the brainstorming skill better", "category": "improve-skill", "skill": "/experiment"},
     {"input": "the review skill misses security issues, improve it", "category": "improve-skill", "skill": "/experiment"},
 
-    {"input": "fix the slow query in the members endpoint", "category": "fix", "skill": "/fix-bug", "note": "fix wins over optimize because user said 'fix'"},
+    {"input": "fix the slow query in the users endpoint", "category": "fix", "skill": "/fix-bug", "note": "fix wins over optimize because user said 'fix'"},
     {"input": "make the API faster", "category": "optimize", "skill": "/experiment", "note": "optimize because no specific bug, just improvement goal"},
     {"input": "write more tests", "category": "cover", "skill": "/cover --target", "note": "cover because about test quantity, not fixing broken tests"},
     {"input": "test the new feature", "category": "verify", "skill": "/verify", "note": "verify because checking existing feature works, not adding coverage"}

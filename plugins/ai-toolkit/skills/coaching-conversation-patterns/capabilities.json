@@ -2,7 +2,7 @@
   "$schema": "../../schemas/skill-capabilities.schema.json",
   "name": "coaching-conversation-patterns",
   "version": "1.0.0",
-  "description": "AI health coaching conversation patterns for empathetic, safe, and effective member interactions",
+  "description": "AI coaching & conversational support patterns for empathetic, safe, and effective user interactions",
 
   "capabilities": {
     "safety-guardrails": {
@@ -11,7 +11,7 @@
         "Detect medical advice requests",
         "Identify crisis indicators",
         "Implement safety validation",
-        "Handle escalation to human coaches"
+        "Handle escalation to human reviewers"
       ],
       "reference_file": "references/safety-guardrails.md",
       "token_cost": 250
@@ -20,7 +20,7 @@
       "keywords": ["empathy", "tone", "supportive", "validation", "acknowledgment", "EARS"],
       "solves": [
         "Generate empathetic coaching responses",
-        "Calibrate tone to member sentiment",
+        "Calibrate tone to user sentiment",
         "Apply EARS framework",
         "Avoid dismissive language"
       ],
@@ -84,15 +84,15 @@
   "triggers": {
     "high_confidence": [
       "coaching.*conversation",
-      "health.*coach.*ai",
-      "member.*chat.*response",
+      "conversational.*coach.*ai",
+      "user.*chat.*response",
       "empathetic.*response",
       "coaching.*safety"
     ],
     "medium_confidence": [
-      "health.*conversation",
+      "supportive.*conversation",
       "supportive.*message",
-      "member.*engagement.*ai"
+      "user.*engagement.*ai"
     ]
   },
 

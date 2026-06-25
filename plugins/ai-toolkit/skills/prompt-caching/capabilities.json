@@ -36,10 +36,10 @@
       "token_cost": 200
     },
     "agentic-caching-architecture": {
-      "keywords": ["agent", "agentic", "health-coach", "layering", "prefix", "long-running"],
+      "keywords": ["agent", "agentic", "assistant", "layering", "prefix", "long-running"],
       "solves": [
         "Cache-friendly agent architecture",
-        "Health coach prompt structure",
+        "Conversational assistant prompt structure",
         "Multi-turn session caching",
         "Subagent model transitions",
         "Compaction with cache preservation"

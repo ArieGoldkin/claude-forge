@@ -19,10 +19,10 @@ Token-optimized reference for TypeScript code quality standards in platform.
 
 ✅ **Good - Under 50 lines**:
 ```typescript
-function fetchMemberActivities(memberId: string) {
+function fetchUserActivities(userId: string) {
   const { data, error } = useQuery({
-    queryKey: ['member', memberId, 'activities'],
-    queryFn: () => apiClient.get(`/activities?member_id=${memberId}`),
+    queryKey: ['user', userId, 'activities'],
+    queryFn: () => apiClient.get(`/activities?user_id=${userId}`),
   });
 
   if (error) return <ErrorMessage error={error} />;
@@ -154,18 +154,18 @@ try {
 
 ❌ **Bad - Duplication**:
 ```typescript
-function getMemberActivities(memberId: string) {
+function getUserActivities(userId: string) {
   const { data } = useQuery({
-    queryKey: ['member', memberId, 'activities'],
-    queryFn: () => apiClient.get(`/activities?member_id=${memberId}`),
+    queryKey: ['user', userId, 'activities'],
+    queryFn: () => apiClient.get(`/activities?user_id=${userId}`),
   });
   return data;
 }
 
-function getMemberGoals(memberId: string) {
+function getUserGoals(userId: string) {
   const { data } = useQuery({
-    queryKey: ['member', memberId, 'goals'],
-    queryFn: () => apiClient.get(`/goals?member_id=${memberId}`),
+    queryKey: ['user', userId, 'goals'],
+    queryFn: () => apiClient.get(`/goals?user_id=${userId}`),
   });
   return data;
 }
@@ -173,25 +173,25 @@ function getMemberGoals(memberId: string) {
 
 ✅ **Good - Extracted hook**:
 ```typescript
-function useMemberData<T>(memberId: string, resource: string) {
+function useUserData<T>(userId: string, resource: string) {
   return useQuery({
-    queryKey: ['member', memberId, resource],
-    queryFn: () => apiClient.get(`/${resource}?member_id=${memberId}`),
+    queryKey: ['user', userId, resource],
+    queryFn: () => apiClient.get(`/${resource}?user_id=${userId}`),
   });
 }
 
 // Usage
-const activities = useMemberData(memberId, 'activities');
-const goals = useMemberData(memberId, 'goals');
+const activities = useUserData(userId, 'activities');
+const goals = useUserData(userId, 'goals');
 ```
 
 ### Clear Naming
 
 | Type | Convention | Example |
 |------|-----------|---------|
-| Variables | `camelCase` | `memberData`, `isLoading` |
+| Variables | `camelCase` | `userData`, `isLoading` |
 | Functions | `camelCase` | `fetchActivities()`, `validateEmail()` |
-| Classes/Interfaces | `PascalCase` | `ActivityList`, `MemberProfile` |
+| Classes/Interfaces | `PascalCase` | `ActivityList`, `UserProfile` |
 | Constants | `SCREAMING_SNAKE_CASE` | `MAX_RETRIES`, `API_BASE_URL` |
 | Booleans | `is/has/should` prefix | `isActive`, `hasPermission`, `shouldRedirect` |
 
@@ -212,8 +212,8 @@ await retryOperation(fetchData, { maxRetries: 3 });
 
 ❌ **Bad - Obvious**:
 ```typescript
-// Get member activities
-const activities = await getMemberActivities(memberId);
+// Get user activities
+const activities = await getUserActivities(userId);
 
 // Check if user is logged in
 if (isLoggedIn) {
@@ -242,33 +242,33 @@ function isEligibleForRenewal(subscription: Subscription): boolean {
 
 ❌ **Bad**:
 ```typescript
-console.log(`Member ${member.email} completed activity`);  // PII!
-logger.info(`Processing for ${member.name}`);  // PII!
+console.log(`User ${user.email} completed activity`);  // PII!
+logger.info(`Processing for ${user.name}`);  // PII!
 ```
 
 ✅ **Good**:
 ```typescript
 logger.info('Activity completed', {
-  member_id: memberId,
+  user_id: userId,
   activity_id: activityId
 });
 ```
 
 ### Tenant Isolation
 
-✅ **Good - Backend filters by member_id**:
+✅ **Good - Backend filters by user_id**:
 ```typescript
 // Frontend trusts backend to filter
 const { data } = useQuery({
-  queryKey: ['member-activities'],
-  queryFn: () => fetchMemberActivities(),  // Backend adds member_id from JWT
+  queryKey: ['user-activities'],
+  queryFn: () => fetchUserActivities(),  // Backend adds user_id from JWT
 });
 ```
 
 ❌ **Bad - Client-side filtering (insecure!)**:
 ```typescript
 const allActivities = await fetchAllActivities();  // Cross-tenant leak!
-const filtered = allActivities.filter(a => a.member_id === memberId);
+const filtered = allActivities.filter(a => a.user_id === userId);
 ```
 
 ---
@@ -297,7 +297,7 @@ See `tool-configs/actual-tool-configs.md` for details.
 - [ ] No `any` types (use `unknown` or proper types)
 - [ ] Try/catch for async operations
 - [ ] Clear variable/function names (camelCase)
-- [ ] No PII in logs (member_id only)
+- [ ] No PII in logs (user_id only)
 - [ ] No client-side tenant filtering
 - [ ] No commented-out code
 - [ ] No console.log (use logger)

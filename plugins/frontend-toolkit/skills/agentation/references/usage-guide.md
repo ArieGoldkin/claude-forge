@@ -33,7 +33,7 @@ How to use Agentation for visual feedback and QA workflows.
 
 ### Step 1: Identify Issue
 
-**Scenario:** QA finds bug in member app
+**Scenario:** QA finds bug in web app
 
 Example:
 - Submit button doesn't show loading state
@@ -113,7 +113,7 @@ Can you find and fix the loading state issue?
 [Paste Agentation output]
 
 Priority: Medium
-Affects: Checkout flow, member experience
+Affects: Checkout flow, user experience
 ```
 
 **Option C: Slack thread**
@@ -277,7 +277,7 @@ Developer: I have a styling issue:
 [Paste Agentation output]
 
 Claude: Found the component at:
-frontend/member/src/components/Button.tsx:42
+frontend/web/src/components/Button.tsx:42
 
 The padding is set to 8px, should be 12px.
 Change line 42:

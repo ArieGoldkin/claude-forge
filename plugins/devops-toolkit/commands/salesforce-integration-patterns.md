@@ -1,5 +1,5 @@
 ---
-description: Salesforce CRM integration patterns. Use when working with Salesforce sync (member data, subscription status, focus areas), case
+description: Salesforce CRM integration patterns. Use when working with Salesforce sync (record data, status fields, custom objects), case management, webhooks, bulk operations, or SOQL queries
 ---
 
 # salesforce-integration-patterns

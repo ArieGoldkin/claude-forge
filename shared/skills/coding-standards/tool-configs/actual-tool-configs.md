@@ -92,7 +92,7 @@ Biome supports these rules but they are NOT enabled:
 
 **Location**: `/pyproject.toml`
 
-**Scope**: Entire Python workspace (lambdas/member/*, lambdas/coach/*, lambdas/core/*)
+**Scope**: Entire Python workspace (lambdas/users/*, lambdas/admin/*, lambdas/core/*)
 
 ### Current Configuration (❌ CRITICAL GAP)
 
@@ -155,7 +155,7 @@ max-complexity = 10
 
 ## tsconfig.json (Frontend - TypeScript Type Checking)
 
-**Location**: `/frontend/member/tsconfig.app.json` (also coach, schedule)
+**Location**: `/frontend/web/tsconfig.app.json` (also admin, reports)
 
 **Scope**: TypeScript compilation and type checking
 
@@ -269,10 +269,10 @@ npx biome check frontend/
 npx biome check --fix frontend/
 
 # TypeScript type checking
-cd frontend/member && npm run typecheck
+cd frontend/web && npm run typecheck
 
 # Run tests
-cd frontend/member && npm test
+cd frontend/web && npm test
 ```
 
 ### Backend (Python)
@@ -285,7 +285,7 @@ uv run ruff check .
 # mypy not currently used
 
 # Run tests
-cd lambdas/member/get-member-data && uv run pytest
+cd lambdas/users/get-user-data && uv run pytest
 ```
 
 ---

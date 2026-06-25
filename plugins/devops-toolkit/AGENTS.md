@@ -39,7 +39,7 @@ locals {
 from utils.database.db_utils import get_db_engine, get_session
 engine = get_db_engine(db_secret="arn:aws:secretsmanager:...")
 with get_session(engine) as session:
-    session.execute(text("SELECT * FROM members WHERE id = :id"), {"id": member_id})
+    session.execute(text("SELECT * FROM users WHERE id = :id"), {"id": user_id})
 ```
 **ORM**: SQLAlchemy 2.0 + Alembic migrations. Always use parameterized queries.
 **Deep dive**: `/dtk:postgresql-master`

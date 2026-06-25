@@ -89,9 +89,9 @@ Example (good):
 
 ```yaml
 body: |
-  **blocking:** Audit-trail row is missing for member transitions in `update_state()`.
+  **blocking:** Audit-trail row is missing for user transitions in `update_state()`.
 
-  `member_audit.py:34` requires an `audit_row` insert on every state change; this branch updates `member.state` without one. Violates I.4.
+  `user_audit.py:34` requires an `audit_row` insert on every state change; this branch updates `user.state` without one. Violates I.4.
 
   _Reviewed with Claude Code._
 ```

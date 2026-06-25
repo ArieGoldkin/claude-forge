@@ -87,7 +87,7 @@ Show TL;DR + recommendation + file path. Suggest next steps:
 This skill processes production error data. Strict rules:
 
 - **De-identify users**: last 12 chars of ID only, never emails/names/IPs
-- **No request/response bodies**: may contain PHI (assessments, care plans, health scores)
+- **No request/response bodies**: may contain PHI or other sensitive user data
 - **No breadcrumb payloads**: summarize types and timing, not content
 - **Aggregates only**: counts and distributions, never individual user journeys
 - **Release hashes**: first 8 characters only

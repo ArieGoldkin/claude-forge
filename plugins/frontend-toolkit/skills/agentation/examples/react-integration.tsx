@@ -2,7 +2,7 @@
  * Agentation React Integration Examples
  *
  * This file demonstrates different ways to integrate Agentation
- * into the platform member app.
+ * into the platform web app.
  */
 
 import { Agentation } from 'agentation'
@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react'
 /**
  * Simplest integration - add to App.tsx root
  *
- * Location: frontend/member/src/App.tsx
+ * Location: frontend/web/src/App.tsx
  */
 export function AppBasicExample() {
   return (
@@ -37,7 +37,7 @@ export function AppBasicExample() {
  * Centralized dev tools component
  * Useful when you have multiple dev-only tools
  *
- * Location: frontend/member/src/components/DevTools.tsx
+ * Location: frontend/web/src/components/DevTools.tsx
  */
 export function DevTools() {
   // Early return for production
@@ -181,7 +181,7 @@ export function AppWithCustomCallback() {
 /**
  * Add Agentation to all Storybook stories
  *
- * Location: frontend/member/.storybook/preview.tsx
+ * Location: frontend/web/.storybook/preview.tsx
  */
 import type { Decorator } from '@storybook/react'
 
@@ -338,7 +338,7 @@ export type { AnnotationData }
  * 3. Always available during dev/QA
  * 4. No performance overhead
  *
- * Add this to: frontend/member/src/App.tsx
+ * Add this to: frontend/web/src/App.tsx
  */
 export function PlatformIntegration() {
   return (

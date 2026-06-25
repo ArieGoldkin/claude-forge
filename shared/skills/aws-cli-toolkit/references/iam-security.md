@@ -88,7 +88,7 @@ aws iam get-role-policy --profile acme-dev \
 
 ```bash
 # Get managed policy (need version)
-POLICY_ARN="arn:aws:iam::238141764839:policy/acme-lambda-policy"
+POLICY_ARN="arn:aws:iam::123456789012:policy/acme-lambda-policy"
 
 # Get default version
 VERSION=$(aws iam get-policy --profile acme-dev \
@@ -106,7 +106,7 @@ aws iam get-policy-version --profile acme-dev \
 
 ```bash
 aws iam list-policy-versions --profile acme-dev \
-  --policy-arn arn:aws:iam::238141764839:policy/acme-lambda-policy \
+  --policy-arn arn:aws:iam::123456789012:policy/acme-lambda-policy \
   --query "Versions[*].[VersionId,IsDefaultVersion,CreateDate]" \
   --output table
 ```
@@ -116,7 +116,7 @@ aws iam list-policy-versions --profile acme-dev \
 ```bash
 # Create new version (keeps old as non-default)
 aws iam create-policy-version --profile acme-dev \
-  --policy-arn arn:aws:iam::238141764839:policy/acme-lambda-policy \
+  --policy-arn arn:aws:iam::123456789012:policy/acme-lambda-policy \
   --policy-document file://policy.json \
   --set-as-default
 ```
@@ -128,7 +128,7 @@ aws iam create-policy-version --profile acme-dev \
 ```bash
 # Check if role can perform actions
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names \
     s3:GetObject \
     s3:PutObject \
@@ -137,8 +137,8 @@ aws iam simulate-principal-policy --profile acme-dev \
     logs:PutLogEvents \
   --resource-arns \
     "arn:aws:s3:::acme-data-dev/*" \
-    "arn:aws:secretsmanager:us-east-1:238141764839:secret:acme/*" \
-    "arn:aws:logs:us-east-1:238141764839:log-group:/aws/lambda/acme-*"
+    "arn:aws:secretsmanager:us-east-1:123456789012:secret:acme/*" \
+    "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/acme-*"
 ```
 
 ### Check Specific Permission
@@ -146,7 +146,7 @@ aws iam simulate-principal-policy --profile acme-dev \
 ```bash
 # Quick permission check
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names rds:DescribeDBInstances \
   --query "EvaluationResults[*].[EvalActionName,EvalDecision]" \
   --output table
@@ -157,7 +157,7 @@ aws iam simulate-principal-policy --profile acme-dev \
 ```bash
 # Generate report
 JOB_ID=$(aws iam generate-service-last-accessed-details --profile acme-dev \
-  --arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --query JobId --output text)
 
 # Get results (wait for completion)
@@ -175,7 +175,7 @@ aws iam get-service-last-accessed-details --profile acme-dev \
 ```bash
 # Assume role and get credentials
 CREDS=$(aws sts assume-role --profile acme-dev \
-  --role-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --role-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --role-session-name test-session \
   --duration-seconds 3600)
 
@@ -217,7 +217,7 @@ aws sts assume-role \
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "arn:aws:logs:us-east-1:238141764839:log-group:/aws/lambda/acme-*"
+      "Resource": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/acme-*"
     },
     {
       "Sid": "SecretsManagerRead",
@@ -225,7 +225,7 @@ aws sts assume-role \
       "Action": [
         "secretsmanager:GetSecretValue"
       ],
-      "Resource": "arn:aws:secretsmanager:us-east-1:238141764839:secret:acme/*"
+      "Resource": "arn:aws:secretsmanager:us-east-1:123456789012:secret:acme/*"
     },
     {
       "Sid": "VPCNetworkInterfaces",
@@ -238,7 +238,7 @@ aws sts assume-role \
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "ec2:Vpc": "arn:aws:ec2:us-east-1:238141764839:vpc/vpc-acme"
+          "ec2:Vpc": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-acme"
         }
       }
     }
@@ -283,7 +283,7 @@ aws sts assume-role \
         "rds:DescribeDBClusters",
         "rds:DescribeDBSnapshots"
       ],
-      "Resource": "arn:aws:rds:us-east-1:238141764839:db:acme-*"
+      "Resource": "arn:aws:rds:us-east-1:123456789012:db:acme-*"
     }
   ]
 }
@@ -343,7 +343,7 @@ aws iam list-roles --profile acme-dev \
 # Attach permission boundary
 aws iam put-role-permissions-boundary --profile acme-dev \
   --role-name acme-lambda-execution-role \
-  --permissions-boundary arn:aws:iam::238141764839:policy/acme-permission-boundary
+  --permissions-boundary arn:aws:iam::123456789012:policy/acme-permission-boundary
 ```
 
 ### Service Control Policies (SCPs)
@@ -379,7 +379,7 @@ aws iam list-role-policies --profile acme-dev \
 
 # 3. Simulate the failed action
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/$ROLE_NAME \
+  --policy-source-arn arn:aws:iam::123456789012:role/$ROLE_NAME \
   --action-names THE_FAILED_ACTION \
   --resource-arns THE_RESOURCE_ARN
 ```
@@ -389,7 +389,7 @@ aws iam simulate-principal-policy --profile acme-dev \
 ```bash
 # Check for explicit denies
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names s3:DeleteBucket \
   --resource-arns "arn:aws:s3:::acme-data-dev" \
   --query "EvaluationResults[*].[EvalActionName,EvalDecision,MatchedStatements]"

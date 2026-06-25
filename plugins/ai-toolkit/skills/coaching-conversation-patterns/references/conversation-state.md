@@ -1,4 +1,4 @@
-# Conversation State Management for AI Health Coaching
+# Conversation State Management for AI Coaching
 
 ## Table of Contents
 
@@ -28,7 +28,7 @@ Managing conversation state is critical for coherent, personalized coaching inte
 │                     LONG-TERM MEMORY                            │
 │  (Persisted in database, retrieved via RAG)                     │
 │                                                                 │
-│  • Member profile (demographics, preferences)                   │
+│  • User profile (demographics, preferences)                     │
 │  • Historical goals and outcomes                                │
 │  • Communication style preferences                              │
 │  • Key life events and context                                  │
@@ -79,7 +79,7 @@ class Sentiment(Enum):
 
 class ConversationTurn(BaseModel):
     """Single turn in conversation."""
-    role: str  # "member" or "coach"
+    role: str  # "user" or "coach"
     content: str
     timestamp: datetime
     sentiment: Sentiment | None = None
@@ -98,7 +98,7 @@ class ConversationState(BaseModel):
 
     # Identifiers
     session_id: str
-    member_id: str
+    user_id: str
     started_at: datetime
     last_activity: datetime
 
@@ -130,22 +130,22 @@ class ConversationState(BaseModel):
     coach_model_version: str = "1.0.0"
 ```
 
-### Member Profile (Long-term)
+### User Profile (Long-term)
 ```python
-class MemberProfile(BaseModel):
-    """Persistent member information for personalization."""
+class UserProfile(BaseModel):
+    """Persistent user information for personalization."""
 
-    member_id: str
+    user_id: str
 
     # Demographics
     first_name: str
     preferred_name: str | None = None
     timezone: str = "UTC"
 
-    # Health context
+    # Domain context
     primary_goals: list[str] = []
     why_statement: str | None = None  # Their motivation
-    health_conditions: list[str] = []  # For context, not treatment
+    relevant_conditions: list[str] = []  # For context, not treatment
 
     # Communication preferences
     preferred_tone: str = "supportive"  # supportive, direct, casual
@@ -169,11 +169,11 @@ class MemberProfile(BaseModel):
 
 ### Turn Processing
 ```python
-async def process_member_turn(
+async def process_user_turn(
     state: ConversationState,
     message: str
 ) -> ConversationState:
-    """Process incoming member message and update state."""
+    """Process incoming user message and update state."""
 
     # 1. Detect sentiment
     sentiment = await detect_sentiment(message)
@@ -186,7 +186,7 @@ async def process_member_turn(
 
     # 4. Create turn record
     turn = ConversationTurn(
-        role="member",
+        role="user",
         content=message,
         timestamp=datetime.utcnow(),
         sentiment=sentiment,
@@ -225,9 +225,9 @@ async def process_member_turn(
 ### Commitment Extraction
 ```python
 COMMITMENT_EXTRACTION_PROMPT = """
-Analyze this conversation exchange and extract any commitments the member made.
+Analyze this conversation exchange and extract any commitments the user made.
 
-Member message: {member_message}
+User message: {user_message}
 Coach response: {coach_response}
 
 Look for:
@@ -240,13 +240,13 @@ Return a list of ActionItem objects, or empty list if no commitments.
 """
 
 async def extract_commitments(
-    member_message: str,
+    user_message: str,
     coach_response: str
 ) -> list[ActionItem]:
     """Extract commitments from conversation."""
     result = await llm.with_structured_output(list[ActionItem]).ainvoke(
         COMMITMENT_EXTRACTION_PROMPT.format(
-            member_message=member_message,
+            user_message=user_message,
             coach_response=coach_response
         )
     )
@@ -270,7 +270,7 @@ TOKEN_BUDGETS = {
 
 def build_context_window(
     state: ConversationState,
-    member_profile: MemberProfile,
+    user_profile: UserProfile,
     rag_context: list[Document]
 ) -> str:
     """Build optimized context window for response generation."""
@@ -280,9 +280,9 @@ def build_context_window(
     # 1. System prompt (always first)
     context_parts.append(COACHING_SYSTEM_PROMPT)
 
-    # 2. Member profile summary
-    profile_summary = summarize_profile(member_profile)
-    context_parts.append(f"## Member Context\n{profile_summary}")
+    # 2. User profile summary
+    profile_summary = summarize_profile(user_profile)
+    context_parts.append(f"## User Context\n{profile_summary}")
 
     # 3. RAG-retrieved context
     if rag_context:
@@ -339,7 +339,7 @@ Conversation:
 
 Include:
 1. Main topics discussed
-2. Member's current emotional state
+2. User's current emotional state
 3. Goals or commitments mentioned
 4. Key insights or breakthroughs
 5. Open questions or concerns
@@ -361,7 +361,7 @@ async def summarize_session(state: ConversationState) -> str:
 ### End-of-Session Summary
 ```python
 END_SESSION_SUMMARY_PROMPT = """
-Create a comprehensive summary of this coaching session for the member's record.
+Create a comprehensive summary of this coaching session for the user's record.
 
 Conversation:
 {conversation_text}
@@ -370,9 +370,9 @@ Include:
 1. Session date and duration
 2. Primary topics covered
 3. Goals discussed or set
-4. Commitments made by member
+4. Commitments made by the user
 5. Action items for follow-up
-6. Member's sentiment/emotional journey
+6. User's sentiment/emotional journey
 7. Recommended focus for next session
 
 Format as structured JSON for storage.
@@ -399,7 +399,7 @@ class SessionSummary(BaseModel):
 -- Conversation sessions
 CREATE TABLE coaching_sessions (
     id UUID PRIMARY KEY,
-    member_id UUID NOT NULL REFERENCES members(id),
+    user_id UUID NOT NULL REFERENCES users(id),
     started_at TIMESTAMP NOT NULL,
     ended_at TIMESTAMP,
     status VARCHAR(20) DEFAULT 'active',
@@ -411,7 +411,7 @@ CREATE TABLE coaching_sessions (
 CREATE TABLE conversation_turns (
     id UUID PRIMARY KEY,
     session_id UUID NOT NULL REFERENCES coaching_sessions(id),
-    role VARCHAR(10) NOT NULL,  -- 'member' or 'coach'
+    role VARCHAR(10) NOT NULL,  -- 'user' or 'coach'
     content TEXT NOT NULL,
     sentiment VARCHAR(20),
     topics TEXT[],
@@ -423,7 +423,7 @@ CREATE TABLE conversation_turns (
 CREATE TABLE coaching_commitments (
     id UUID PRIMARY KEY,
     session_id UUID NOT NULL REFERENCES coaching_sessions(id),
-    member_id UUID NOT NULL REFERENCES members(id),
+    user_id UUID NOT NULL REFERENCES users(id),
     description TEXT NOT NULL,
     due_date DATE,
     status VARCHAR(20) DEFAULT 'pending',
@@ -433,9 +433,9 @@ CREATE TABLE coaching_commitments (
 );
 
 -- Indexes for retrieval
-CREATE INDEX idx_sessions_member ON coaching_sessions(member_id);
+CREATE INDEX idx_sessions_user ON coaching_sessions(user_id);
 CREATE INDEX idx_turns_session ON conversation_turns(session_id);
-CREATE INDEX idx_commitments_member ON coaching_commitments(member_id);
+CREATE INDEX idx_commitments_user ON coaching_commitments(user_id);
 CREATE INDEX idx_turns_timestamp ON conversation_turns(timestamp DESC);
 ```
 
@@ -472,7 +472,7 @@ async def recover_session_state(session_id: str) -> ConversationState | None:
     # Reconstruct state
     state = ConversationState(
         session_id=session_id,
-        member_id=session["member_id"],
+        user_id=session["user_id"],
         started_at=session["started_at"],
         last_activity=turns[-1]["timestamp"] if turns else session["started_at"],
         turns=[
@@ -507,29 +507,29 @@ async def recover_session_state(session_id: str) -> ConversationState | None:
 ### Relevant History Retrieval
 ```python
 async def get_coaching_context(
-    member_id: str,
+    user_id: str,
     current_message: str
 ) -> CoachingContext:
     """Retrieve relevant context for personalized coaching."""
 
-    # 1. Get member profile
-    profile = await get_member_profile(member_id)
+    # 1. Get user profile
+    profile = await get_user_profile(user_id)
 
     # 2. Search past conversations
     past_conversations = await vector_search(
         query=current_message,
         filters={
-            "member_id": member_id,
+            "user_id": user_id,
             "type": "conversation_summary"
         },
         top_k=3
     )
 
     # 3. Get relevant commitments
-    commitments = await get_recent_commitments(member_id, days=30)
+    commitments = await get_recent_commitments(user_id, days=30)
 
     # 4. Get progress on active goals
-    goal_progress = await get_goal_progress(member_id)
+    goal_progress = await get_goal_progress(user_id)
 
     return CoachingContext(
         profile=profile,

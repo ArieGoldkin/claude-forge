@@ -205,7 +205,7 @@ aws secretsmanager create-secret --profile acme-dev \
 # Enable rotation with Lambda function
 aws secretsmanager rotate-secret --profile acme-dev \
   --secret-id acme/dev/database \
-  --rotation-lambda-arn arn:aws:lambda:us-east-1:238141764839:function:acme-secret-rotation \
+  --rotation-lambda-arn arn:aws:lambda:us-east-1:123456789012:function:acme-secret-rotation \
   --rotation-rules AutomaticallyAfterDays=30
 ```
 
@@ -375,9 +375,9 @@ aws secretsmanager describe-secret --profile acme-dev \
 
 # 2. Check IAM permissions
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names secretsmanager:GetSecretValue \
-  --resource-arns "arn:aws:secretsmanager:us-east-1:238141764839:secret:acme/dev/database*"
+  --resource-arns "arn:aws:secretsmanager:us-east-1:123456789012:secret:acme/dev/database*"
 
 # 3. Check resource policy
 aws secretsmanager get-resource-policy --profile acme-dev \

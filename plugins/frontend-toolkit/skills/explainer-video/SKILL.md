@@ -216,7 +216,7 @@ Pre-built specs in `assets/`:
 - `example-architecture-event-lambdas.yaml` — 43-Lambda topology with SNS/SQS data flow
 - `example-flow-review-mr.yaml` — `/etk:review-mr` 8-phase pipeline
 - `example-sequence-mr-creation.yaml` — Developer → glab → GitLab → CI → reviewer message flow
-- `example-state-machine-member-lifecycle.yaml` — member lifecycle FSM with valid + invalid transitions
+- `example-state-machine-subscription-lifecycle.yaml` — subscription lifecycle FSM with valid + invalid transitions
 
 Use these as both starting points (copy and adapt) and validation oracles (each is a valid spec for its pattern).
 

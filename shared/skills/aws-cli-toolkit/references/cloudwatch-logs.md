@@ -19,17 +19,17 @@ Comprehensive guide for CloudWatch log tailing, Log Insights queries, metrics, a
 ```bash
 # Tail with follow mode (real-time)
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 30m --follow
 
 # Tail without follow (snapshot)
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h
 
 # Tail with timestamps
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --format short
 ```
 
@@ -38,14 +38,14 @@ aws logs tail --profile acme-dev \
 ```bash
 # Since relative time
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 30m    # 30 minutes
   --since 2h     # 2 hours
   --since 1d     # 1 day
 
 # Since absolute time (ISO 8601)
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 2026-01-31T10:00:00Z
 ```
 
@@ -54,31 +54,31 @@ aws logs tail --profile acme-dev \
 ```bash
 # Filter for ERROR level
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "ERROR"
 
 # Filter for specific exception
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "ConnectionError"
 
 # Filter for request ID
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 1h --filter-pattern "abc-123-def-456"
 
-# Filter for member ID
+# Filter for user ID
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
-  --since 1h --filter-pattern '"member_id": "m_12345"'
+  /aws/lambda/acme-api-service-dev \
+  --since 1h --filter-pattern '"user_id": "m_12345"'
 ```
 
 ### Multiple Log Groups
 
 ```bash
 # Tail multiple services (separate terminals)
-aws logs tail --profile acme-dev /aws/lambda/acme-member-service-dev --since 30m --follow &
-aws logs tail --profile acme-dev /aws/lambda/acme-coach-service-dev --since 30m --follow &
+aws logs tail --profile acme-dev /aws/lambda/acme-api-service-dev --since 30m --follow &
+aws logs tail --profile acme-dev /aws/lambda/acme-staff-service-dev --since 30m --follow &
 aws logs tail --profile acme-dev /aws/lambda/acme-activity-service-dev --since 30m --follow &
 
 # Stop all background tails
@@ -92,7 +92,7 @@ kill $(jobs -p)
 ```bash
 # Start query (returns query ID)
 QUERY_ID=$(aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -115,7 +115,7 @@ aws logs get-query-results --profile acme-dev \
 ```bash
 # Count errors by type
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -128,7 +128,7 @@ aws logs start-query --profile acme-dev \
 
 # Errors with stack traces
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -144,7 +144,7 @@ aws logs start-query --profile acme-dev \
 ```bash
 # Lambda execution stats
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -158,7 +158,7 @@ aws logs start-query --profile acme-dev \
 
 # Cold start analysis
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -172,7 +172,7 @@ aws logs start-query --profile acme-dev \
 
 # P95/P99 latency
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -189,7 +189,7 @@ aws logs start-query --profile acme-dev \
 ```bash
 # Find all logs for a request ID
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -200,7 +200,7 @@ aws logs start-query --profile acme-dev \
 
 # Slow requests (> 5 seconds)
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-24H +%s) \
   --end-time $(date +%s) \
   --query-string '
@@ -217,11 +217,11 @@ aws logs start-query --profile acme-dev \
 ```bash
 # Parse JSON logs (Powertools format)
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
-    fields @timestamp, level, message, service, member_id
+    fields @timestamp, level, message, service, user_id
     | filter level = "ERROR"
     | sort @timestamp desc
     | limit 50
@@ -229,12 +229,12 @@ aws logs start-query --profile acme-dev \
 
 # Query by custom field
 aws logs start-query --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
   --query-string '
-    fields @timestamp, message, member_id, action
-    | filter member_id = "m_12345"
+    fields @timestamp, message, user_id, action
+    | filter user_id = "m_12345"
     | sort @timestamp desc
   '
 ```
@@ -245,8 +245,8 @@ aws logs start-query --profile acme-dev \
 # Query across multiple services
 aws logs start-query --profile acme-dev \
   --log-group-names \
-    /aws/lambda/acme-member-service-dev \
-    /aws/lambda/acme-coach-service-dev \
+    /aws/lambda/acme-api-service-dev \
+    /aws/lambda/acme-staff-service-dev \
     /aws/lambda/acme-activity-service-dev \
   --start-time $(date -v-1H +%s) \
   --end-time $(date +%s) \
@@ -267,7 +267,7 @@ aws logs start-query --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Invocations \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
@@ -277,7 +277,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Errors \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
@@ -287,7 +287,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Duration \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
@@ -297,7 +297,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Throttles \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 300 \
@@ -361,7 +361,7 @@ aws cloudwatch describe-alarms --profile acme-dev \
 
 ```bash
 aws cloudwatch describe-alarm-history --profile acme-dev \
-  --alarm-name acme-member-service-errors \
+  --alarm-name acme-api-service-errors \
   --history-item-type StateUpdate \
   --query "AlarmHistoryItems[*].[Timestamp,HistorySummary]" \
   --output table
@@ -372,11 +372,11 @@ aws cloudwatch describe-alarm-history --profile acme-dev \
 ```bash
 # Error rate alarm
 aws cloudwatch put-metric-alarm --profile acme-dev \
-  --alarm-name acme-member-service-errors \
-  --alarm-description "Member service error rate > 5%" \
+  --alarm-name acme-api-service-errors \
+  --alarm-description "User service error rate > 5%" \
   --metric-name Errors \
   --namespace AWS/Lambda \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --statistic Sum \
   --period 300 \
   --evaluation-periods 2 \
@@ -386,11 +386,11 @@ aws cloudwatch put-metric-alarm --profile acme-dev \
 
 # Duration alarm
 aws cloudwatch put-metric-alarm --profile acme-dev \
-  --alarm-name acme-member-service-duration \
-  --alarm-description "Member service p99 duration > 10s" \
+  --alarm-name acme-api-service-duration \
+  --alarm-description "User service p99 duration > 10s" \
   --metric-name Duration \
   --namespace AWS/Lambda \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --extended-statistic p99 \
   --period 300 \
   --evaluation-periods 3 \
@@ -415,7 +415,7 @@ aws logs describe-log-groups --profile acme-dev \
 ```bash
 # Set 30-day retention
 aws logs put-retention-policy --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --retention-in-days 30
 ```
 
@@ -434,20 +434,20 @@ aws logs delete-log-group --profile acme-dev \
 ```bash
 # 1. Verify log group exists
 aws logs describe-log-groups --profile acme-dev \
-  --log-group-name-pattern acme-member-service
+  --log-group-name-pattern acme-api-service
 
 # 2. Check for recent log streams
 aws logs describe-log-streams --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --order-by LastEventTime \
   --descending \
   --limit 5
 
 # 3. Verify Lambda has CloudWatch permissions
 aws iam simulate-principal-policy --profile acme-dev \
-  --policy-source-arn arn:aws:iam::238141764839:role/acme-lambda-execution-role \
+  --policy-source-arn arn:aws:iam::123456789012:role/acme-lambda-execution-role \
   --action-names logs:CreateLogStream logs:PutLogEvents \
-  --resource-arns "arn:aws:logs:us-east-1:238141764839:log-group:/aws/lambda/acme-*"
+  --resource-arns "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/acme-*"
 ```
 
 ### Query Timeout
@@ -455,7 +455,7 @@ aws iam simulate-principal-policy --profile acme-dev \
 ```bash
 # Check query status
 aws logs describe-queries --profile acme-dev \
-  --log-group-name /aws/lambda/acme-member-service-dev \
+  --log-group-name /aws/lambda/acme-api-service-dev \
   --status Running
 
 # Cancel running query

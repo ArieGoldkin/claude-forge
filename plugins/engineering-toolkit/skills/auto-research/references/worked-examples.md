@@ -19,7 +19,7 @@ how classify → plan → confirm → execute → report works in practice.
 
 **User input:**
 ```
-/auto-research reduce p95 API latency for /api/members below 200ms
+/auto-research reduce p95 API latency for /api/users below 200ms
 ```
 
 **Phase 1 — Classify:**
@@ -27,11 +27,11 @@ how classify → plan → confirm → execute → report works in practice.
 - Metric: p95 latency
 - Direction: minimize
 - Goal: 200ms
-- Target: `/api/members` endpoint
+- Target: `/api/users` endpoint
 
 **Phase 2 — Plan:**
-Scan codebase for the endpoint handler. Find `src/api/members/handler.ts` and
-`src/api/members/queries.ts`. Infer metric command from project's benchmark setup.
+Scan codebase for the endpoint handler. Find `src/api/users/handler.ts` and
+`src/api/users/queries.ts`. Infer metric command from project's benchmark setup.
 
 **Phase 3 — Confirm:**
 ```
@@ -40,12 +40,12 @@ Scan codebase for the endpoint handler. Find `src/api/members/handler.ts` and
 ├─────────────────────────────────────────────────────┤
 │  Goal:     Reduce p95 API latency below 200ms       │
 │  Strategy: optimize                                 │
-│  Skill:    /experiment src/api/members/             │
+│  Skill:    /experiment src/api/users/               │
 │            --metric "npm run bench:api -- --json     │
-│            | jq '.endpoints[\"members\"].p95'"      │
+│            | jq '.endpoints[\"users\"].p95'"        │
 │            --minimize --goal 200 --unit ms          │
-│  Target:   src/api/members/handler.ts               │
-│            src/api/members/queries.ts                │
+│  Target:   src/api/users/handler.ts                 │
+│            src/api/users/queries.ts                  │
 │  Budget:   10 iterations / 30 minutes               │
 │  Metric:   p95 latency (minimize)                   │
 ├─────────────────────────────────────────────────────┤
@@ -67,13 +67,13 @@ Invoke `/experiment` with the planned parameters. Heartbeat every 60s:
 ```
 ## Auto-Research Report
 
-Goal:     Reduce p95 API latency for /api/members below 200ms
+Goal:     Reduce p95 API latency for /api/users below 200ms
 Strategy: /experiment (minimize p95 latency)
 Result:   GOAL_REACHED
 Duration: 10m58s
 
 ### What Worked
-- Added composite index on (member_id, status) → p95: 450ms → 380ms
+- Added composite index on (user_id, status) → p95: 450ms → 380ms
 - Batched N+1 query into single JOIN → p95: 380ms → 340ms
 - Connection pooling with pg-pool → p95: 340ms → 195ms
 

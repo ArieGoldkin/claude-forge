@@ -2,6 +2,14 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.7.7] - 2026-06-24 — genericize company-specific domain references
+
+Part of a monorepo-wide pass removing company-specific domain references and genericizing example data across every plugin. Skill-prose only (no hook/dist rebuild).
+
+### Changed
+
+- **Genericized engineering skill examples** — removed company member/coach references and company repo paths from `hipaa-compliance-checker` (checklist + templates), `investigate-sentry` (PHI examples), `fix-bug`, `review-mr`, `post-mr-comments`, `develop`, and `auto-research`.
+
 ## [2.7.6] - 2026-06-22 — auto-research: unattended / propose-only watcher mode
 
 Phase 2 (first PR) of adopting OrchestKit's loop capabilities in our idiom (capability, not substrate — see `docs/plans/2026-06-21_adopt-loop-capabilities-roadmap.md`, roadmap item R4). Skill-prose only (no hook/dist rebuild). Adopts ork's `ci-sentinel` value — a background watcher that observes and reports — without ork's substrate (no daemon, no server, no coordination DB).

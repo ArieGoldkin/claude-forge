@@ -1,0 +1,107 @@
+# Worked example: subscription lifecycle FSM as a state-machine explainer video
+# Pattern: state-machine
+# Render with: npx remotion render SubscriptionLifecycleFsm out/subscription-lifecycle.mp4
+
+title: "Subscription Lifecycle"
+subtitle: "trialing → active → past_due → cancelled"
+duration_seconds: 60
+fps: 30
+
+states:
+  - id: trialing
+    label: "trialing"
+    description: "Trial period; billing not yet active; payment method capture in progress"
+    position: { x: 200, y: 540 }
+
+  - id: active
+    label: "active"
+    description: "Subscription active; payment method on file; first billing cycle in progress"
+    position: { x: 700, y: 540 }
+
+  - id: past_due
+    label: "past_due"
+    description: "Active subscription; latest invoice failed; in grace/dunning window"
+    position: { x: 1200, y: 540 }
+
+  - id: cancelled
+    label: "cancelled"
+    description: "Terminal — subscription closed; access revoked; record is immutable"
+    position: { x: 1700, y: 540 }
+
+transitions:
+  # Valid transitions
+  - id: t_trial_to_active
+    from: trialing
+    to: active
+    trigger: "trial ended AND payment method on file"
+    valid: true
+
+  - id: t_active_to_past_due
+    from: active
+    to: past_due
+    trigger: "billing event: invoice failed"
+    valid: true
+
+  - id: t_past_due_to_active
+    from: past_due
+    to: active
+    trigger: "billing event: payment recovered"
+    valid: true
+
+  - id: t_trial_to_cancel
+    from: trialing
+    to: cancelled
+    trigger: "billing event: cancelled (during trial)"
+    valid: true
+
+  - id: t_active_to_cancel
+    from: active
+    to: cancelled
+    trigger: "billing event: cancelled"
+    valid: true
+
+  - id: t_past_due_to_cancel
+    from: past_due
+    to: cancelled
+    trigger: "billing event: cancelled"
+    valid: true
+
+  # Invalid transitions — used by the "attempted reactivation" scenario
+  - id: t_invalid_reactivate
+    from: cancelled
+    to: active
+    trigger: "(any attempt to reactivate)"
+    valid: false
+
+  - id: t_invalid_skip
+    from: trialing
+    to: past_due
+    trigger: "(forward-skip past active)"
+    valid: false
+
+  - id: t_invalid_reverse
+    from: active
+    to: trialing
+    trigger: "(reverse transition)"
+    valid: false
+
+scenarios:
+  - id: happy_path
+    name: "Happy path: trialing through active"
+    sequence: [trialing, active]
+
+  - id: recovery
+    name: "Dunning recovery: payment fails then recovers"
+    sequence: [active, past_due, active]
+
+  - id: standard_cancel
+    name: "Standard cancellation: from active state"
+    sequence: [active, cancelled]
+
+  - id: invalid_reactivate
+    name: "Attempted reactivation of cancelled subscription (BLOCKED by I.III.2)"
+    sequence: [cancelled, active]      # final transition is invalid → triggers shake
+
+  - id: invalid_skip
+    name: "Forward-skip attempt: trialing → past_due (BLOCKED)"
+    sequence: [trialing, past_due]     # invalid → triggers shake

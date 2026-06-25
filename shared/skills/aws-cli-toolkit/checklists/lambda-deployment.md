@@ -85,7 +85,7 @@ aws sts get-caller-identity --profile acme-dev
 ```bash
 # Check current function state
 aws lambda get-function --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "Configuration.[State,LastUpdateStatus]"
 ```
 
@@ -104,17 +104,17 @@ aws lambda get-function --profile acme-dev \
 
 ```bash
 # Option A: Deploy from S3 (recommended for large packages)
-aws s3 cp function.zip s3://acme-deployments-dev/functions/member-service/ \
+aws s3 cp function.zip s3://acme-deployments-dev/functions/api-service/ \
   --profile acme-dev
 
 aws lambda update-function-code --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --s3-bucket acme-deployments-dev \
-  --s3-key functions/member-service/function.zip
+  --s3-key functions/api-service/function.zip
 
 # Option B: Deploy from local zip
 aws lambda update-function-code --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --zip-file fileb://function.zip
 ```
 
@@ -126,11 +126,11 @@ aws lambda update-function-code --profile acme-dev \
 ```bash
 # Wait for update to complete
 aws lambda wait function-updated --profile acme-dev \
-  --function-name acme-member-service-dev
+  --function-name acme-api-service-dev
 
 # Verify state
 aws lambda get-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --query "[State,LastUpdateStatus]"
 ```
 
@@ -142,7 +142,7 @@ aws lambda get-function-configuration --profile acme-dev \
 ```bash
 # Update environment variables
 aws lambda update-function-configuration --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --environment "Variables={KEY=value}"
 ```
 
@@ -155,7 +155,7 @@ aws lambda update-function-configuration --profile acme-dev \
 ```bash
 # Invoke function with test payload
 aws lambda invoke --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --payload '{"action": "health_check"}' \
   --cli-binary-format raw-in-base64-out \
   response.json && cat response.json
@@ -170,7 +170,7 @@ aws lambda invoke --profile acme-dev \
 ```bash
 # Check recent logs for errors
 aws logs tail --profile acme-dev \
-  /aws/lambda/acme-member-service-dev \
+  /aws/lambda/acme-api-service-dev \
   --since 10m --filter-pattern "ERROR"
 ```
 
@@ -185,7 +185,7 @@ aws logs tail --profile acme-dev \
 aws cloudwatch get-metric-statistics --profile acme-dev \
   --namespace AWS/Lambda \
   --metric-name Errors \
-  --dimensions Name=FunctionName,Value=acme-member-service-dev \
+  --dimensions Name=FunctionName,Value=acme-api-service-dev \
   --start-time $(date -u -v-15M +%Y-%m-%dT%H:%M:%SZ) \
   --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
   --period 60 --statistics Sum
@@ -202,7 +202,7 @@ aws cloudwatch get-metric-statistics --profile acme-dev \
 ```bash
 # Publish new version
 VERSION=$(aws lambda publish-version --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --description "Deployment $(date +%Y-%m-%d)" \
   --query Version --output text)
 echo "Published version: $VERSION"
@@ -215,7 +215,7 @@ echo "Published version: $VERSION"
 ```bash
 # Update alias to new version
 aws lambda update-alias --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --name live \
   --function-version $VERSION
 ```
@@ -227,7 +227,7 @@ aws lambda update-alias --profile acme-dev \
 ```bash
 # Route 10% traffic to new version
 aws lambda update-alias --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --name live \
   --function-version 5 \
   --routing-config AdditionalVersionWeights={"6"=0.1}
@@ -245,7 +245,7 @@ aws lambda update-alias --profile acme-dev \
 ```bash
 # Revert alias to previous version
 aws lambda update-alias --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --name live \
   --function-version PREVIOUS_VERSION
 ```
@@ -255,9 +255,9 @@ aws lambda update-alias --profile acme-dev \
 ```bash
 # Deploy previous package from S3
 aws lambda update-function-code --profile acme-dev \
-  --function-name acme-member-service-dev \
+  --function-name acme-api-service-dev \
   --s3-bucket acme-deployments-dev \
-  --s3-key functions/member-service/function-previous.zip
+  --s3-key functions/api-service/function-previous.zip
 ```
 
 ## Post-Deployment Monitoring

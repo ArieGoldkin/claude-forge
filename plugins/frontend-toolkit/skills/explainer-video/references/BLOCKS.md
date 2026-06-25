@@ -180,8 +180,8 @@ output: {
   label: "DIFF ONLY",
   lines: [
     { text: "@@ -3,1 +3,1 @@",                       kind: "context" },
-    { text: "- Member email is the primary key.",    kind: "removed" },
-    { text: "+ Member id is the primary key.",       kind: "added" },
+    { text: "- User email is the primary key.",       kind: "removed" },
+    { text: "+ User id is the primary key.",          kind: "added" },
   ],
 }
 ```

@@ -89,14 +89,14 @@ Full catalog patterns: Read `json-render` skill at `skills/json-render/`
 
 ## Architecture Pattern: Production App UI
 
-For production member-facing UIs:
+For production user-facing UIs:
 
 ```
-Designer creates spec template → AI personalizes per member → Codegen → Review → Deploy
+Designer creates spec template → AI personalizes per user → Codegen → Review → Deploy
 ```
 
-1. **Template catalog** — Define domain-specific components (ProgressCard, GoalTracker, CoachMessage)
-2. **AI personalization** — LLM fills template spec with member-specific data and copy
+1. **Template catalog** — Define domain-specific components (ProductCard, OrderSummary, NotificationBanner)
+2. **AI personalization** — LLM fills template spec with user-specific data and copy
 3. **Codegen to JSX** — `@json-render/codegen` produces reviewable React components
 4. **Code review** — Standard PR review process (no runtime AI interpretation in prod)
 5. **Deploy** — Static JSX, deterministic, testable

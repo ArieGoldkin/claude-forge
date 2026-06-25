@@ -9,48 +9,48 @@ Animate a finite state machine — states as nodes, transitions as edges, walk t
 ## YAML schema
 
 ```yaml
-title: "Member Lifecycle"                     # required
-subtitle: "onboarding → engagement → cancelled"  # optional
+title: "Subscription Lifecycle"               # required
+subtitle: "trialing → active → cancelled"     # optional
 duration_seconds: 60                          # optional, default 60
 fps: 30                                       # optional, default 30
 
 states:                                       # required (≥2 entries)
-  - id: onboarding
-    label: "onboarding"
-    description: "First 30 days; Sparks not yet active"
+  - id: trialing
+    label: "trialing"
+    description: "Trial period; billing not yet active"
     position: { x: 200, y: 400 }
-  - id: early_engagement
-    label: "early_engagement"
-    description: "Sparks active; coach assigned"
+  - id: active
+    label: "active"
+    description: "Subscription active; payment method on file"
     position: { x: 600, y: 400 }
-  - id: engagement
-    label: "engagement"
-    description: "Steady-state member"
+  - id: past_due
+    label: "past_due"
+    description: "Active but latest invoice failed"
     position: { x: 1000, y: 400 }
   - id: cancelled
     label: "cancelled"
-    description: "Terminal — Cognito user disabled"
+    description: "Terminal — subscription closed; record immutable"
     position: { x: 1400, y: 400 }
 
 transitions:                                  # required (≥1 entry)
   - id: t1
-    from: onboarding
-    to: early_engagement
-    trigger: "30 days elapsed"
+    from: trialing
+    to: active
+    trigger: "trial ended"
     valid: true
   - id: t2
-    from: early_engagement
-    to: engagement
-    trigger: "first cycle complete"
+    from: active
+    to: past_due
+    trigger: "invoice failed"
     valid: true
   - id: t3
-    from: engagement
+    from: active
     to: cancelled
-    trigger: "carrier event: cancelled"
+    trigger: "billing event: cancelled"
     valid: true
   - id: t_invalid_1
     from: cancelled
-    to: engagement
+    to: active
     trigger: "(any)"
     valid: false                              # rendered with shake + red color
   # ... more transitions
@@ -58,13 +58,13 @@ transitions:                                  # required (≥1 entry)
 scenarios:                                    # optional, at least one recommended
   - id: happy_path
     name: "Happy path"
-    sequence: [onboarding, early_engagement, engagement]
+    sequence: [trialing, active]
   - id: cancellation
     name: "Cancellation flow"
-    sequence: [engagement, cancelled]
-  - id: invalid_revival
-    name: "Attempted revival of cancelled member"
-    sequence: [cancelled, engagement]         # final transition is invalid → triggers shake
+    sequence: [active, cancelled]
+  - id: invalid_reactivate
+    name: "Attempted reactivation of cancelled subscription"
+    sequence: [cancelled, active]             # final transition is invalid → triggers shake
 ```
 
 ## Required fields validation
@@ -114,4 +114,4 @@ export const StateMachineComposition: React.FC<{spec: StateMachineSpec}> = ({spe
 
 ## Worked example
 
-`assets/example-state-machine-member-lifecycle.yaml` shows the member lifecycle FSM with four scenarios including an invalid cancelled→engagement attempt. The invalid scenario is the visual highlight — it makes the immutability rule concrete.
+`assets/example-state-machine-subscription-lifecycle.yaml` shows the subscription lifecycle FSM with several scenarios including an invalid cancelled→active reactivation attempt. The invalid scenario is the visual highlight — it makes the immutability rule concrete.
