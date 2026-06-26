@@ -16,13 +16,17 @@ Monorepo for the **Claude Forge** plugin suite (ctk, dtk, atk, ftk, etk) with sh
 
 ## Plugins
 
-| Plugin | Version | Skills | Agents | Commands | Description |
-|--------|---------|--------|--------|----------|-------------|
-| [ctk](plugins/continuity-toolkit/) (was: continuity-toolkit) | 2.6.11 | 11 | 1 | 12 | **Solves for** context loss — sessions that forget everything after compaction or a restart. Session continuity — state persistence, context monitoring, delta-cache token compression, dangerous-bash registry (filesystem/http/aws/terraform), preflight context + approval-first git-push gate for destructive commands, auto-continue handoff contract (PreCompact → SessionStart), opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1), token-savings measurement spike, HIPAA hook, 29 shared hooks |
-| [dtk](plugins/devops-toolkit/) (was: devops-toolkit) | 2.0.8 | 15 | 2 | 12 | **Solves for** infra guesswork — AWS/Terraform/CI patterns rebuilt from scratch on every project. DevOps — AWS, Terraform, CI/CD, Salesforce, Lambda container patterns, Husky pre-commit setup |
-| [atk](plugins/ai-toolkit/) (was: ai-toolkit) | 2.0.6 | 16 | 1 | 25 | **Solves for** LLM-feature trial-and-error — RAG/agent/evaluation patterns rediscovered per team. AI/LLM — RAG, embeddings, LangGraph, coaching, prompt patterns, NotebookLM |
-| [ftk](plugins/frontend-toolkit/) (was: frontend-toolkit) | 2.3.6 | 17 | 4 | 11 | **Solves for** slow design-to-code round-trips and decisions buried in chat scrollback. Frontend — React, Figma, Stitch AI, json-render, design systems, browser automation, Remotion explainer videos (block-based + bespoke) |
-| [etk](plugins/engineering-toolkit/) (was: engineering-toolkit) | 2.8.0 | 24 | 4 | 19 | **Solves for** review bounces — lint/format/typecheck failures caught after push instead of before. Engineering — ADR, TDD, code review, HIPAA, quality gates, brainstorming, Sentry investigation, MR-comment posting, business-invariants authoring + planning-time consumption, subagent scope-restate, ticket scope-check (auto-loaded), codebase zoom-out, caveman terse-mode |
+Five independent plugins — install only the ones you need. Each is domain-agnostic and works on any project. Install **ctk** alongside any of the others to get the shared safety and continuity layer (security guardrails, auto-permissions, session persistence) they all build on.
+
+| Plugin | Version | Skills · Agents · Commands | What it is and what you get |
+|--------|---------|:--------------------------:|------------------------------|
+| **[ctk](plugins/continuity-toolkit/)** — Continuity Toolkit | 2.6.11 | 11 · 1 · 12 | **Your sessions stop forgetting.** State survives compaction and restarts through an auto-saved handoff (PreCompact → SessionStart), with context-window monitoring, delta-cache token compression, and a save/resume ledger. Also ships the suite's shared safety layer — a dangerous-bash registry (filesystem/http/aws/terraform), an approval-first git-push gate, and the 29 shared hooks the other plugins rely on. |
+| **[dtk](plugins/devops-toolkit/)** — DevOps Toolkit | 2.0.8 | 15 · 2 · 12 | **Stop rebuilding infrastructure from scratch.** Production-ready AWS, Terraform, and CI/CD recipes — Lambda container deploys, VPC/networking, cost optimization, and observability — plus Salesforce integration and one-command Husky pre-commit setup. |
+| **[atk](plugins/ai-toolkit/)** — AI Toolkit | 2.0.6 | 16 · 1 · 25 | **Ship LLM features without rediscovering the same patterns.** RAG pipelines, embeddings and vector search, LangGraph workflows, and function calling, plus evaluation, streaming, and testing harnesses, prompt caching, and NotebookLM — OpenAI and Anthropic patterns side by side. |
+| **[ftk](plugins/frontend-toolkit/)** — Frontend Toolkit | 2.3.6 | 17 · 4 · 11 | **Close the design-to-code gap.** React and shadcn/ui components, Figma and Google Stitch AI import, json-render generative UI, design-system tokens, headless browser automation, and Remotion explainer videos — prototype to production. |
+| **[etk](plugins/engineering-toolkit/)** — Engineering Toolkit | 2.8.0 | 24 · 4 · 19 | **Catch problems before review, not after push.** TDD and quality gates, structured code/MR review across GitLab and GitHub with inline comments, ADRs, Sentry investigation, goal-driven auto-research, brainstorming, and codebase zoom-out — your engineering-discipline layer. |
+
+> Counts are **skills · agents · commands** per plugin.
 
 ## Installation
 
