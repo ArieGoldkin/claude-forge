@@ -3,7 +3,7 @@
 > **Maintainer**: Arie Goldkin
 > **Plugins**: ctk (formerly continuity-toolkit), dtk (formerly devops-toolkit), atk (formerly ai-toolkit), ftk (formerly frontend-toolkit), etk (formerly engineering-toolkit)
 > **Versioning**: Independent per plugin
-> **CC Alignment**: v2.1.173 (audited 2026-06-11). Per-version "considered but not adopted" notes are not tracked here — see `git log -p CLAUDE.md` or the CC CHANGELOG for prior reasoning. The v2.1.159→173 review ($PROJECT permission-rule fix, build-tool-config protections, $HOME deny parity, types.ts hook-schema additions, nested-subagent doc updates) is captured in `docs/reviews/2026-06-11_cc-v2.1.173-alignment-audit.md`; the prior v2.1.153→158 review is in `docs/reviews/2026-05-31_cc-v2.1.158-plugin-system-alignment-audit.md`.
+> **CC Alignment**: v2.1.193 (audited 2026-06-26). The v2.1.174→193 gap analysis (model-governance enforcement via `enforceAvailableModels`, the hook `if`-condition file-path fix, auto-mode native git-blocking + `classifyAllShell`, nested-subagent 5-deep, `/plugin` Skills tab) is in `docs/reviews/2026-06-26_cc-v2.1.193-alignment-gaps.md`. **Floor note:** ctk's `hooks.json` file-path `if` conditions (`Write(*.ts)`, `Write(.env*)`, …) depend on the **v2.1.176** fix to gate correctly — that is the effective minimum CC version for our security/permission hooks. Per-version "considered but not adopted" notes are not tracked here — see `git log -p CLAUDE.md` or the CC CHANGELOG for prior reasoning. Prior reviews: v2.1.159→173 in `docs/reviews/2026-06-11_cc-v2.1.173-alignment-audit.md`; v2.1.153→158 in `docs/reviews/2026-05-31_cc-v2.1.158-plugin-system-alignment-audit.md`.
 
 ## Communication Style
 
@@ -231,7 +231,7 @@ CC v2.1.144 removed the truncated skill listing from the startup notification �
 
 After `claude plugin install` (or after a `/reload-plugins`), run `/doctor` to verify the full skill, agent, command, and hook count matches what each plugin declares. Mismatch usually points to a missing dependency (use `claude plugin install <name>` to re-resolve per v2.1.117+/v2.1.118+ behavior) or a hook-load error (visible in the `/plugin` Errors tab per v2.1.118+).
 
-For a quick install/enablement census without full diagnostics, run `/plugin list` (CC v2.1.163+) — the `--enabled`/`--disabled` filters confirm all 5 plugins are enabled faster than `/doctor` when you only need presence, not counts.
+For a quick install/enablement census without full diagnostics, run `/plugin list` (CC v2.1.163+) — the `--enabled`/`--disabled` filters confirm all 5 plugins are enabled faster than `/doctor` when you only need presence, not counts. For a per-plugin **skill** census specifically, the `/plugin` Installed tab now has a dedicated **"Skills" section** (CC v2.1.186+), and the marketplace browser gained a search bar (v2.1.180).
 
 ### Authoring skills/agents/commands with `--dangerously-skip-permissions` (CC v2.1.121+)
 
@@ -314,6 +314,18 @@ Rules:
 - **When delegating to a cheaper tier, include explicit stop conditions** in the prompt ("if the file doesn't match this description, stop and report — don't improvise").
 - **Cheaper scan tiers raise the false-lead rate** — the existing vet discipline (review-mr evidence gating, verify-against-ground-truth workflows) is mandatory, not optional, for findings produced on cheaper tiers.
 - **Status quo until piloted**: all agents stay `model: inherit`. Pilot by piggybacking an already-planned wave (next `/review-mr` scan agents or `/brainstorming --deep` research phase) with `opts.model: "sonnet"`, compare findings quality against an inherit baseline, and only then consider flipping any agent's frontmatter. The pilot rides existing work — it is not its own project.
+
+### Model & MCP governance (CC v2.1.175–187)
+
+The model-economics guidance above is **advisory**. As of the v2.1.175–187 line it can be made **enforceable** — turning the cost ceiling from intent into rules the harness applies. This is the enforcement layer the auto-research 2.8.0 port had to adapt around; adopt it for real teeth:
+
+1. **`enforceAvailableModels` managed setting (v2.1.175).** Pin the allowed model set so a more expensive model can't be selected — for the session *or any subagent*. v2.1.176/180/187 hardened enforcement for alias picks, subagents, and the model picker. Set in **managed settings** for org-wide enforcement:
+   ```json
+   { "enforceAvailableModels": ["claude-sonnet-4-6", "claude-opus-4-8"] }
+   ```
+2. **`autoMode.soft_deny: ["Agent(model:fable)"]`** — prompt before an expensive subagent spawn instead of hard-blocking it (respects the `$defaults` merge semantics).
+
+Why this matters here: **auto-research is the repo's highest-fan-out entry point** (a `design` route spawns ~11 agents), so it is exactly where an unconstrained model choice is most expensive. These settings are the enforceable backing for the advisory rule that fan-out must not defeat the cost ceiling. Configure in managed settings (org-wide) or `~/.claude/settings.local.json` (gitignored, per-developer).
 
 ## Output Budgeting
 
@@ -420,7 +432,7 @@ Rules:
 
 This applies to agents spawned by the controller via the `Agent` tool. The controller itself follows the same rule when its own task involves destructive operations and the user has not pre-confirmed scope.
 
-Since CC v2.1.172, subagents can spawn their own subagents (up to 5 levels deep); at any depth, "controller" means the immediate parent — the status protocol and SCOPE restate apply between each parent/child pair, and statuses bubble up one level at a time, not directly to the user. (Note: every agent in this repo currently excludes `Agent`/`Task` from its `tools:` list, so nesting is disabled by configuration here.)
+Since CC v2.1.172 subagents can spawn their own subagents; v2.1.180 raised the limit to 5 levels deep, and v2.1.187 fixed subagent depth-tracking and worktree-registration leaks; at any depth, "controller" means the immediate parent — the status protocol and SCOPE restate apply between each parent/child pair, and statuses bubble up one level at a time, not directly to the user. (Note: every agent in this repo currently excludes `Agent`/`Task` from its `tools:` list, so nesting is disabled by configuration here.)
 
 ## Adding a New Shared Library File
 
@@ -485,6 +497,8 @@ When using Claude Code Auto Mode, the classifier uses this context to determine 
 ```
 
 > **Note (CC v2.1.118+)**: include `"$defaults"` as a list entry to *append* your rules to the built-in list instead of *replacing* it. Previously (and still on older CC), supplying `autoMode.environment` replaced the defaults entirely. The same `"$defaults"` merge semantics apply to `autoMode.allow` and `autoMode.soft_deny`.
+
+> **Note (CC v2.1.183 / v2.1.193)**: Auto Mode gained native safety since our baseline — **destructive `git` commands are now blocked natively** (v2.1.183), so the `hard_deny` git entries below are belt-and-suspenders (still valid, not redundant). **`autoMode.classifyAllShell`** (v2.1.193) routes *all* Bash/PowerShell through the classifier — a stronger lever than per-pattern denies for high-trust environments. **Denial reasons** now surface in the transcript, the denial toast, and `/permissions` recent-denials (v2.1.193) — use them to debug "why was this denied." Separately, `attribution.sessionUrl` (v2.1.183) controls whether the `claude.ai` session link is appended to commit trailers.
 
 ### Recommended `hard_deny` baseline (CC v2.1.136+)
 
