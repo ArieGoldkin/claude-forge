@@ -122,6 +122,22 @@ claude --headless -p "run tests and report results"
 
 This enables correlation between CI pipeline spans and Claude Code tool invocations in your observability backend (Jaeger, Datadog, Grafana Tempo).
 
+### Claude Code OTEL Events & Metrics (CC v2.1.180+)
+
+Beyond trace context, Claude Code emits structured OTEL telemetry you can ship to your collector:
+
+- **`model` attribute on metrics (CC v2.1.180)** — token/cost/duration metrics are now tagged with the model id (e.g. `claude-opus-4-8`), so you can break down spend and latency per model in Grafana/Datadog. Group your cost dashboards by this attribute.
+- **`claude_code.assistant_response` log event (CC v2.1.193)** — emits the assistant's responses as OTEL logs. **Redacted by default**; set `OTEL_LOG_ASSISTANT_RESPONSES=1` to include response bodies. Leave redaction on in any environment where transcripts may contain sensitive data (PII/PHI/secrets) — opt in only for trusted debugging.
+
+```bash
+# Ship Claude Code telemetry to an OTLP collector
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://collector:4317"
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_LOGS_EXPORTER=otlp
+# Opt in to response-body logging ONLY for trusted/non-sensitive sessions:
+# export OTEL_LOG_ASSISTANT_RESPONSES=1
+```
+
 ## Alerting Strategy
 
 ### Severity Levels

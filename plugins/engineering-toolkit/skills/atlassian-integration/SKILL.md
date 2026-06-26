@@ -16,6 +16,8 @@ Integrate with Jira and Confluence via MCP. Provides workflow guidance for effic
 
 ## Quick Start
 
+> **MCP authentication (CC v2.1.186+).** If the Atlassian MCP server isn't connected yet, authenticate from the CLI with `claude mcp login atlassian` (`claude mcp logout atlassian` to clear). CC v2.1.193+ shows a **startup notice** when an MCP server needs auth, and reconnects automatically on transient 401/403s — so a mid-session token expiry no longer silently breaks the `mcp__atlassian__*` tools.
+
 ### 1. Get Cloud ID (Required First Step)
 
 Most operations require a `cloudId`. Extract from URLs or fetch:

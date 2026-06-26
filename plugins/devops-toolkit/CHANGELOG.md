@@ -2,6 +2,11 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.9] - 2026-06-26 — adopt Claude Code OTEL telemetry in observability-monitoring
+
+Documents the new Claude Code OpenTelemetry surface (CC alignment v2.1.193) in the `observability-monitoring` skill: the `model` attribute on metrics (CC v2.1.180) for per-model cost/latency breakdowns, and the `claude_code.assistant_response` log event (CC v2.1.193, redacted unless `OTEL_LOG_ASSISTANT_RESPONSES=1`). Skill-content only; no hook/dist change.
+
+
 ## [2.0.8] - 2026-06-25 — rebrand to Claude Forge
 
 Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs, the `continuity-recommendation` hook's install hint (`/plugin install ctk@claude-forge`), schema `$id` URLs, and install commands; dist rebuilt. Re-add the marketplace and reinstall as `dtk@claude-forge`.
