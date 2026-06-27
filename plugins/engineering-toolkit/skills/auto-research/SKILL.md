@@ -399,8 +399,9 @@ Recipes are named goal+stop-condition templates so common loops don't need hand-
 | `error-sweep` | `/fix-bug` over the top open error, investigation-first | budget |
 | `docs-drift` | `/verify` + a doc-vs-code consistency scan | goal |
 | `flake-hunt` | `/verify --streak=5` to surface intermittent failures | streak=5 |
+| `pr-review-watch` | `/review-mr` over open PRs, report-only watch via `/loop` (unattended) | budget |
 
-Recipes are presets, not new machinery — they ride the existing engine (experiment / cover / verify / fix-bug) and the triple ceiling. The full catalog and how to add a recipe live in `${CLAUDE_SKILL_DIR}/references/recipes.md`.
+Recipes are presets, not new machinery — they ride the existing engine (experiment / cover / verify / fix-bug / review-mr) and the triple ceiling. The full catalog, each preset's cadence/rung/cost profile, and how to add a recipe live in `${CLAUDE_SKILL_DIR}/references/recipes.md`. How much autonomy to grant a loop — and how to promote it from report-only to a confirmed write-loop — is in `${CLAUDE_SKILL_DIR}/references/autonomy-ladder.md`.
 
 ## Configuration
 
@@ -481,6 +482,9 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
   templates, their expansions, and how to add a new recipe
 - **Unattended Mode**: `${CLAUDE_SKILL_DIR}/references/unattended-mode.md` — Propose-don't-apply
   guardrails, the four hard rails, self-scheduling cadence, findings-ledger format, termination
+- **Autonomy Ladder**: `${CLAUDE_SKILL_DIR}/references/autonomy-ladder.md` — The L1 (report-only)
+  → L2 (propose-don't-apply) → L3 (confirmed write-loop) rungs, route→rung mapping, and the
+  evidence-based promotion gates between them
 - **Worked Examples**: `${CLAUDE_SKILL_DIR}/references/worked-examples.md` — Full end-to-end
   examples for each route (optimize, fix, cover, design, build, review, verify)
 - **Self-Improvement**: `${CLAUDE_SKILL_DIR}/references/self-improvement.md` — Skill

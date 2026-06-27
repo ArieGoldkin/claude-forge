@@ -17,8 +17,24 @@ The resolved plan is still shown in the Phase 3 confirm box and still requires a
 | `error-sweep` | `/fix-bug` over the top open error, investigation-first | `--tokens 300k` | `budget` | chip at the error backlog within a cost cap, propose fixes |
 | `docs-drift` | `/verify` + a doc-vs-code consistency scan | — | `goal` | catch docs that disagree with the code they describe |
 | `flake-hunt` | `/verify --streak=5` | — | `streak=5` | surface intermittent test failures by demanding 5 consecutive greens |
+| `pr-review-watch` | `/review-mr` over the open PRs/MRs, report-only watch via `/loop` | `--unattended --tokens 300k` | `budget` | babysit open PRs/MRs — surface blockers and draft review notes as they appear |
 
 `{scope}` is filled from the goal text or the current selection; if absent, auto-research scans the codebase per its normal Phase 2 step.
+
+## Operational profile
+
+What each preset costs to *run as a loop* — the cadence to schedule it at, the [autonomy rung](autonomy-ladder.md) it's safe to start on, and its rough token weight. (Adapted from `cobusgreyling/loop-engineering`'s per-pattern cadence/readiness/cost metadata, MIT.)
+
+| Recipe | Cadence | Start rung | Token cost |
+|---|---|---|---|
+| `coverage-90` | 1200–1800s (idle drift) | L3 confirmed | medium |
+| `perf-p95-200ms` | on-demand | L3 confirmed | high |
+| `error-sweep` | 1200–1800s | L2 propose-only | medium |
+| `docs-drift` | 1200–1800s | L1 report | low |
+| `flake-hunt` | on-demand / per-CI | L3 confirmed | medium |
+| `pr-review-watch` | ~270s active · 1200s idle | L1 report → L2 propose | high |
+
+`error-sweep` already covers loop-engineering's "Issue Triage" / "CI Sweeper" intent (top open error, investigation-first). Its "Changelog Drafter", "Post-Merge Cleanup", and "Dependency Sweeper" patterns are **not** ported: none has a backing skill, so per the "Adding a recipe" rules below they are skill gaps, not recipe gaps.
 
 ## Adding a recipe
 

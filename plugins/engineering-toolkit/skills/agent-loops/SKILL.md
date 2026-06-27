@@ -38,6 +38,15 @@ Metric-driven autonomous improvement loop. Establish baseline, then iterate: hyp
 
 See `/experiment` skill for full implementation. See `/cover --target` for specialized coverage variant.
 
+## Before running an unattended loop
+
+Walk the [loop failure-mode checklist](${CLAUDE_SKILL_DIR}/references/loop-failure-modes.md) — ten
+named ways an autonomous loop goes wrong (Infinite Fix Loop, Verifier Theater, Token Burn,
+Over-Reach, Escalation Failure, …), each cross-linked to the guardrail this repo already enforces
+against it. It's a 30-second pre-flight before letting any loop run unwatched, and it pairs with the
+[autonomy ladder](../auto-research/references/autonomy-ladder.md) (how much autonomy to grant, and
+when to promote).
+
 ## Related Skills
 
 - `function-calling` - Tool definitions and execution

@@ -2,6 +2,16 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.8.2] - 2026-06-27 — loop-engineering adoption: failure-mode checklist + autonomy ladder
+
+> Adopts the three genuinely net-new ideas from `cobusgreyling/loop-engineering` (MIT) as cite-don't-duplicate reference docs that index machinery this repo already ships. A 24-agent adversarial research pass found ~11 of 14 loop-engineering concepts already covered (often more strictly — review-mr's checker auto-downgrades unverified findings; the `--tokens` ceiling hard-stops mid-run); its three npm CLIs were declined as domain-coupled dev substrate. Skill-content only — no hook/`dist` change.
+
+### Added
+
+- **Loop failure-mode checklist** (`agent-loops/references/loop-failure-modes.md`) — the 10 named loop failure modes (Infinite Fix Loop, Verifier Theater, Token Burn, Over-Reach, Escalation Failure, …) as a pre-flight checklist, each cross-linked to the guardrail etk/ctk already enforces against it (experiment stuck-detection + readonly allowlists, the unattended hard token cutoff + blocker-stop, review-mr's evidence gate + checker, ctk security-blocker). Wired into the `agent-loops` SKILL.
+- **Autonomy ladder** (`auto-research/references/autonomy-ladder.md`) — names the L1 (report-only) → L2 (propose-don't-apply) → L3 (confirmed write-loop) rungs that already ship scattered across `unattended-mode`/`experiment`/`self-improvement`, with a route→rung map and evidence-based promotion gates. Wired into the `auto-research` SKILL Reference Files.
+- **`pr-review-watch` recipe** + an **operational-profile table** (cadence / start-rung / token-cost) for every preset in `auto-research/references/recipes.md`. `pr-review-watch` rides `/review-mr` + `/loop` to babysit open PRs. Notes that `error-sweep` already covers loop-engineering's Issue-Triage / CI-Sweeper intent, and that its Changelog-Drafter / Post-Merge-Cleanup / Dependency-Sweeper patterns are skill gaps (no backing skill), not recipe gaps.
+
 ## [2.8.1] - 2026-06-26 — atlassian-integration: MCP authentication note
 
 Adds an MCP-auth note to the `atlassian-integration` skill (CC alignment v2.1.193): authenticate the Atlassian MCP server with `claude mcp login atlassian` (CC v2.1.186), the startup notice when a server needs auth, and automatic reconnect on transient 401/403 (CC v2.1.191/193). Skill-content only; no hook/dist change.
