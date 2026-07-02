@@ -73,18 +73,7 @@ This skill teaches agents how to collect and verify evidence before marking task
 
 ### 3. Verification Standards
 
-**Minimum Evidence Requirements:**
-- At least ONE verification type executed
-- Exit code captured (0 = pass, non-zero = fail)
-- Timestamp recorded
-- Evidence stored in context
-
-**Production-Grade Requirements:**
-- Tests pass (exit code 0)
-- Coverage >70% (or project standard)
-- Build succeeds (exit code 0)
-- No critical linter errors
-- Security scan passes
+Evidence quality has three tiers — **Minimum** (at least one verification executed; exit code + timestamp captured; stored in context), **Production-Grade** (tests + build pass, coverage / linter / security bars met), and **Gold Standard**. The **authoritative threshold values for every tier live in one place**: [references/quality-standards.md](${CLAUDE_SKILL_DIR}/references/quality-standards.md). Don't restate the numbers here — change them there.
 
 ---
 

@@ -156,7 +156,7 @@ Options:
   --extract "{extraction command}"    # Post-process metric output (default: last stdout line)
   --goal {value}                      # Stop when metric reaches this value
   --unit {label}                      # Human-readable unit (ms, KB, %, bpb)
-  --iterations {N}                    # Max iterations (default: 10)
+  --iterations {N}                    # Max iterations (default: 20)
   --minutes {N}                       # Max wall-clock minutes (default: 60)
   --checkpoint {N}                    # Pause for review every N iterations
   --readonly {path,...}               # Files/dirs the agent must not modify
@@ -206,7 +206,7 @@ Full schema: `${CLAUDE_SKILL_DIR}/references/config-schema.md`
 | **Git rollback** | `git reset --hard HEAD~1` on any regression, crash, timeout, or violation |
 | **Readonly enforcement** | Check `git diff --name-only` against readonly list at commit time; violations revert immediately |
 | **Scope containment** | Only modify files within the target scope; out-of-scope edits are constraint violations |
-| **Budget limits** | `max_iterations` (default 10, max 100), `max_minutes` (default 60, max 480) |
+| **Budget limits** | `max_iterations` (default 20, max 100), `max_minutes` (default 60, max 480) |
 | **Stuck detection** | 5 consecutive discards triggers strategy reset; 6 consecutive stops the experiment |
 | **Human checkpoint** | Pause every `checkpoint_every` iterations for review |
 | **Destructive change prevention** | Do not delete the target, empty it, or remove all definitions |

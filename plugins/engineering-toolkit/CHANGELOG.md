@@ -2,6 +2,31 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.8.3] - 2026-07-02 — cross-fork adoption: `/etk:audit-skill` + skill-hygiene governance + auto-research single-sourcing + reference-repair sweep
+
+> Ports the company work-copy's etk 2.8.0 + 2.8.1 work into Claude Forge. Because the two forks diverged (Claude Forge already carried the fork's older 2.7.0 auto-research audit as its own 2.8.0, plus 2.7.3–2.7.6 recipe/triple-ceiling/unattended work the fork lacks), each change was re-verified against Claude Forge's **current** files and **merged on top of** them rather than overwritten — via a 10-agent read-only cross-fork diff. Domain-agnostic guardrail held: for the shared `coding-standards` / `testing-strategy-builder` skills only `SKILL.md` was touched; the fork's `member`/`coach`/wellness-fingerprinted satellite files were **not** synced (Claude Forge's neutral satellites stand). Skill-definition + docs only — no runtime hook behavior changed, no `dist/` rebuild.
+
+### Added
+
+- **`/etk:audit-skill`** — new skill + command. Audits any `SKILL.md` against the repo's Skill Authoring Rules and emits *candidate flags* for human review (CSO compliance · >150-line progressive-disclosure review · no-op/sediment/duplication · completion criteria). Read-only by design (`disallowed-tools: Edit/Write/NotebookEdit`) — never edits or deletes; points back to root `CLAUDE.md` as the single source of truth rather than restating the rules. Brings etk to **25 skills / 20 commands**.
+- **Skill-hygiene governance (root `CLAUDE.md`)** — folded in three net-new authoring rules (a context-load/"context-rent" rationale on CSO; a no-op/sediment pruning discipline **with** a repetition-as-steering carve-out; checkable-and-exhaustive completion-criterion guidance) + a soft >150-line progressive-disclosure review flag, and added the recurring `/etk:audit-skill` gate to the Release Checklist. Adapted from Matt Pocock's `writing-great-skills` (mattpocock/skills, MIT). Fixed a typo carried in the source ("every modified *model*" → "every modified *file*").
+
+### Changed
+
+- **auto-research routing single-sourcing** — collapsed the routing map from three overlapping authoritative encodings (the When-to-Use table, the ASCII Routing Decision Tree, the Intent Classification table) to **one**: the Intent Classification table is now authoritative and the other two are explicit derivative pointers, so adding a route is a one-place edit. Merged against Claude Forge's diverged copy — all Claude Forge-only sections (Stop-Conditions, Recipe Presets, Unattended/Propose-Only Mode, the triple ceiling / `--tokens`, the `Connected MCP sources` note, the autonomy-ladder pointer) preserved verbatim. Added an Advanced-Modes maturity note **adapted** to include Claude Forge's live `--unattended` mode (which the fork lacks).
+
+### Fixed
+
+> A reference-repair sweep surfaced by the `/etk:audit-skill` audit — seven skills carried pointers that resolved to nothing, orphaned satellites nothing pointed to, or a self-contradictory default. Each defect was re-confirmed present in Claude Forge's current copy before fixing.
+
+- **security-checklist**: repointed 18 dead `references/` pointers to the real, previously-orphaned `checklists/owasp-top-10-checklist.md`; dropped the compliance pointer with no target (the inline GDPR/SOC2 checklist stands); corrected the false "963 → 245 lines" footer.
+- **testing-strategy-builder**: repointed 12 dead `references/` pointers (incl. a phantom `framework-specific/` dir and `../../instructions/test-selectors.md`) to the real `references/code-examples.md`; removed pointers with no target; corrected the false "485 → 290 lines" footer. (This also removed a stray `platform patterns` fingerprint line.)
+- **quality-gates**: wired the orphaned `templates/` worksheets (gate-check, complexity-assessment, requirements-checklist) into the Templates section; removed two dangling pointers to a non-existent `breakdown-template.md`.
+- **architecture-decision-record**: wired the orphaned `checklists/adr-review-checklist.md` into a new "Reviewing an ADR" section.
+- **experiment**: aligned the `max_iterations` default — SKILL.md/playground said 10 while `config-schema.md`/`safety-guardrails.md` said 20 (now 20 everywhere, incl. `playground.html`).
+- **coding-standards**: made the Quick Reference the single source for the numeric limits — collapsed the redundant "Standards by Check Type" re-listing and pointed the per-language quick-checks at it.
+- **evidence-verification**: made `references/quality-standards.md` the single source for tier thresholds; SKILL.md now summarizes and defers instead of restating the numbers (which had already drifted: `>70%` vs `>=70%`).
+
 ## [2.8.2] - 2026-06-27 — loop-engineering adoption: failure-mode checklist + autonomy ladder
 
 > Adopts the three genuinely net-new ideas from `cobusgreyling/loop-engineering` (MIT) as cite-don't-duplicate reference docs that index machinery this repo already ships. A 24-agent adversarial research pass found ~11 of 14 loop-engineering concepts already covered (often more strictly — review-mr's checker auto-downgrades unverified findings; the `--tokens` ceiling hard-stops mid-run); its three npm CLIs were declined as domain-coupled dev substrate. Skill-content only — no hook/`dist` change.

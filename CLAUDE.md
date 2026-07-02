@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.9, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.6, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.6, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.8.2, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.8.3, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -55,7 +55,7 @@ claude-forge/
 | dtk (formerly devops-toolkit) | 15 | 2 | 12 | 2 (repo-access-guard, continuity-recommendation) | Infrastructure, AWS, Terraform, CI/CD, Salesforce, Husky pre-commit |
 | atk (formerly ai-toolkit) | 16 | 1 | 25 | 1 (continuity-recommendation) | RAG, embeddings, LangGraph, LLM patterns, conversational AI, NotebookLM |
 | ftk (formerly frontend-toolkit) | 16 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
-| etk (formerly engineering-toolkit) | 24 | 4 | 19 | 2 (review-logger, continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode |
+| etk (formerly engineering-toolkit) | 25 | 4 | 20 | 2 (review-logger, continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode |
 
 > **Important**: ctk (formerly continuity-toolkit) is the **canonical owner of all shared hooks** (security, permissions, lifecycle, post-tool, HIPAA context injection). Install it alongside other plugins for full hook coverage. Other plugins have been stripped of shared hooks to prevent duplication when multiple plugins are installed simultaneously.
 >
@@ -359,6 +359,7 @@ Skill `description` fields are **trigger conditions only** — never workflow or
 - Describe WHEN the skill activates, not WHAT it does
 - End with `Triggers on <keyword1>, <keyword2>` for discoverability
 - Claude reads description summaries and may skip full skill content if the description leaks workflow
+- **Why lean matters**: a model-invoked `description` is permanent per-turn context rent — it loads into context every session whether or not the skill fires, so verbosity costs tokens continuously. Prune descriptions hardest. (A `disable-model-invocation` skill pays no context rent but spends human *cognitive* load instead — match the invocation type to the cost you can afford.)
 
 **Good**: `"Run tests, linting, and type checking with evidence collection. Triggers on verify, run checks, quality check"`
 **Bad**: `"First runs tests, then collects evidence, then presents a summary with pass/fail for each check"`
@@ -372,6 +373,15 @@ User instructions > Skill rules > System prompt defaults
 ```
 
 Skills must never override explicit user preferences. If a user says "skip tests", the skill skips tests even if TDD is normally enforced.
+
+### Skill body hygiene — pruning, sizing, completion criteria
+
+The `description` rules above govern *discovery*; these govern the skill **body** as it ages. Adapted from Matt Pocock's `writing-great-skills` (mattpocock/skills, MIT), evaluated 2026-06-30.
+
+- **Prune no-ops and sediment.** Skill bodies accrete inert instructions ("sediment") — the default fate without a pruning discipline. Audit each sentence against the model's *default*: if a line wouldn't change what the model already does, cut the whole sentence (don't trim words). Keep each *meaning* in one place — restating the same meaning in N spots makes a behavior change an N-place edit (e.g. auto-research once encoded its routing map in three places). **Carve-out**: deliberate repetition *as steering* — anti-rationalization tables (cover's Red-Flags/Rationalizations), safety-boundary restatement (review-mr's never-auto-post) — is NOT duplication; the redundancy IS the mechanism. Do not collapse it.
+- **Write checkable, exhaustive completion criteria** for long-horizon skills (fix-bug, cover, experiment, develop). A step's done-condition should be both *checkable* (the model can tell done from not-done) and *demanding* ("every modified file accounted for", not "produce a change list") — vague bounds invite premature completion. In-repo exemplar: `verify`'s Step-4 quality-level table.
+- **Soft size flag**: a SKILL.md over ~150 lines is a prompt to *review for progressive disclosure* (push branch-specific reference behind `${CLAUDE_SKILL_DIR}` pointers), **not** a hard ceiling — legitimately reference-dense skills (terraform, database, testing) may exceed it. The flag triggers a look, not a cut.
+- The no-op test is **model-relative** ("settle by running, not by debating") and we have no behavioral eval harness — so audits emit *candidate* flags for human review, never auto-delete. **`/etk:audit-skill`** operationalizes these rules (it points back here as the single source of truth — it does not restate them). Run it on changed skills before a version bump (see Release Checklist).
 
 ### Read-only skill hardening with `disallowed-tools` (CC v2.1.152+)
 
@@ -469,6 +479,8 @@ Whenever you change a plugin's `dependencies` field, rename the plugin, or ship 
 4. `plugins/{name}/CLAUDE.md` `> Version:` header line if present
 5. `README.md` (root) plugin table — version column for that row
 6. `CLAUDE.md` (root) plugin tree comment (line ~42-48) — `(vX.Y.Z, installed as ...)`
+
+**Skill quality gate (recurring — added 2026-06-30)**: if the bump touches any `skills/**/SKILL.md`, run **`/etk:audit-skill`** over the changed skills first and triage its flags (CSO compliance · >150-line progressive-disclosure review · no-op/sediment · completion criteria). This is the *recurring* trigger for the pruning discipline in "Skill body hygiene" above — sediment is the default fate without one, and a release is the natural cadence. The audit only flags; a human decides each cut. (Deferred hardening: a scheduled `/loop` sweep or a CI lint — a CI gate needs an `ANTHROPIC_API_KEY` because the audit is model-invoked, the same blocker as the deferred runtime-smoke job.)
 
 **The dep-rename trap**: changing `dependencies: ["old-name"]` → `dependencies: ["new-name"]` without bumping the version means existing installs keep their stale `plugin.json` and the dep resolution silently breaks the next time the old dep is uninstalled. Always patch-bump on dep changes, even if nothing else changed.
 

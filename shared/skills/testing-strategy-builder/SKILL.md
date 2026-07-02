@@ -90,7 +90,7 @@ Modern testing follows the "Testing Trophy" model:
 
 **Coverage Target:** 90%+ for business logic
 
-**For detailed examples:** See [references/unit-testing.md](${CLAUDE_SKILL_DIR}/references/unit-testing.md)
+**For detailed examples:** See [`references/code-examples.md` → Unit Test Examples](${CLAUDE_SKILL_DIR}/references/code-examples.md)
 
 ### Integration Tests
 **Purpose**: Test component interactions
@@ -102,7 +102,7 @@ Modern testing follows the "Testing Trophy" model:
 
 **Coverage Target:** 70%+ for API endpoints
 
-**For detailed examples:** See [references/integration-testing.md](${CLAUDE_SKILL_DIR}/references/integration-testing.md)
+**For detailed examples:** See [`references/code-examples.md` → Integration Test Examples](${CLAUDE_SKILL_DIR}/references/code-examples.md)
 
 ### End-to-End (E2E) Tests
 **Purpose**: Validate critical user journeys
@@ -114,7 +114,7 @@ Modern testing follows the "Testing Trophy" model:
 
 **Coverage Target:** 5-10 critical journeys
 
-**For detailed examples:** See [references/e2e-testing.md](${CLAUDE_SKILL_DIR}/references/e2e-testing.md)
+**For detailed examples:** See [`references/code-examples.md` → End-to-End Test Examples](${CLAUDE_SKILL_DIR}/references/code-examples.md)
 
 ### Performance Tests
 **Purpose**: Validate system under load
@@ -125,7 +125,7 @@ Modern testing follows the "Testing Trophy" model:
 - Spike testing (traffic surges)
 - Soak testing (sustained load)
 
-**For detailed examples:** See [references/performance-testing.md](${CLAUDE_SKILL_DIR}/references/performance-testing.md)
+**For detailed examples:** See [`references/code-examples.md` → Performance Test Examples](${CLAUDE_SKILL_DIR}/references/code-examples.md)
 
 ---
 
@@ -175,7 +175,7 @@ Then [expected outcome]
 - Database operations (test DB)
 - Internal service interactions
 
-**For complete patterns:** See [references/testing-patterns.md](${CLAUDE_SKILL_DIR}/references/testing-patterns.md)
+**For complete patterns:** See [`references/code-examples.md` → Mocking / Snapshot / Parameterized / Test Isolation](${CLAUDE_SKILL_DIR}/references/code-examples.md)
 
 ---
 
@@ -253,7 +253,7 @@ jobs:
 - Smoke tests (critical paths)
 - Health checks
 
-**For complete CI/CD patterns:** See [references/ci-cd-patterns.md](${CLAUDE_SKILL_DIR}/references/ci-cd-patterns.md)
+The pipeline pattern and quality gates above are the CI/CD guidance shipped with this skill.
 
 ---
 
@@ -279,14 +279,6 @@ jobs:
 | **API** | httpx + pytest | Async support |
 | **E2E** | Playwright (Python) | Browser automation |
 | **Performance** | Locust | Python-based load testing |
-
-**For tool installation guides:** See [references/tool-installation.md](${CLAUDE_SKILL_DIR}/references/tool-installation.md)
-
-**Framework-specific guides:**
-- [Jest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/jest.md)
-- [Vitest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/vitest.md)
-- [Playwright Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/playwright.md)
-- [pytest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/pytest.md)
 
 ---
 
@@ -334,7 +326,7 @@ test('user can sign up', async () => { /* ... */ });
 test('user can login', async () => { /* ... */ });
 ```
 
-**For complete anti-patterns guide:** See [references/testing-anti-patterns.md](${CLAUDE_SKILL_DIR}/references/testing-anti-patterns.md)
+The anti-patterns above are the complete set shipped with this skill.
 
 ---
 
@@ -357,25 +349,9 @@ When starting a new project or feature:
 
 ## Detailed References
 
-**For comprehensive testing patterns:**
-- [Test Selectors Guide](../../instructions/test-selectors.md) - data-testid best practices, createTestId utility, platform patterns (see CLAUDE.md)
-- [Unit Testing Guide](${CLAUDE_SKILL_DIR}/references/unit-testing.md) - AAA pattern, test isolation, fixtures
-- [Integration Testing Guide](${CLAUDE_SKILL_DIR}/references/integration-testing.md) - API testing, test databases, contracts
-- [E2E Testing Guide](${CLAUDE_SKILL_DIR}/references/e2e-testing.md) - Playwright/Cypress patterns, page objects
-- [Performance Testing Guide](${CLAUDE_SKILL_DIR}/references/performance-testing.md) - k6/Locust patterns, load/stress testing
-- [Testing Patterns](${CLAUDE_SKILL_DIR}/references/testing-patterns.md) - Mocking, parameterized tests, snapshots
-- [CI/CD Patterns](${CLAUDE_SKILL_DIR}/references/ci-cd-patterns.md) - Complete pipeline examples, quality gates
-- [Tool Installation Guide](${CLAUDE_SKILL_DIR}/references/tool-installation.md) - Detailed setup for Jest/Vitest/Playwright/pytest
-- [Testing Anti-Patterns](${CLAUDE_SKILL_DIR}/references/testing-anti-patterns.md) - Common mistakes to avoid
-
-**Framework-specific guides:**
-- [Jest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/jest.md)
-- [Vitest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/vitest.md)
-- [Playwright Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/playwright.md)
-- [pytest Guide](${CLAUDE_SKILL_DIR}/references/framework-specific/pytest.md)
+- [Testing Code Examples](${CLAUDE_SKILL_DIR}/references/code-examples.md) — worked examples for every tier: unit (AAA / Given-When-Then), integration (API + test DB), E2E (full user journey + **test-selector / data-testid best practices**), performance (k6 load tests), plus test-data factories/fixtures, mocking, snapshot, parameterized, and test-isolation patterns.
 
 ---
 
-**Skill Version**: 2.0.0 (Optimized with Progressive Disclosure)
-**Last Updated**: 2025-12-30
-**Token Optimization**: 485 lines → 290 lines (40% reduction)
+**Skill Version**: 2.0.1
+**Last Updated**: 2026-07-02
