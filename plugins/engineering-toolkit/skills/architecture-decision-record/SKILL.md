@@ -142,6 +142,10 @@ Keep ADRs in version control alongside code:
 - [ ] Link ADR in implementation PR
 - [ ] Update Status to "Implemented" after deployment
 
+## Reviewing an ADR
+
+When reviewing a proposed ADR (your own or a teammate's), use the [ADR Review Checklist](${CLAUDE_SKILL_DIR}/checklists/adr-review-checklist.md) — per-section content-quality checks (context / decision / consequences / alternatives / references), architecture-review criteria (technical viability, business alignment, operational considerations, compliance), stakeholder sign-off, common review feedback, and ADR rejection criteria.
+
 ## Examples
 
 See `${CLAUDE_SKILL_DIR}/examples/` for complete ADR samples:

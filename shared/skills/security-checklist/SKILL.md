@@ -71,45 +71,37 @@ pip-audit
 
 ## OWASP Top 10 (2021 Edition) - Quick Reference
 
+> **Detailed per-item authorization checks, code examples, and testing steps:** [`checklists/owasp-top-10-checklist.md`](${CLAUDE_SKILL_DIR}/checklists/owasp-top-10-checklist.md)
+
 1. **Broken Access Control** - Verify user authorization before resource access
    - Mitigation: Implement RBAC, deny by default, log access failures
-   - See: [references/owasp-detailed.md#broken-access-control](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 2. **Cryptographic Failures** - Use strong encryption and hashing
    - Mitigation: TLS/HTTPS, bcrypt/argon2 for passwords, encrypt PII at rest
-   - See: [references/owasp-detailed.md#cryptographic-failures](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 3. **Injection** - Prevent SQL injection, command injection, XSS
    - Mitigation: Parameterized queries, input validation, escape output
-   - See: [references/owasp-detailed.md#injection](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 4. **Insecure Design** - Design security from the start
    - Mitigation: Threat modeling, rate limiting, secure defaults
-   - See: [references/owasp-detailed.md#insecure-design](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 5. **Security Misconfiguration** - Secure default configurations
    - Mitigation: Disable debug in production, set security headers, update dependencies
-   - See: [references/owasp-detailed.md#security-misconfiguration](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 6. **Vulnerable Components** - Keep dependencies updated
    - Mitigation: npm audit, pip-audit, Dependabot, regular updates
-   - See: [references/automated-scanning.md](${CLAUDE_SKILL_DIR}/references/automated-scanning.md)
 
 7. **Authentication Failures** - Strong authentication and session management
    - Mitigation: MFA, strong passwords, secure sessions, rate limiting
-   - See: [references/authentication-patterns.md](${CLAUDE_SKILL_DIR}/references/authentication-patterns.md)
 
 8. **Software/Data Integrity Failures** - Verify code and data integrity
    - Mitigation: SRI for CDN scripts, signed commits, package signatures
-   - See: [references/owasp-detailed.md#integrity-failures](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 9. **Security Logging Failures** - Log security events
    - Mitigation: Log auth events, authorization failures, security errors
-   - See: [references/owasp-detailed.md#logging-failures](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 10. **Server-Side Request Forgery (SSRF)** - Validate URLs
     - Mitigation: URL allowlists, block internal IPs, disable redirects
-    - See: [references/owasp-detailed.md#ssrf](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
 
 ---
 
@@ -132,7 +124,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True    # No JavaScript access
 app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'  # CSRF protection
 ```
 
-**For complete authentication patterns:** See [references/authentication-patterns.md](${CLAUDE_SKILL_DIR}/references/authentication-patterns.md)
+**For complete authentication patterns:** See [`checklists/owasp-top-10-checklist.md` §7 (Identification & Authentication Failures)](${CLAUDE_SKILL_DIR}/checklists/owasp-top-10-checklist.md)
 
 ---
 
@@ -154,7 +146,7 @@ from markupsafe import escape
 content = escape(request.form['content'])
 ```
 
-**For complete validation patterns:** See [references/owasp-detailed.md#injection](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md)
+**For complete validation patterns:** See [`checklists/owasp-top-10-checklist.md` §3 (Injection)](${CLAUDE_SKILL_DIR}/checklists/owasp-top-10-checklist.md)
 
 ---
 
@@ -181,7 +173,7 @@ def set_security_headers(response):
 4. Record evidence in context
 5. BLOCK if Critical > 0 or High > 5
 
-**For complete scanning guide:** See [references/automated-scanning.md](${CLAUDE_SKILL_DIR}/references/automated-scanning.md)
+**For complete scanning guide:** See [`checklists/owasp-top-10-checklist.md` §6 (Vulnerable & Outdated Components)](${CLAUDE_SKILL_DIR}/checklists/owasp-top-10-checklist.md)
 
 ---
 
@@ -198,8 +190,6 @@ def set_security_headers(response):
 - [ ] Encryption at rest and in transit
 - [ ] Logging and monitoring
 - [ ] Incident response plan
-
-**For complete compliance guide:** See [references/compliance.md](${CLAUDE_SKILL_DIR}/references/compliance.md)
 
 ---
 
@@ -227,14 +217,11 @@ When securing an application:
 
 ## Detailed References
 
-**For comprehensive security patterns:**
-- [OWASP Top 10 Detailed](${CLAUDE_SKILL_DIR}/references/owasp-detailed.md) - Complete examples and code patterns
-- [Authentication Patterns](${CLAUDE_SKILL_DIR}/references/authentication-patterns.md) - JWT, sessions, password hashing
-- [Automated Scanning Guide](${CLAUDE_SKILL_DIR}/references/automated-scanning.md) - npm audit, pip-audit, semgrep, bandit
-- [Compliance Guide](${CLAUDE_SKILL_DIR}/references/compliance.md) - GDPR, SOC2 requirements
+- [OWASP Top 10 Detailed Checklist](${CLAUDE_SKILL_DIR}/checklists/owasp-top-10-checklist.md) — per-item authorization checks, code examples (SQL/command/NoSQL injection, argon2 hashing, SSRF, security headers), testing steps, and dependency-scan commands for all 10 categories, plus authentication & session-management patterns (§7).
+
+The GDPR/SOC2 quick checklist above is the compliance guidance shipped with this skill.
 
 ---
 
-**Skill Version**: 2.0.0 (Optimized with Progressive Disclosure)
-**Last Updated**: 2025-12-30
-**Token Optimization**: 963 lines → 245 lines (75% reduction)
+**Skill Version**: 2.0.1
+**Last Updated**: 2026-07-02

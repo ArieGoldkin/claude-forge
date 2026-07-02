@@ -94,7 +94,7 @@ Detailed standards including functions, types, React patterns, and error handlin
 **Read**: [references/typescript-standards.md](${CLAUDE_SKILL_DIR}/references/typescript-standards.md)
 
 **Quick checks:**
-- Functions < 50 lines, complexity < 10
+- Function size & complexity within the Quick Reference limits above
 - No `any` types (use `unknown` or proper types)
 - Proper error handling with try/catch
 - Clear variable/function names
@@ -105,7 +105,7 @@ Detailed standards including functions, type hints, docstrings, and Lambda patte
 **Read**: [references/python-standards.md](${CLAUDE_SKILL_DIR}/references/python-standards.md)
 
 **Quick checks:**
-- Functions < 50 lines, complexity < 10
+- Function size & complexity within the Quick Reference limits above
 - Type hints on all function signatures
 - Pydantic models for validation
 - No PII in logs
@@ -116,7 +116,7 @@ Component architecture, hooks, props, and UI patterns.
 **Read**: [references/react-standards.md](${CLAUDE_SKILL_DIR}/references/react-standards.md)
 
 **Quick checks:**
-- Components < 300 lines
+- Component size within the Quick Reference limit above
 - Proper hook usage (React 19 `use()` for data fetching)
 - TanStack Query patterns
 - data-testid for QA testing
@@ -146,36 +146,14 @@ Cross-language naming rules with examples.
 
 ## Standards by Check Type
 
-### Manual Review Required
+The numeric limits and their enforcement status (manual / tool-enforced / gap) are the **Enforcement** column of the [Quick Reference](#quick-reference) tables above (the single source) plus the [Tool Enforcement Reality](#tool-enforcement-reality) section. This section adds only the standards that carry no number and so aren't in those tables:
 
-These standards are NOT enforced by tools and require human review:
-- Function size < 50 lines
-- Component size < 300 lines (React)
-- Cyclomatic complexity < 10
-- Nesting depth < 4 levels
+**Manual review only (not tool-checkable):**
 - DRY principle (no unnecessary duplication)
 - Clear variable/function names
 - Comments where logic isn't self-evident
 
-### Tool Enforced (Partial)
-
-These standards are enforced by current tool configurations:
-- TypeScript strict mode checks (tsconfig.json)
-- Unused variables/parameters (tsconfig.json)
-- Formatting: indentation, quotes, semicolons (biome.json)
-- Basic linting rules (biome.json recommended rules)
-
-### Should Be Tool Enforced (Gaps)
-
-These standards are documented but NOT enforced by tools:
-- Cyclomatic complexity < 10
-- Test coverage > 80%
-- Line length limits
-- Import sorting
-- Python linting (ruff has ZERO rules enabled)
-- Naming conventions
-
-See [tool-configs/gaps-and-recommendations.md](tool-configs/gaps-and-recommendations.md) for remediation.
+See [tool-configs/gaps-and-recommendations.md](tool-configs/gaps-and-recommendations.md) for remediation of the ❌ gaps.
 
 ---
 

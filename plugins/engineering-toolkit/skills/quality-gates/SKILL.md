@@ -214,6 +214,11 @@ See [references/templates.md](${CLAUDE_SKILL_DIR}/references/templates.md) for:
 - Stuck Escalation template
 - Complexity Breakdown template
 
+Full fill-in worksheet artifacts (copy into your task notes when running a gate):
+- [Gate Check](${CLAUDE_SKILL_DIR}/templates/gate-check-template.md) — end-to-end gate-decision worksheet (complexity + critical questions + dependencies + attempt history + decision)
+- [Complexity Assessment](${CLAUDE_SKILL_DIR}/templates/complexity-assessment.md) — scored 1–5 complexity worksheet
+- [Requirements Checklist](${CLAUDE_SKILL_DIR}/templates/requirements-checklist.md) — functional / technical / non-functional completeness checklist
+
 ---
 
 ## Integration with Context System
