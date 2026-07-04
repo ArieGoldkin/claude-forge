@@ -2,6 +2,23 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.7] - 2026-07-04 — playground Visual Standard (orchestkit adoption)
+
+Cross-fork adoption from orchestkit's `playground-visual-standard.md` (yonatangross/orchestkit, MIT) into the `playground` skill — principles, not verbatim assets. Skills/docs only; no `dist` rebuild.
+
+### Added
+
+- **`skills/playground/references/visual-standard.md`** — a falsifiable design contract for single-file HTML playgrounds: §0 signal-count archetype routing, HSL `--pg-` token scales (one value per role), glass do/don'ts, a 4-duration motion budget + verbatim `prefers-reduced-motion` gate, component specs (device frame / transport / flow arrow / copy-prompt / accessible drag-and-drop), RTL logical-properties rules, a 10-point anti-"generic AI" checklist, and a pre-ship self-audit. Defers to sibling ftk skills (`frontend-creative-design`, `interaction-patterns`, `design-system-tokens`) for the general ground they already own rather than duplicating it.
+
+### Changed
+
+- **`skills/playground/SKILL.md`** — Step 1 rewritten as a signal-count archetype routing ("decision, not vibe") pointing at the standard's §0; added a self-audit gate before `open`; added accessibility + reduced-motion to core requirements; reframed "Two genres" → "Three families" (control panel · read-and-decide brief · **operate-it playground** — user-story player / decision board, buildable from the standard). Added `user story player, decision board` triggers.
+
+### Declined (orchestkit substrate, fails the end-user-install lens)
+
+- decision-router board (37-agent ork registry + Workflow strategies), the multi-format front-door (ASCII / NotebookLM infographic), memory-MCP visualization storage, and the plan-context scripts / PR-playground CI gate. Charts-via-`/dataviz` (`chart-encoding-standard`) parked as a separate follow-up.
+
+
 ## [2.3.6] - 2026-06-25 — rebrand to Claude Forge
 
 Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs, the `continuity-recommendation` hook's install hint (`/plugin install ctk@claude-forge`), explainer-video references, and install commands; dist rebuilt. Re-add the marketplace and reinstall as `ftk@claude-forge`.

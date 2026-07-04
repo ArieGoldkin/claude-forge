@@ -34,7 +34,7 @@
       "name": "ftk",
       "source": "./plugins/frontend-toolkit",
       "description": "Frontend development toolkit (ftk, formerly frontend-toolkit) - 17 skills, 4 agents, 11 commands for UI/UX, design systems, browser automation, Google Stitch AI, and Remotion explainer videos",
-      "version": "2.3.6",
+      "version": "2.3.7",
       "category": "development"
     },
     {
