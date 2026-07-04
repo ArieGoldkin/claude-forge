@@ -2,6 +2,11 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.9] - 2026-07-04 — playground description accuracy
+
+Resolves the one `/etk:audit-skill` finding carried from 2.3.8: the `playground` skill `description` enumerated its templates but omitted the `decision-board` template added in 2.3.8. Added "decision boards (drag-to-prioritize)" to the enumeration so the model-invoked description matches the shipped template set (the "decision board" trigger keyword already covered discovery; this is an accuracy fix). Description-only; no `dist` rebuild.
+
+
 ## [2.3.8] - 2026-07-04 — playground chart-encoding + decision-board archetype (orchestkit adoption, round 2)
 
 Follow-up to 2.3.7 after a deeper read of orchestkit's playground ecosystem (yonatangross/orchestkit, MIT). Adopted the two items a deeper assessment surfaced as genuine gaps; declined the rest (gold-standard HTML is bespoke and less strict than our own standard; decision-router is ork-substrate-locked; visualize-plan's ASCII family is plan-domain-locked). Skills/docs only; no `dist` rebuild.
