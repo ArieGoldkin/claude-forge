@@ -42,7 +42,7 @@ claude-forge/
 │   ├── continuity-toolkit/     # Session continuity management (v2.6.11, installed as ctk)
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.9, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.6, installed as atk)
-│   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.7, installed as ftk)
+│   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.8, installed as ftk)
 │   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.8.3, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```

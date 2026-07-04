@@ -2,6 +2,25 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.8] - 2026-07-04 — playground chart-encoding + decision-board archetype (orchestkit adoption, round 2)
+
+Follow-up to 2.3.7 after a deeper read of orchestkit's playground ecosystem (yonatangross/orchestkit, MIT). Adopted the two items a deeper assessment surfaced as genuine gaps; declined the rest (gold-standard HTML is bespoke and less strict than our own standard; decision-router is ork-substrate-locked; visualize-plan's ASCII family is plan-domain-locked). Skills/docs only; no `dist` rebuild.
+
+### Added
+
+- **`skills/playground/references/chart-encoding.md`** — fills a real gap (ftk had zero chart/palette/CVD guidance despite 5 playground templates rendering quantitative marks). Defers the data-mark layer to Claude Code's bundled `/dataviz` skill, enforces the **chrome↔marks boundary** (persona `--pg-` HSL for the frame, `/dataviz` validated palette for the data — never `--pg-accent` on a bar), and probes-don't-requires (`/dataviz` absent → simple/ASCII fallback, so zero-dependency holds).
+- **`skills/playground/templates/decision-board.md`** — a new operate-it archetype guide: drag items across an Impact×Effort matrix / ranked list / Now-Next-Later buckets with a live RICE score. Extracts the verified accessible engine (Pointer-Events drag, keyboard reorder + `refocus()`, `aria-live` announcements, RTL-aware axis) into house-style prose + snippets, citing `interaction-patterns`. Not a copied HTML file.
+
+### Changed
+
+- **`skills/playground/references/visual-standard.md`** — added the `aria-pressed`-as-selection-state protocol for non-drag toggle UI (§5); wired chart-encoding into §0 routing and the §8 self-audit; added a `decision-board.md` scaffold pointer. **Fixed three wrong section cross-references** in §0 (reduced-motion is §4 not §5; component specs / drag-and-drop engine are §5 not §6).
+- **`skills/playground/SKILL.md`** — added `decision-board.md` to the template list; a "charts defer to `/dataviz`" core requirement; updated the operate-it family (decision board now has a dedicated template; user-story player still standard-built).
+
+### Declined (confirmed by the deeper read)
+
+- `homeos-arieh.html` verbatim (bespoke Hebrew/HomeOS/personal, "study don't edit" — and it violates our own reduced-motion + 4-duration-budget rules); `decision-router.template.html` (hardcodes ork's 37-agent registry, `ORK-ONLY`); `release-notes-player` (a recipe of user-story-player, not a distinct archetype); the entire `visualize-plan` ASCII pattern family (swimlane/DAG/reversibility/pre-mortem — plan/diff-domain-locked, a different skill's job).
+
+
 ## [2.3.7] - 2026-07-04 — playground Visual Standard (orchestkit adoption)
 
 Cross-fork adoption from orchestkit's `playground-visual-standard.md` (yonatangross/orchestkit, MIT) into the `playground` skill — principles, not verbatim assets. Skills/docs only; no `dist` rebuild.

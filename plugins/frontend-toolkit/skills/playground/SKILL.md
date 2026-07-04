@@ -23,6 +23,7 @@ A playground is a self-contained HTML file with interactive controls on one side
    - `${CLAUDE_SKILL_DIR}/templates/diff-review.md` — Code review (git diffs, commits, PRs with line-by-line commenting)
    - `${CLAUDE_SKILL_DIR}/templates/code-map.md` — Codebase architecture (component relationships, data flow, layer diagrams)
    - `${CLAUDE_SKILL_DIR}/templates/strategy-brief.md` — Read-and-decide documents (roadmaps, build-vs-buy, option matrices, migration proposals) with sticky scroll-spy nav, KPI strip, before/after splits, sortable verdict matrix, and mermaid diagrams
+   - `${CLAUDE_SKILL_DIR}/templates/decision-board.md` — Operate-it prioritization (drag items across an Impact×Effort matrix / ranked list / Now-Next-Later buckets with a live RICE score); accessible Pointer-Events drag-and-drop + keyboard + `aria-live`
 3. **Follow the template** to build the playground. If the topic doesn't fit any template cleanly, use the one closest and adapt. For any operate-it playground (player, board, or a rich control panel), also follow the **Visual Standard** — it carries the token/glass/motion/a11y rules the templates assume.
 4. **Self-audit, then open.** Run the standard's §8 self-audit before declaring done; then run `open <filename>.html` to launch it in the user's default browser.
 
@@ -35,6 +36,7 @@ A playground is a self-contained HTML file with interactive controls on one side
 - **Sensible defaults + presets.** Looks good on first load. Include 3-5 named presets that snap all controls to a cohesive combination.
 - **Dark theme, on the token scale.** System font for UI, monospace for code/values; minimal chrome. Use HSL `--pg-` tokens with one value per role (Visual Standard §1) — not eyeballed colors.
 - **Accessible + reduced-motion.** Ship the `prefers-reduced-motion` gate verbatim (Visual Standard §4). Any drag-and-drop uses Pointer Events + keyboard + `aria-live`, never native HTML5 DnD (§5, and the `interaction-patterns` skill). Playgrounds that may render RTL use CSS logical properties (§6).
+- **Charts defer to `/dataviz`.** Any quantitative data mark (bar, line, KPI tile) takes its colors from the bundled `/dataviz` validated palette — not the persona `--pg-accent` — per `references/chart-encoding.md` (probe-don't-require; simple/ASCII fallback if `/dataviz` is absent, so zero-dependency still holds).
 
 ## Three families
 
@@ -42,7 +44,7 @@ Pick the family first — it changes the layout, whether a prompt output exists,
 
 - **Control panel** (design, data, maps) — **adjust-and-copy**: controls on one side, live preview on the other.
 - **Read-and-decide brief** (roadmaps, build-vs-buy, option matrices) — a narrative scrolled top-to-bottom where interactivity (sort, filter, scroll-spy) serves comprehension, not configuration. Uses `strategy-brief.md`; the brief itself is the deliverable (prompt output optional).
-- **Operate-it playground** (user-story player, decision board) — the viewer *operates* something: plays a flow over ≥2 steps, or drags to decide with a live score. No dedicated template yet — build it from the **Visual Standard** (`references/visual-standard.md`), which carries the device-frame / transport / flow-arrow / drag-and-drop-engine specs.
+- **Operate-it playground** — the viewer *operates* something: a **decision board** (drag to prioritize with a live score) uses `templates/decision-board.md`; a **user-story player** (plays a flow over ≥2 steps) is built from the **Visual Standard** (`references/visual-standard.md`) §5 component specs. Both are governed by that standard.
 
 ## State management pattern
 

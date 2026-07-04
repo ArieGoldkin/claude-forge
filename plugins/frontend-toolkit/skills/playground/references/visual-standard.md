@@ -34,11 +34,14 @@ Then pick ONE archetype:
   • CONTROL PANEL   → adjust-and-copy: live controls on one side, live preview on the other
                       (the design / data / concept-map / code-map templates).
   • USER-STORY PLAYER → the playground plays a flow over ≥2 steps/screens (device frame +
-                      transport + cause→effect arrow). Build from §6 component specs.
+                      transport + cause→effect arrow). Build from §5 component specs.
   • DECISION BOARD  → the core is prioritization via drag-and-drop with a live score
-                      (RICE/WSJF) + copy-prompt. Build from the §6 drag-and-drop engine.
+                      (RICE/WSJF) + copy-prompt. Use the `decision-board.md` template
+                      (or build from the §5 drag-and-drop engine).
   • (<2 signals) → not a full playground. A data/config dashboard is fine with the card
-                      layout — but still take the §1 tokens and the §5 reduced-motion gate.
+                      layout — but still take the §1 tokens and the §4 reduced-motion gate.
+                      Any quantitative data marks (bars/lines/KPI tiles) follow
+                      `chart-encoding.md` — defer to /dataviz, don't eyeball chart colors.
 ```
 
 A read-and-decide document (roadmap, build-vs-buy, option matrix) is a **different genre** —
@@ -130,6 +133,10 @@ Glass reads as glass only against a dark, contrasted backdrop with a visible edg
 - **Copy-prompt bar:** mono text + one `<button>`; **1 click to clipboard** (no modal/toast to
   dismiss); icon→✓ for ~1500ms then revert. The prompt is a natural-language instruction that
   only mentions non-default choices — not a value dump (this repeats the SKILL's core prompt rule).
+- **Selection state = `aria-pressed`, not a bare class.** For non-drag toggle UI (scenario cards,
+  segmented controls, filter chips), use `<button aria-pressed="${active}">` and style via
+  `[aria-pressed="true"]` — one accessible convention across every toggle, screen-reader-legible
+  for free (the pattern ork's gold-standard exemplar uses for scenario/view/chip selection).
 - **Drag-and-drop decision surface** (full internals in `interaction-patterns`; the
   playground-critical rules):
   - **Do NOT use native HTML5 DnD** (`draggable="true"`) — it is mouse-only and inaccessible.
@@ -140,7 +147,7 @@ Glass reads as glass only against a dark, contrasted backdrop with a visible edg
   - **ARIA:** `role="button"`, `aria-roledescription="draggable card"`, and an
     `aria-live="polite"` region announcing every move ("X moved to Should").
   - Patterns: Impact×Effort 2×2 · ranked-list reorder · MoSCoW / Now-Next-Later buckets, with a
-    live RICE/WSJF score + copy-prompt.
+    live RICE/WSJF score + copy-prompt. Ready-made scaffold: the `decision-board.md` template.
 
 ---
 
@@ -184,4 +191,6 @@ The general anti-generic reasoning ("why Inter + purple-on-white reads as templa
 - [ ] If a decision surface exists: mouse **and** keyboard work, live region announces, touch ok (§5).
 - [ ] RTL: toggle `dir="rtl"` — layout + arrows mirror correctly (§6).
 - [ ] Single file, zero external deps; copy-prompt is 1-click and natural-language.
+- [ ] Any quantitative chart draws its colors from `chart-encoding.md` / the /dataviz validated
+      palette — never the persona `--pg-accent` — or fell back to a simple/ASCII mark.
 - [ ] Ran the §7 checklist; zero hits.
