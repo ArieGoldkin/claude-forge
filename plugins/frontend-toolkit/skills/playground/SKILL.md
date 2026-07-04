@@ -1,6 +1,6 @@
 ---
 name: playground
-description: "Build interactive HTML playgrounds as self-contained single-file explorers. Visual controls, live preview, and prompt copy. Templates for design, data, concept maps, document critique, diff review, code maps, and strategy briefs (roadmaps, option matrices, mermaid diagrams). Use when: creating an interactive explorer, building a visual tool, prototyping with live controls, or presenting a roadmap/strategy doc. Triggers on: playground, explorer, interactive tool, visual builder, live preview, build a playground, HTML explorer, roadmap brief, strategy brief, user story player, decision board"
+description: "Build interactive HTML playgrounds as self-contained single-file explorers. Visual controls, live preview, and prompt copy. Templates for design, data, concept maps, document critique, diff review, code maps, strategy briefs (roadmaps, option matrices, mermaid diagrams), and decision boards (drag-to-prioritize). Use when: creating an interactive explorer, building a visual tool, prototyping with live controls, or presenting a roadmap/strategy doc. Triggers on: playground, explorer, interactive tool, visual builder, live preview, build a playground, HTML explorer, roadmap brief, strategy brief, user story player, decision board"
 effort: low
 paths:
   - "**/*.html"
