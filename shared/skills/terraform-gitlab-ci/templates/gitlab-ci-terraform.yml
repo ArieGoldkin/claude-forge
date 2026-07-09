@@ -20,9 +20,9 @@ stages:
   before_script:
     # Configure AWS credentials via OIDC
     - |
-      if [ -n "$CI_JOB_JWT_V2" ]; then
+      if [ -n "$GITLAB_OIDC_TOKEN" ]; then
         export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/web_identity_token
-        echo "$CI_JOB_JWT_V2" > $AWS_WEB_IDENTITY_TOKEN_FILE
+        echo "$GITLAB_OIDC_TOKEN" > $AWS_WEB_IDENTITY_TOKEN_FILE
         export AWS_ROLE_ARN="${AWS_ROLE_ARN}"
         export AWS_ROLE_SESSION_NAME="gitlab-ci-${CI_PIPELINE_ID}"
       fi

@@ -33,7 +33,7 @@ The skill will:
 4. Run Phase 2 (Plan) — quality gates, task breakdown, test strategy
 5. Run Phase 3 (Build) — TDD implementation per task
 6. Run Phase 4 (Verify) — evidence collection, quality checks
-7. Present summary and offer to create MR
+7. Present summary and offer to open the MR via `/etk:prepare-pr`
 
 Each phase has a human checkpoint. Respond with: **yes**, **adjust**, **skip**, or **stop**.
 

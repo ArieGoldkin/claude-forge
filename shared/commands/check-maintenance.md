@@ -44,9 +44,9 @@ Status:
 ### Step 2: Check Handoff Count
 
 ```bash
-# Count handoff files
+# Count handoff files (current convention is .yaml; .md covers pre-v3.0 installs)
 HANDOFFS_DIR=".claude/continuity/handoffs"
-HANDOFF_COUNT=$(find "$HANDOFFS_DIR" -name "*.md" | wc -l)
+HANDOFF_COUNT=$(find "$HANDOFFS_DIR" -type f \( -name "*.yaml" -o -name "*.md" \) | wc -l)
 
 Status:
 - ✅ < 20 files: Healthy
@@ -190,7 +190,7 @@ None - system is healthy
 - Size: 127 KB
 - Agent decisions: 342
 - Status: 🔴 Action needed
-- Recommendation: Run /archive-shared-context quarterly
+- Recommendation: Manually prune old agent decisions from shared-context.json (no dedicated archive command exists)
 
 **Archive Status**
 - Last archive: 2025-11-20 (57 days ago)
@@ -204,7 +204,7 @@ None - system is healthy
 **Recommended Actions (Priority Order)**
 1. 🔴 /archive-ledger (reduce 813 → ~400 lines)
 2. 🔴 /archive-handoffs (reduce 47 → ~15 files)
-3. 🟡 /archive-shared-context (if >60 days since last)
+3. 🟡 Manually prune shared-context.json (no dedicated command; keep current-session fields)
 ```
 
 ## Maintenance Schedule Recommendations
@@ -214,7 +214,7 @@ None - system is healthy
 | **Weekly** | `/check-maintenance` | Every Friday |
 | **As Needed** | `/archive-ledger` | When ledger >500 lines |
 | **Monthly** | `/archive-handoffs` | When handoffs >30 files |
-| **Quarterly** | `/archive-shared-context` | When >100KB or >90 days |
+| **Quarterly** | Manual shared-context.json prune | When >100KB or >90 days |
 
 ## Integration with Other Commands
 
@@ -235,9 +235,10 @@ None - system is healthy
 - Handoff: ~2000 tokens average (only latest loaded)
 - Shared context: ~5 tokens per KB
 
-**Health thresholds** (adjustable per project):
-- Ledger: 500 lines (conservative), 800 lines (limit)
+**Health thresholds** (CANONICAL — other skill/reference files point here; change values in this block and Steps 1-4 only):
+- Ledger: 500 lines (warn), 800 lines (limit)
 - Handoffs: 20 files (warn), 40 files (limit)
 - Shared context: 50KB (warn), 100KB (limit)
+- Archive recency: 30 days (warn), 60 days (overdue)
 
 **False positives**: Large projects may naturally have higher numbers. Adjust thresholds in project CLAUDE.md if needed.

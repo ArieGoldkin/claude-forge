@@ -365,6 +365,13 @@ registerHook(
   readCacheWriterHook
 );
 
+import { readCacheInvalidatorHook } from './posttool/read-cache-invalidator.js';
+registerHook(
+  'posttool/read-cache-invalidator',
+  'Refresh the delta-cache base after Write/Edit/MultiEdit so post-edit reads are not intercepted with a stale diff',
+  readCacheInvalidatorHook
+);
+
 import { bashOutputMeasurerHook } from './posttool/bash-output-measurer.js';
 registerHook(
   'posttool/bash-output-measurer',

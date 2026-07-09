@@ -8,8 +8,8 @@ Investigate and fix a bug from a Jira ticket or free-text description.
 
 **Usage:**
 ```bash
-/fix-bug NAPP-234                    # From Jira ticket
-/fix-bug NAPP-234 --dry-run          # Investigate only, don't create MR
+/fix-bug PROJ-123                    # From Jira ticket
+/fix-bug PROJ-123 --dry-run          # Investigate only, don't create MR
 /fix-bug "checkout 500 error"        # From description (no Jira)
 ```
 
@@ -18,7 +18,7 @@ Investigate and fix a bug from a Jira ticket or free-text description.
 ## Phase 1: Parse Input
 
 Extract from `$ARGUMENTS`:
-- **Jira key** (e.g., `NAPP-234`) - if provided
+- **Jira key** (e.g., `PROJ-123`) - if provided
 - **Flags**: `--dry-run` (investigate only, no code changes)
 - **Free text** - if no Jira key, treat as bug description
 
@@ -119,7 +119,7 @@ Present findings and ask the user whether to proceed with a fix attempt.
 
 ## Phase 4: Fix the Bug
 
-1. **Create a branch**: `git checkout -b fixie/fix-<slug>` from current branch (or `dev` if in a consuming repo)
+1. **Create a branch**: `git checkout -b fix/<slug>` from the current branch (or the repo's integration branch if in a consuming repo)
 2. **Write a regression test**: Create a test that reproduces the bug (should fail before the fix, pass after)
 3. **Edit the affected files**: Make the minimum changes needed to fix the root cause identified in Phase 3
 4. **Run relevant tests**:
@@ -142,39 +142,30 @@ Present findings and ask the user whether to proceed with a fix attempt.
 
 ```bash
 git add <changed_files>
-git commit -m "fix: <summary from investigation> [NAPP-234]
+git commit -m "fix: <summary from investigation> [<ticket>]
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-### Push and Create MR
+### Create the MR — delegate to `/etk:prepare-pr`
+
+Route MR authoring + creation through **`/etk:prepare-pr`** so the bug MR carries the standardized description (Background / High-Level Design / Pitfalls) instead of an ad-hoc format. prepare-pr pushes the branch, drafts the body to a file (with a HIPAA redaction pass), opens the MR on the detected VCS (`gh` or `glab`), and hands off to `/review-mr`:
 
 ```bash
-git push -u origin fixie/fix-<slug>
-
-glab mr create \
-  --title "fix: <summary>" \
-  --description "$(cat <<'EOF'
-## Summary
-<Root cause from investigation>
-
-## Changes
-<List of changes made>
-
-## Test Plan
-- [ ] Existing tests pass
-- [ ] <Specific test scenarios for this bug>
-
-## Jira
-Fixes NAPP-234
-
----
-Created with `/fix-bug` via Claude Code
-EOF
-)" \
-  --target-branch dev \
-  --label fixie
+/etk:prepare-pr --closes <ticket>
 ```
+
+(Add `--target <branch>` and `--label <name>` if the project uses a fixed integration branch or a bug label.)
+
+Give prepare-pr the Phase-3 investigation context so it fills the sections from the bug:
+- **Background** — *need*: the bug's user/system impact; *how it worked before*: the buggy behavior; *how it should work now*: the fixed behavior (root cause from Phase 3); *related flows*: what the bug touched.
+- **High-Level Design** — the changed files by area + a sequence of the corrected flow.
+- **Pitfalls & Regressions** — the regression test written in Phase 4 + the edge cases it guards.
+
+Notes:
+- The **Commit** step above already ran, so prepare-pr finds a clean tree and goes straight to push → create.
+- The Phase-4 tests already ran, so pass that context to prepare-pr's Step-1 gate; it treats that as partial evidence and **runs the lint/typecheck** that Phase 4 didn't cover (Phase 4 runs tests only, not a full `/etk:verify`).
+- Do **not** also hand-write the MR-create command; prepare-pr owns the description contract now.
 
 ### Update Jira (if ticket provided)
 
@@ -196,8 +187,8 @@ Present a summary to the user:
 ```markdown
 ## Fix Applied: [Bug Summary]
 
-**Jira**: NAPP-234
-**Branch**: fixie/fix-<slug>
+**Jira**: PROJ-123
+**Branch**: fix/<slug>
 **MR**: !<mr_number>
 
 **Root cause**: [explanation]
@@ -224,7 +215,7 @@ Present a summary to the user:
 | `mcp__atlassian__getJiraIssue` | Read bug ticket details |
 | `mcp__atlassian__addCommentToJiraIssue` | Post fix comment to ticket |
 | `mcp__atlassian__transitionJiraIssue` | Move ticket to In Progress |
-| `glab mr create` | Create GitLab merge request |
+| `/etk:prepare-pr` | Author the standardized MR description + open the MR (Phase 5) |
 | `glab mr view` | View MR details |
 | Glob, Grep, Read | Search and read codebase |
 | Edit, Write | Apply code fixes |
@@ -234,6 +225,6 @@ Present a summary to the user:
 
 | Command | When to use |
 |---------|-------------|
-| `/fix-bug NAPP-234` | Investigate and fix a bug (this command) |
+| `/fix-bug PROJ-123` | Investigate and fix a bug (this command) |
 | `/review-mr 567` | Review the MR created by fix-bug |
 | `/etk:atlassian-integration` | Direct Jira/Confluence interaction |

@@ -40,6 +40,7 @@ import {
   computeContentHash,
   computeDelta,
   readEntry,
+  snapshotFileToCache,
 } from '../lib/read-cache/index.js';
 import type { HookInput, HookResult } from '../types.js';
 
@@ -136,6 +137,15 @@ export async function readCacheHook(input: HookInput): Promise<HookResult> {
   } catch (e) {
     logDebug(HOOK_NAME, `measurement record failed: ${e}`);
   }
+
+  // Advance the cache base to the current content before denying. Because the
+  // deny substitutes a diff for the Read, the Read never executes — so it can't
+  // satisfy the harness read-before-edit gate. By advancing the base here, the
+  // *next* Read of this path hash-matches and proceeds as a full read, which
+  // both satisfies the gate and self-heals out-of-band changes (e.g. a git
+  // branch switch) that this hook can't otherwise observe. Best-effort: this
+  // re-reads the file (already warm in the OS page cache) and never throws.
+  await snapshotFileToCache(sessionId, absPath);
 
   const message = [
     `[delta-cache] File ${absPath} was previously read this session.`,

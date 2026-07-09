@@ -23,7 +23,7 @@ This command is the **session boundary** where cleanup happens:
 - Before a long break
 - When context is getting full
 - **When `/save-state` warns about ledger >500 lines**
-- **When dirty_tracking shows ≥20 file edits (auto-suggested)**
+- **When dirty_tracking shows ≥25 file edits (the auto-suggest threshold; canonical values in the `dirty-state-tracker` hook)**
 
 ## What This Command Does
 

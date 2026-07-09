@@ -19,20 +19,13 @@
  * @module posttool/read-cache-writer
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { recordReadEvent } from '../lib/bash-compress/index.js';
 import { guardTool, runGuards } from '../lib/guards.js';
 import { getFilePath, getSessionId } from '../lib/input.js';
 import { logDebug, logWarn } from '../lib/logging.js';
 import { outputSilentSuccess } from '../lib/output.js';
-import {
-  type CachedRead,
-  computeContentHash,
-  ensureSessionDir,
-  readEntry,
-  writeEntry,
-} from '../lib/read-cache/index.js';
+import { readEntry, snapshotFileToCache } from '../lib/read-cache/index.js';
 import type { HookInput, HookResult } from '../types.js';
 
 const HOOK_NAME = 'read-cache-writer';
@@ -55,59 +48,35 @@ export async function readCacheWriterHook(input: HookInput): Promise<HookResult>
     }
 
     const absPath = path.resolve(filePath);
-    if (!fs.existsSync(absPath)) {
-      logDebug(HOOK_NAME, `file no longer exists: ${absPath}`);
-      return outputSilentSuccess();
-    }
 
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(absPath);
-    } catch (e) {
-      logDebug(HOOK_NAME, `stat failed: ${e}`);
-      return outputSilentSuccess();
-    }
-    if (!stat.isFile()) {
-      return outputSilentSuccess();
-    }
-
-    let content: string;
-    try {
-      content = fs.readFileSync(absPath, 'utf8');
-    } catch (e) {
-      logWarn(HOOK_NAME, `read failed for ${absPath}: ${e}`);
-      return outputSilentSuccess();
-    }
-
-    const entry: CachedRead = {
-      absPath,
-      contentHash: computeContentHash(content),
-      size: stat.size,
-      mtimeMs: stat.mtimeMs,
-      cachedContent: content,
-      recordedAt: new Date().toISOString(),
-      schemaVersion: 1,
-    };
-
-    // Spike A measurement: record cache miss (first read this session) for
-    // the baseline so the analyzer can compute hit rate as hits/(hits+misses).
-    // Probe the cache before we write to determine whether this was a miss.
+    // Spike A measurement: record cache miss (first read this session) for the
+    // baseline so the analyzer can compute hit rate as hits/(hits+misses).
+    // Probe the cache before we snapshot to determine whether this was a miss.
+    let wasMiss = false;
     try {
       const prior = await readEntry(sessionId, absPath);
-      if (!prior) {
-        recordReadEvent(sessionId, absPath, 'cache_miss', stat.size);
-      }
+      wasMiss = !prior;
     } catch (e) {
-      logDebug(HOOK_NAME, `measurement record failed: ${e}`);
+      logDebug(HOOK_NAME, `measurement probe failed: ${e}`);
     }
 
-    try {
-      ensureSessionDir(sessionId);
-      await writeEntry(sessionId, entry);
-      logDebug(HOOK_NAME, `cached read of ${absPath} (${stat.size} bytes)`);
-    } catch (e) {
-      logWarn(HOOK_NAME, `cache write failed for ${absPath}: ${e}`);
+    // Persist the file's current bytes as the new cache base. snapshotFileToCache
+    // is best-effort and never throws; null means the path wasn't a regular file
+    // or an I/O step failed, in which case there is nothing to measure either.
+    const size = await snapshotFileToCache(sessionId, absPath);
+    if (size === null) {
+      logDebug(HOOK_NAME, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
+      return outputSilentSuccess();
     }
+
+    if (wasMiss) {
+      try {
+        recordReadEvent(sessionId, absPath, 'cache_miss', size);
+      } catch (e) {
+        logDebug(HOOK_NAME, `measurement record failed: ${e}`);
+      }
+    }
+    logDebug(HOOK_NAME, `cached read of ${absPath} (${size} bytes)`);
 
     return outputSilentSuccess();
   } catch (e) {

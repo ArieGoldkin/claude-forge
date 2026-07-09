@@ -23,6 +23,7 @@ export {
   getSessionDir,
   getSessionSizeBytes,
   readEntry,
+  snapshotFileToCache,
   writeEntry,
 } from './cache-store.js';
 export { computeDelta, MAX_DELTA_CHARS, MAX_DELTA_LINES } from './unified-diff.js';

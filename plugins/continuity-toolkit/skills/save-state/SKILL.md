@@ -21,8 +21,7 @@ Update the project state ledger with current context using the append-until-hand
 - Appends new Key Decisions (never removes existing ones)
 - Replaces snapshot sections: Current State, Done (Recent), Next, Open Questions
 - Updates ledger timestamp and writes to `.claude/continuity/ledgers/`
-- Warns if ledger exceeds 500 lines (suggests `/create-handoff`)
-- Alerts urgently if ledger exceeds 800 lines
+- Warns when the ledger crosses the canonical health thresholds (warn / urgent — defined in the /check-maintenance command) and suggests `/create-handoff`
 
 ## Related
 - See `/continuity-management` for full system documentation

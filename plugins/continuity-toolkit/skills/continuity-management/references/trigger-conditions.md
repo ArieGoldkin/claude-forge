@@ -4,6 +4,8 @@ Claude monitors session state and suggests commands at critical moments.
 
 ## Trigger Conditions
 
+> Numeric thresholds below mirror the canonical set in the /check-maintenance command (Notes → Health thresholds) — when changing a value, update the canonical block first, then this file.
+
 **`/save-state` triggers:**
 - 5+ tasks completed since last save (requires TodoWrite tracking)
 - Architectural decision recorded in shared-context.json

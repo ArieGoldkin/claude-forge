@@ -147,6 +147,7 @@ export {
   ensureSessionDir,
   readEntry,
   writeEntry,
+  snapshotFileToCache,
   evictOldSessions,
   getSessionSizeBytes,
   MAX_DELTA_LINES,

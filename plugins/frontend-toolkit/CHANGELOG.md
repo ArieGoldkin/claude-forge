@@ -2,6 +2,12 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.10] - 2026-07-09 — prune dead session-loader.ts (cross-fork adoption)
+
+### Removed
+
+- Deleted `hooks/src/lifecycle/session-loader.ts` — dead, drifted code from before the shared-hook consolidation (not wired in `hooks.json`, not registered in `index.ts`, not imported; no dist artifact). No runtime effect; session loading is ctk-owned via the shared hook.
+
 ## [2.3.9] - 2026-07-04 — playground description accuracy
 
 Resolves the one `/etk:audit-skill` finding carried from 2.3.8: the `playground` skill `description` enumerated its templates but omitted the `decision-board` template added in 2.3.8. Added "decision boards (drag-to-prioritize)" to the enumeration so the model-invoked description matches the shipped template set (the "decision board" trigger keyword already covered discovery; this is an accuracy fix). Description-only; no `dist` rebuild.

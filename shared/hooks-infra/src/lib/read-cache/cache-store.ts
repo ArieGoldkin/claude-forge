@@ -29,7 +29,28 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { acquireLock, releaseLock } from '../lock.js';
 import { logWarn } from '../logging.js';
+import { CREDENTIAL_PATTERNS, ENV_PATTERNS, SSH_PATTERNS } from '../path-utils.js';
 import type { CachedRead } from './types.js';
+
+/**
+ * Secret-bearing file patterns whose *content* must never be persisted to the
+ * on-disk cache. Reuses the security layer's env/ssh/credential definitions
+ * (filename-based, so they match anywhere — unlike the system-dir patterns,
+ * which would also flag harmless temp files under `/var`). Defense-in-depth:
+ * the security-blocker already denies Write/Edit to most of these at
+ * PreToolUse, but the cache is the one place that copies full file bodies to
+ * `~/.claude/cache`, so it filters independently.
+ */
+const SECRET_BEARING_PATTERNS: readonly RegExp[] = [
+  ...ENV_PATTERNS,
+  ...SSH_PATTERNS,
+  ...CREDENTIAL_PATTERNS,
+];
+
+/** True if the path looks like a secret-bearing file (env / ssh key / credential). */
+function isSecretBearingPath(absPath: string): boolean {
+  return SECRET_BEARING_PATTERNS.some((pattern) => pattern.test(absPath));
+}
 
 /** Default eviction threshold for old session directories: 48 hours. */
 const DEFAULT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
@@ -222,6 +243,74 @@ export async function writeEntry(sessionId: string, entry: CachedRead): Promise<
   } finally {
     releaseLock(lockPath);
   }
+}
+
+/**
+ * Snapshot a file's current on-disk content into the per-session cache.
+ *
+ * Stats the file, reads its bytes, and appends a fresh {@link CachedRead}
+ * entry whose hash/size/content reflect the file *as it exists right now*.
+ * Because the store is most-recent-wins, this becomes the new base that a
+ * subsequent `Read` diffs against.
+ *
+ * Shared by two callers:
+ * - the PostToolUse `Read` writer — records the file after Claude reads it;
+ * - the PostToolUse `Write|Edit|MultiEdit` invalidator — refreshes the base
+ *   after a mutation so the next `Read` hash-matches and proceeds as a full
+ *   read instead of being intercepted with a diff against a now-stale base
+ *   (the cause of the post-edit Read/Edit deadlock).
+ *
+ * Best-effort: returns the byte size persisted on success, or `null` if the
+ * path is not a regular file, looks secret-bearing (see
+ * {@link isSecretBearingPath}), or any stat/read/write step fails. Never
+ * throws — a failed cache refresh must not break the user's tool call.
+ */
+export async function snapshotFileToCache(
+  sessionId: string,
+  absPath: string
+): Promise<number | null> {
+  // Defense-in-depth: never copy a secret-bearing file's body into the cache,
+  // regardless of which tool triggered the snapshot (read writer, edit
+  // invalidator, or pretool advance-on-serve).
+  if (isSecretBearingPath(absPath)) {
+    return null;
+  }
+
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(absPath);
+  } catch {
+    return null;
+  }
+  if (!stat.isFile()) {
+    return null;
+  }
+
+  let content: string;
+  try {
+    content = fs.readFileSync(absPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const entry: CachedRead = {
+    absPath,
+    contentHash: computeContentHash(content),
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    cachedContent: content,
+    recordedAt: new Date().toISOString(),
+    schemaVersion: 1,
+  };
+
+  try {
+    ensureSessionDir(sessionId);
+    await writeEntry(sessionId, entry);
+  } catch {
+    return null;
+  }
+
+  return stat.size;
 }
 
 /** Best-effort recursive size calculation for a directory tree. */

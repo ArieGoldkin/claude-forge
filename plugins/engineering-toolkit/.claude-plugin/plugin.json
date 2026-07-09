@@ -1,7 +1,7 @@
 {
   "name": "etk",
-  "version": "2.8.3",
-  "description": "Engineering practices toolkit - 25 skills, 4 agents, 20 commands for quality, architecture, testing, autonomous experimentation, auto-research, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
+  "version": "2.9.0",
+  "description": "Engineering practices toolkit - 26 skills, 4 agents, 20 commands for quality, architecture, testing, autonomous experimentation, auto-research, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
   "author": {
     "name": "Arie Goldkin",
     "email": "ariegoldkin88@gmail.com"
@@ -9,7 +9,9 @@
   "homepage": "https://github.com/ArieGoldkin/claude-forge/blob/main/plugins/engineering-toolkit/README.md",
   "repository": "https://github.com/ArieGoldkin/claude-forge",
   "license": "MIT",
-  "dependencies": ["ctk"],
+  "dependencies": [
+    "ctk"
+  ],
   "keywords": [
     "engineering",
     "quality",

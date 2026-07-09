@@ -2,6 +2,26 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.7.0] - 2026-07-09 — read-cache Read/Edit deadlock fix + secret-skip (cross-fork adoption) + continuity-maintenance doc fixes
+
+Cross-fork adoption from the internal toolkit fork. Adds the delta-cache invalidator (27th shared hook) + advance-on-serve, and fixes several continuity-maintenance doc bugs the fork's skill-audit sweep surfaced. Hook source changed → tracked `dist/` rebuilt.
+
+### Added
+
+- **`posttool/read-cache-invalidator` shared hook** (27th) — refreshes the per-session delta-cache base after every `Write|Edit|MultiEdit` so a subsequent `Read` of the just-edited file hash-matches and is not intercepted with a stale diff. Wired into ctk's `PostToolUse(Write|Edit|MultiEdit)` group.
+- Shared **`snapshotFileToCache()`** helper — one choke point for "snapshot file → cache", reused by the read writer, the new edit invalidator, and pretool advance-on-serve. Unit tests + a full deadlock reproduction/self-heal suite (`read-cache-deadlock.test.ts`).
+
+### Fixed
+
+- **Read/Edit deadlock**: the cache writer fired on `Read` only, so `Write/Edit/MultiEdit` never refreshed the cached bytes; a re-Read of a just-edited file saw `cached != disk`, was intercepted with a diff, and **denied** — and a denied Read can't satisfy the harness read-before-edit gate. Two fixes: the new PostToolUse invalidator refreshes the base post-edit, and the pretool hook now **advances the base whenever it serves a diff** so out-of-band changes (e.g. a git branch switch) self-heal on the second Read.
+- **`check-maintenance` false-healthy bug**: the handoff-count check globbed `*.md`, but handoffs are `*.yaml` since the v3.0 format — the 20/40 warning could never fire. Now counts both `*.yaml` and legacy `*.md`.
+- **`check-maintenance` dead route**: recommended `/archive-shared-context` (no such command) in 3 places → replaced with the real remediation (manual shared-context.json prune).
+- **Dirty-tracking threshold drift**: docs said auto-suggest fires at 20 edits; the `dirty-state-tracker` hook's real thresholds are **15 (warn) / 25 (auto-suggest)**. Doc references corrected and the hook named as canonical. Also single-sourced the numeric health thresholds into the `/check-maintenance` command (other files point at it) and fixed one stale `handoff-<date>.md` naming reference.
+
+### Security
+
+- **Delta-cache never persists secret-bearing file content** (`snapshotFileToCache`): skips files matching the security layer's env/ssh/credential patterns (`.env*`, `.ssh/id_*`, `secrets.y(a)ml`, `credentials.json`, `.npmrc`, `.netrc`, …) before writing to `~/.claude/cache`. Filters in the one shared choke point, covering the read writer, the edit invalidator, and pretool advance-on-serve.
+
 ## [2.6.11] - 2026-06-25 — rebrand to Claude Forge
 
 Suite renamed `claude-dev-kit` → **Claude Forge**. Updated repository/homepage URLs and the `session-loader` window-title example; dist rebuilt. No behavior change beyond the rename. Re-add the marketplace and reinstall as `ctk@claude-forge`.

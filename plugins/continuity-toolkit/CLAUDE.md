@@ -1,7 +1,7 @@
 # Continuity Toolkit - Claude Code Plugin
 
 > **Plugin Name**: ctk (formerly `continuity-toolkit`, renamed in v2.0.0)
-> **Version**: 2.6.11
+> **Version**: 2.7.0
 > **Last Updated**: 2026-06-24
 
 ## Overview
@@ -51,7 +51,7 @@ Session continuity and context management toolkit for Claude Code. Provides mult
 | `/setup-context-monitor` | Configure StatusLine context monitor |
 | `/web-research` | Research external websites for documentation, competitive intelligence, or market data |
 
-## Hooks (26 - includes all shared hooks)
+## Hooks (27 - includes all shared hooks)
 
 This plugin owns all shared hooks from `shared/hooks-infra/`. Other plugins have been stripped to only their plugin-specific hooks to prevent duplication.
 

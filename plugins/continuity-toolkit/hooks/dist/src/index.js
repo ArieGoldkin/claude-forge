@@ -1,4 +1,4 @@
-import * as fs5 from 'fs';
+import * as fs6 from 'fs';
 import { readSync, readFileSync, writeFileSync } from 'fs';
 import * as path2 from 'path';
 import { join } from 'path';
@@ -518,8 +518,8 @@ function ensureLogDir() {
   }
   try {
     const logDir = resolveLogDir();
-    if (!fs5.existsSync(logDir)) {
-      fs5.mkdirSync(logDir, { recursive: true });
+    if (!fs6.existsSync(logDir)) {
+      fs6.mkdirSync(logDir, { recursive: true });
     }
     logDirCreated = true;
   } catch {
@@ -527,7 +527,7 @@ function ensureLogDir() {
 }
 function getFileSize(filePath) {
   try {
-    const stats = fs5.statSync(filePath);
+    const stats = fs6.statSync(filePath);
     return stats.size;
   } catch {
     return 0;
@@ -539,7 +539,7 @@ function rotateLog(logFile, maxSize) {
     if (size > maxSize) {
       const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const rotatedFile = `${logFile}.old.${timestamp}`;
-      fs5.renameSync(logFile, rotatedFile);
+      fs6.renameSync(logFile, rotatedFile);
     }
   } catch {
   }
@@ -549,7 +549,7 @@ function getTimestamp() {
 }
 function writeLogLine(logFile, line) {
   try {
-    fs5.appendFileSync(logFile, `${line}
+    fs6.appendFileSync(logFile, `${line}
 `, { encoding: "utf8" });
   } catch {
   }
@@ -678,9 +678,9 @@ var CONTINUITY_DIRS = {
   context: ".claude/context"
 };
 function ensureDirectory(dirPath) {
-  if (!fs5.existsSync(dirPath)) {
+  if (!fs6.existsSync(dirPath)) {
     try {
-      fs5.mkdirSync(dirPath, { recursive: true });
+      fs6.mkdirSync(dirPath, { recursive: true });
       return true;
     } catch {
       return false;
@@ -742,7 +742,7 @@ function createDefaultSharedContext(projectDir, projectName) {
       was_cleanly_ended: true
     }
   };
-  fs5.writeFileSync(contextFile, `${JSON.stringify(defaultContext, null, 2)}
+  fs6.writeFileSync(contextFile, `${JSON.stringify(defaultContext, null, 2)}
 `);
 }
 function createDefaultLedger(ledgerPath, projectName) {
@@ -797,12 +797,12 @@ _None_
 *Created: ${timestamp}*
 *Updated: ${timestamp}*
 `;
-  fs5.writeFileSync(ledgerPath, ledgerContent);
+  fs6.writeFileSync(ledgerPath, ledgerContent);
 }
 function createContinuityDirectories(projectDir) {
   let createdAny = false;
   const claudeDir = path2.join(projectDir, ".claude");
-  if (!fs5.existsSync(claudeDir)) {
+  if (!fs6.existsSync(claudeDir)) {
     if (!ensureDirectory(claudeDir)) {
       throw new Error("Failed to create .claude directory");
     }
@@ -818,7 +818,7 @@ function createContinuityDirectories(projectDir) {
   ];
   for (const dir of directories) {
     const dirPath = path2.join(projectDir, dir);
-    if (!fs5.existsSync(dirPath)) {
+    if (!fs6.existsSync(dirPath)) {
       if (!ensureDirectory(dirPath)) {
         throw new Error(`Failed to create directory: ${dir}`);
       }
@@ -836,9 +836,9 @@ function createGitkeepFiles(projectDir) {
   ];
   for (const dir of gitkeepDirs) {
     const gitkeepPath = path2.join(projectDir, dir, ".gitkeep");
-    if (!fs5.existsSync(gitkeepPath)) {
+    if (!fs6.existsSync(gitkeepPath)) {
       try {
-        fs5.writeFileSync(gitkeepPath, "");
+        fs6.writeFileSync(gitkeepPath, "");
       } catch {
       }
     }
@@ -847,10 +847,10 @@ function createGitkeepFiles(projectDir) {
 function createLedgerIfNeeded(projectDir, projectName) {
   const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
   const defaultLedger = path2.join(ledgersDir, `CONTINUITY_${projectName}.md`);
-  if (fs5.existsSync(defaultLedger)) {
+  if (fs6.existsSync(defaultLedger)) {
     return false;
   }
-  const files = fs5.readdirSync(ledgersDir);
+  const files = fs6.readdirSync(ledgersDir);
   const hasLedger = files.some((f) => f.endsWith(".md") && f !== ".gitkeep");
   if (!hasLedger) {
     createDefaultLedger(defaultLedger, projectName);
@@ -867,7 +867,7 @@ function ensureContinuityStructure(projectDir) {
     }
     createGitkeepFiles(projectDir);
     const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-    if (!fs5.existsSync(contextFile)) {
+    if (!fs6.existsSync(contextFile)) {
       createDefaultSharedContext(projectDir, projectName);
       createdAny = true;
     }
@@ -881,11 +881,11 @@ function ensureContinuityStructure(projectDir) {
 }
 function getCurrentLedgerPath(projectDir) {
   const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
-  if (!fs5.existsSync(ledgersDir)) {
+  if (!fs6.existsSync(ledgersDir)) {
     return null;
   }
   try {
-    const files = fs5.readdirSync(ledgersDir);
+    const files = fs6.readdirSync(ledgersDir);
     const ledgerFile = files.find((f) => f.endsWith(".md") && f !== ".gitkeep");
     if (ledgerFile) {
       return path2.join(ledgersDir, ledgerFile);
@@ -1131,7 +1131,7 @@ function formatHandoffSummary(handoff) {
 }
 var LOCK_RETRY_DELAY_MS = 100;
 function sleep(ms) {
-  return new Promise((resolve6) => setTimeout(resolve6, ms));
+  return new Promise((resolve7) => setTimeout(resolve7, ms));
 }
 function isPidAlive(pid) {
   try {
@@ -1143,11 +1143,11 @@ function isPidAlive(pid) {
 }
 function removeStaleLock(lockPath, expectedMtimeMs) {
   try {
-    const stat = fs5.statSync(lockPath);
+    const stat = fs6.statSync(lockPath);
     if (stat.mtimeMs !== expectedMtimeMs) {
       return false;
     }
-    fs5.rmSync(lockPath, { recursive: true, force: true });
+    fs6.rmSync(lockPath, { recursive: true, force: true });
     return true;
   } catch {
     return true;
@@ -1156,7 +1156,7 @@ function removeStaleLock(lockPath, expectedMtimeMs) {
 function clearStaleLockIfNeeded(lockPath, maxAge) {
   let stat;
   try {
-    stat = fs5.statSync(lockPath);
+    stat = fs6.statSync(lockPath);
   } catch {
     return true;
   }
@@ -1166,7 +1166,7 @@ function clearStaleLockIfNeeded(lockPath, maxAge) {
   }
   let pid = null;
   try {
-    const pidStr = fs5.readFileSync(path2.join(lockPath, "pid"), "utf-8").trim();
+    const pidStr = fs6.readFileSync(path2.join(lockPath, "pid"), "utf-8").trim();
     const parsed = Number.parseInt(pidStr, 10);
     if (!Number.isNaN(parsed) && parsed > 0) {
       pid = parsed;
@@ -1181,7 +1181,7 @@ function clearStaleLockIfNeeded(lockPath, maxAge) {
 async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      fs5.mkdirSync(lockPath);
+      fs6.mkdirSync(lockPath);
     } catch {
       if (clearStaleLockIfNeeded(lockPath, maxAge)) {
         continue;
@@ -1190,12 +1190,12 @@ async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
       continue;
     }
     try {
-      fs5.writeFileSync(path2.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
+      fs6.writeFileSync(path2.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
       return true;
     } catch (err) {
       if (err.code !== "ENOENT") {
         try {
-          fs5.rmSync(lockPath, { recursive: true, force: true });
+          fs6.rmSync(lockPath, { recursive: true, force: true });
         } catch {
         }
       }
@@ -1206,9 +1206,172 @@ async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
 }
 function releaseLock(lockPath) {
   try {
-    fs5.rmSync(lockPath, { recursive: true, force: true });
+    fs6.rmSync(lockPath, { recursive: true, force: true });
   } catch {
   }
+}
+var ENV_PATTERNS = [
+  /\.env$/,
+  /\.env\..*$/,
+  /\.envrc$/,
+  /\.env_/,
+  /\.env-/
+];
+var GIT_PATTERNS = [
+  /^\.git\//,
+  /^\.git$/,
+  /\/\.git\//,
+  /\/\.git$/,
+  /\.gitconfig$/
+];
+var SSH_PATTERNS = [
+  /\.ssh\/id_/,
+  /\.ssh\/.*\.pem$/,
+  /\.ssh\/.*_rsa$/,
+  /\.ssh\/.*_dsa$/,
+  /\.ssh\/.*_ed25519$/,
+  /\.ssh\/.*_ecdsa$/,
+  /\.ssh\/known_hosts$/,
+  /\.ssh\/authorized_keys$/
+];
+var CREDENTIAL_PATTERNS = [
+  /\.aws\/credentials$/,
+  /\.npmrc$/,
+  /\.pypirc$/,
+  /secrets\.ya?ml$/,
+  /credentials\.json$/,
+  /\.netrc$/,
+  /\.pgpass$/,
+  /\.kube\/config$/,
+  /\.docker\/config\.json$/
+];
+var SYSTEM_DIR_PATTERNS = [
+  /^\/etc\//,
+  /^\/usr\//,
+  /^\/var\//,
+  /^\/sys\//,
+  /^\/proc\//,
+  /^\/boot\//,
+  /^\/root\//,
+  // macOS specific — CC v2.1.113 expanded dangerous-removal targets
+  /^\/private\/etc\//,
+  /^\/private\/var\//,
+  /^\/private\/tmp\//,
+  /^\/private\/home\//
+];
+[
+  ...ENV_PATTERNS,
+  ...GIT_PATTERNS,
+  ...SSH_PATTERNS,
+  ...CREDENTIAL_PATTERNS,
+  ...SYSTEM_DIR_PATTERNS
+];
+function resolveRealPath(inputPath) {
+  const absolutePath = path2.isAbsolute(inputPath) ? inputPath : path2.resolve(getProjectDir2(), inputPath);
+  try {
+    return fs6.realpathSync(absolutePath);
+  } catch {
+    return resolveClosestAncestor(absolutePath);
+  }
+}
+function resolveClosestAncestor(absolutePath) {
+  const components = [];
+  let currentPath = absolutePath;
+  while (currentPath !== path2.dirname(currentPath)) {
+    try {
+      const resolved = fs6.realpathSync(currentPath);
+      return components.length > 0 ? path2.join(resolved, ...components.reverse()) : resolved;
+    } catch {
+      components.push(path2.basename(currentPath));
+      currentPath = path2.dirname(currentPath);
+    }
+  }
+  return path2.resolve(absolutePath);
+}
+function normalizePath(inputPath) {
+  if (!inputPath) {
+    return ".";
+  }
+  let normalized = path2.normalize(inputPath);
+  if (normalized.startsWith("./")) {
+    normalized = normalized.slice(2);
+  }
+  if (!normalized) {
+    return ".";
+  }
+  return normalized;
+}
+function getProjectDir2() {
+  return process.env["CLAUDE_PROJECT_DIR"] || process.cwd();
+}
+function isWithinProject(inputPath, projectDir) {
+  const projectRoot = getProjectDir2();
+  const resolvedPath = resolveRealPath(inputPath);
+  const resolvedProjectRoot = resolveRealPath(projectRoot);
+  const projectRootWithSep = resolvedProjectRoot.endsWith(path2.sep) ? resolvedProjectRoot : resolvedProjectRoot + path2.sep;
+  return resolvedPath === resolvedProjectRoot || resolvedPath.startsWith(projectRootWithSep);
+}
+var PATTERN_CHECKS = [
+  {
+    patterns: ENV_PATTERNS,
+    category: "env",
+    reason: "Environment files contain sensitive credentials"
+  },
+  {
+    patterns: GIT_PATTERNS,
+    category: "git",
+    reason: "Git internals should be modified using git commands"
+  },
+  {
+    patterns: SSH_PATTERNS,
+    category: "ssh",
+    reason: "SSH keys and certificates must be managed manually"
+  },
+  {
+    patterns: CREDENTIAL_PATTERNS,
+    category: "credential",
+    reason: "Credential files must be managed manually or via secrets manager"
+  },
+  {
+    patterns: SYSTEM_DIR_PATTERNS,
+    category: "system",
+    reason: "System directories require elevated privileges and manual authorization"
+  }
+];
+function matchesPatternConfig(pathsToCheck, config) {
+  for (const checkPath of pathsToCheck) {
+    for (const pattern of config.patterns) {
+      if (pattern.test(checkPath)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function isProtectedPath(inputPath) {
+  const normalized = normalizePath(inputPath);
+  const resolved = resolveRealPath(inputPath);
+  const pathsToCheck = [normalized, resolved];
+  for (const config of PATTERN_CHECKS) {
+    if (matchesPatternConfig(pathsToCheck, config)) {
+      return {
+        isProtected: true,
+        category: config.category,
+        reason: config.reason
+      };
+    }
+  }
+  return { isProtected: false };
+}
+
+// src/lib/read-cache/cache-store.ts
+var SECRET_BEARING_PATTERNS = [
+  ...ENV_PATTERNS,
+  ...SSH_PATTERNS,
+  ...CREDENTIAL_PATTERNS
+];
+function isSecretBearingPath(absPath) {
+  return SECRET_BEARING_PATTERNS.some((pattern) => pattern.test(absPath));
 }
 var DEFAULT_MAX_AGE_MS = 48 * 60 * 60 * 1e3;
 function getCacheRoot() {
@@ -1232,12 +1395,12 @@ function getReadsPath(sessionId) {
 }
 function ensureSessionDir(sessionId) {
   const dir = getSessionDir(sessionId);
-  if (!fs5.existsSync(dir)) {
-    fs5.mkdirSync(dir, { recursive: true, mode: 448 });
+  if (!fs6.existsSync(dir)) {
+    fs6.mkdirSync(dir, { recursive: true, mode: 448 });
     return;
   }
   try {
-    fs5.chmodSync(dir, 448);
+    fs6.chmodSync(dir, 448);
   } catch {
   }
 }
@@ -1261,12 +1424,12 @@ function parseEntryLine(line) {
 }
 async function readEntry(sessionId, absPath) {
   const readsPath = getReadsPath(sessionId);
-  if (!fs5.existsSync(readsPath)) {
+  if (!fs6.existsSync(readsPath)) {
     return null;
   }
   let raw;
   try {
-    raw = fs5.readFileSync(readsPath, "utf8");
+    raw = fs6.readFileSync(readsPath, "utf8");
   } catch {
     return null;
   }
@@ -1307,16 +1470,52 @@ async function writeEntry(sessionId, entry) {
   try {
     const line = `${JSON.stringify(entry)}
 `;
-    fs5.appendFileSync(readsPath, line, { encoding: "utf8", mode: 384 });
+    fs6.appendFileSync(readsPath, line, { encoding: "utf8", mode: 384 });
   } finally {
     releaseLock(lockPath);
   }
+}
+async function snapshotFileToCache(sessionId, absPath) {
+  if (isSecretBearingPath(absPath)) {
+    return null;
+  }
+  let stat;
+  try {
+    stat = fs6.statSync(absPath);
+  } catch {
+    return null;
+  }
+  if (!stat.isFile()) {
+    return null;
+  }
+  let content;
+  try {
+    content = fs6.readFileSync(absPath, "utf8");
+  } catch {
+    return null;
+  }
+  const entry = {
+    absPath,
+    contentHash: computeContentHash(content),
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    cachedContent: content,
+    recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    schemaVersion: 1
+  };
+  try {
+    ensureSessionDir(sessionId);
+    await writeEntry(sessionId, entry);
+  } catch {
+    return null;
+  }
+  return stat.size;
 }
 function dirSizeBytes(dir) {
   let total = 0;
   let entries;
   try {
-    entries = fs5.readdirSync(dir, { withFileTypes: true });
+    entries = fs6.readdirSync(dir, { withFileTypes: true });
   } catch {
     return 0;
   }
@@ -1326,7 +1525,7 @@ function dirSizeBytes(dir) {
       if (entry.isDirectory()) {
         total += dirSizeBytes(full);
       } else if (entry.isFile()) {
-        total += fs5.statSync(full).size;
+        total += fs6.statSync(full).size;
       }
     } catch {
     }
@@ -1335,7 +1534,7 @@ function dirSizeBytes(dir) {
 }
 async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
   const root = getCacheRoot();
-  if (!fs5.existsSync(root)) {
+  if (!fs6.existsSync(root)) {
     return { evictedCount: 0, freedBytes: 0 };
   }
   const currentSessionId = currentSessionIdFromEnv();
@@ -1345,7 +1544,7 @@ async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
   let freedBytes = 0;
   let entries;
   try {
-    entries = fs5.readdirSync(root, { withFileTypes: true });
+    entries = fs6.readdirSync(root, { withFileTypes: true });
   } catch {
     return { evictedCount, freedBytes };
   }
@@ -1355,14 +1554,14 @@ async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
     const sessionDir = path2.join(root, entry.name);
     let mtimeMs;
     try {
-      mtimeMs = fs5.statSync(sessionDir).mtimeMs;
+      mtimeMs = fs6.statSync(sessionDir).mtimeMs;
     } catch {
       continue;
     }
     if (now - mtimeMs <= maxAgeMs) continue;
     const sizeBefore = dirSizeBytes(sessionDir);
     try {
-      fs5.rmSync(sessionDir, { recursive: true, force: true });
+      fs6.rmSync(sessionDir, { recursive: true, force: true });
       evictedCount++;
       freedBytes += sizeBefore;
     } catch {
@@ -1523,11 +1722,11 @@ function buildWindowTitleSequence(segments) {
 // src/lifecycle/session-loader.ts
 var HOOK_NAME2 = "session-start";
 function checkStaleSession(contextFile) {
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     return null;
   }
   try {
-    const content = fs5.readFileSync(contextFile, "utf8");
+    const content = fs6.readFileSync(contextFile, "utf8");
     const context = JSON.parse(content);
     const wasClean = context.session_heartbeat?.was_cleanly_ended ?? true;
     if (wasClean === false) {
@@ -1550,7 +1749,7 @@ function formatStaleWarning(staleInfo) {
   return warning;
 }
 async function initializeSession(contextFile, lockDir) {
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME2, "Context file not found, skipping state management");
     return;
   }
@@ -1559,7 +1758,7 @@ async function initializeSession(contextFile, lockDir) {
     return;
   }
   try {
-    const content = fs5.readFileSync(contextFile, "utf8");
+    const content = fs6.readFileSync(contextFile, "utf8");
     const context = JSON.parse(content);
     const timestamp = formatTimestamp();
     context.session_heartbeat = context.session_heartbeat || {};
@@ -1571,9 +1770,9 @@ async function initializeSession(contextFile, lockDir) {
     context.dirty_tracking.files_edited_this_session = [];
     context.dirty_tracking.last_edit_timestamp = null;
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logDebug(HOOK_NAME2, "Session initialized, dirty_tracking reset");
   } catch (error) {
     logError(HOOK_NAME2, `Failed to update context file: ${error}`);
@@ -1599,7 +1798,7 @@ function writeEnvFile(projectDir) {
       lines.push(`export CLAUDE_PROJECT_DIR=${shellEscape(projectDir)}`);
     }
     if (lines.length > 0) {
-      fs5.appendFileSync(envFile, `${lines.join("\n")}
+      fs6.appendFileSync(envFile, `${lines.join("\n")}
 `);
       logDebug(HOOK_NAME2, `Wrote ${lines.length} env var(s) to CLAUDE_ENV_FILE`);
     }
@@ -1609,11 +1808,11 @@ function writeEnvFile(projectDir) {
 }
 function checkContinuitySetup(projectDir) {
   const ledgerDir = path2.join(projectDir, ".claude", "continuity", "ledgers");
-  if (!fs5.existsSync(ledgerDir)) {
+  if (!fs6.existsSync(ledgerDir)) {
     return "TIP: Run `/setup-continuity` to enable session state tracking.\n\n";
   }
   try {
-    const files = fs5.readdirSync(ledgerDir);
+    const files = fs6.readdirSync(ledgerDir);
     const ledgerFiles = files.filter((f) => f.startsWith("CONTINUITY_") && f.endsWith(".md"));
     if (ledgerFiles.length === 0) {
       return "TIP: Run `/setup-continuity` to enable session state tracking.\n\n";
@@ -1624,11 +1823,11 @@ function checkContinuitySetup(projectDir) {
 }
 function getCurrentBranch(projectDir) {
   const headPath = path2.join(projectDir, ".git", "HEAD");
-  if (!fs5.existsSync(headPath)) {
+  if (!fs6.existsSync(headPath)) {
     return null;
   }
   try {
-    const content = fs5.readFileSync(headPath, "utf8").trim();
+    const content = fs6.readFileSync(headPath, "utf8").trim();
     const match = content.match(/^ref: refs\/heads\/(.+)$/);
     return match?.[1] ?? null;
   } catch {
@@ -1637,12 +1836,12 @@ function getCurrentBranch(projectDir) {
 }
 function outputLedgerSummary(projectDir) {
   const ledgerPath = getCurrentLedgerPath(projectDir);
-  if (!ledgerPath || !fs5.existsSync(ledgerPath)) {
+  if (!ledgerPath || !fs6.existsSync(ledgerPath)) {
     logDebug(HOOK_NAME2, `No ledger found in ${projectDir}/.claude/continuity/ledgers/`);
     return "";
   }
   try {
-    const content = fs5.readFileSync(ledgerPath, "utf8");
+    const content = fs6.readFileSync(ledgerPath, "utf8");
     const summary = extractLedgerSummary(content);
     if (!summary) {
       return "";
@@ -1673,11 +1872,11 @@ function outputHandoffSummary(projectDir) {
     "handoffs",
     "handoff-latest.json"
   );
-  if (!fs5.existsSync(handoffPath)) {
+  if (!fs6.existsSync(handoffPath)) {
     return "";
   }
   try {
-    const raw = fs5.readFileSync(handoffPath, "utf8");
+    const raw = fs6.readFileSync(handoffPath, "utf8");
     const parsed = JSON.parse(raw);
     const handoff = validateHandoff(parsed);
     if (!handoff) {
@@ -1756,7 +1955,7 @@ async function sessionEnd(input) {
   const source = input.source || "unknown";
   logDebug(HOOK_NAME3, `Session ending, source: ${source}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME3, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -1766,7 +1965,7 @@ async function sessionEnd(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs5.readFileSync(contextFile, "utf8");
+    const raw = fs6.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -1780,9 +1979,9 @@ async function sessionEnd(input) {
     heartbeat["last_activity"] = timestamp;
     context["session_heartbeat"] = heartbeat;
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME3, `Session cleanly ended (source: ${source})`);
   } catch (error) {
     logError(HOOK_NAME3, `Failed to update context file: ${error}`);
@@ -1863,22 +2062,22 @@ async function preCompactSaver(_input) {
   }
   logDebug(HOOK_NAME5, `Hook fired for project: ${projectDir}`);
   const ledgerPath = getCurrentLedgerPath(projectDir);
-  if (!ledgerPath || !fs5.existsSync(ledgerPath)) {
+  if (!ledgerPath || !fs6.existsSync(ledgerPath)) {
     logWarn(HOOK_NAME5, `Ledger not found at ${ledgerPath ?? "unknown"}`);
     return outputWarning("Ledger not found - state not preserved before compaction");
   }
   try {
-    fs5.accessSync(ledgerPath, fs5.constants.W_OK);
+    fs6.accessSync(ledgerPath, fs6.constants.W_OK);
   } catch {
     logWarn(HOOK_NAME5, `Ledger not writable at ${ledgerPath}`);
     return outputWarning("Ledger not writable - state not preserved before compaction");
   }
   const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
   try {
-    if (fs5.existsSync(contextPath)) {
-      const ctx = JSON.parse(fs5.readFileSync(contextPath, "utf8"));
+    if (fs6.existsSync(contextPath)) {
+      const ctx = JSON.parse(fs6.readFileSync(contextPath, "utf8"));
       const editCount = ctx?.dirty_tracking?.files_edited_count ?? 0;
-      const ledgerStat = fs5.statSync(ledgerPath);
+      const ledgerStat = fs6.statSync(ledgerPath);
       const minutesSinceLastSave = (Date.now() - ledgerStat.mtimeMs) / 6e4;
       if (editCount >= BLOCK_THRESHOLD && minutesSinceLastSave > RECENT_SAVE_MINUTES) {
         logWarn(
@@ -1901,7 +2100,7 @@ async function preCompactSaver(_input) {
 **Auto-saved before compaction**: ${timestamp}
 `;
   try {
-    fs5.appendFileSync(ledgerPath, marker);
+    fs6.appendFileSync(ledgerPath, marker);
     logInfo(HOOK_NAME5, "Timestamp added to ledger");
   } catch (error) {
     logWarn(HOOK_NAME5, `Failed to write to ledger: ${error}`);
@@ -1913,15 +2112,15 @@ async function preCompactSaver(_input) {
 function writeHandoffJson(projectDir, timestamp) {
   try {
     const handoffsDir = path2.join(projectDir, ".claude", "continuity", "handoffs");
-    if (!fs5.existsSync(handoffsDir)) {
-      fs5.mkdirSync(handoffsDir, { recursive: true });
+    if (!fs6.existsSync(handoffsDir)) {
+      fs6.mkdirSync(handoffsDir, { recursive: true });
     }
     const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
     let dirtyFiles = [];
     let sessionId = process.env["CLAUDE_CODE_SESSION_ID"] ?? null;
-    if (fs5.existsSync(contextPath)) {
+    if (fs6.existsSync(contextPath)) {
       try {
-        const ctx = JSON.parse(fs5.readFileSync(contextPath, "utf8"));
+        const ctx = JSON.parse(fs6.readFileSync(contextPath, "utf8"));
         const tracked = ctx?.dirty_tracking?.files_edited_this_session;
         if (Array.isArray(tracked)) {
           dirtyFiles = tracked.filter((f) => typeof f === "string");
@@ -1942,9 +2141,9 @@ function writeHandoffJson(projectDir, timestamp) {
     });
     const outPath = path2.join(handoffsDir, "handoff-latest.json");
     const tmpPath = `${outPath}.tmp`;
-    fs5.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
+    fs6.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
 `);
-    fs5.renameSync(tmpPath, outPath);
+    fs6.renameSync(tmpPath, outPath);
     logInfo(HOOK_NAME5, `Handoff JSON written to ${outPath}`);
   } catch (error) {
     logWarn(HOOK_NAME5, `Failed to write handoff.json: ${error}`);
@@ -2233,159 +2432,6 @@ function matchDangerousBash(command) {
     }
   }
   return null;
-}
-var ENV_PATTERNS = [
-  /\.env$/,
-  /\.env\..*$/,
-  /\.envrc$/,
-  /\.env_/,
-  /\.env-/
-];
-var GIT_PATTERNS = [
-  /^\.git\//,
-  /^\.git$/,
-  /\/\.git\//,
-  /\/\.git$/,
-  /\.gitconfig$/
-];
-var SSH_PATTERNS = [
-  /\.ssh\/id_/,
-  /\.ssh\/.*\.pem$/,
-  /\.ssh\/.*_rsa$/,
-  /\.ssh\/.*_dsa$/,
-  /\.ssh\/.*_ed25519$/,
-  /\.ssh\/.*_ecdsa$/,
-  /\.ssh\/known_hosts$/,
-  /\.ssh\/authorized_keys$/
-];
-var CREDENTIAL_PATTERNS = [
-  /\.aws\/credentials$/,
-  /\.npmrc$/,
-  /\.pypirc$/,
-  /secrets\.ya?ml$/,
-  /credentials\.json$/,
-  /\.netrc$/,
-  /\.pgpass$/,
-  /\.kube\/config$/,
-  /\.docker\/config\.json$/
-];
-var SYSTEM_DIR_PATTERNS = [
-  /^\/etc\//,
-  /^\/usr\//,
-  /^\/var\//,
-  /^\/sys\//,
-  /^\/proc\//,
-  /^\/boot\//,
-  /^\/root\//,
-  // macOS specific — CC v2.1.113 expanded dangerous-removal targets
-  /^\/private\/etc\//,
-  /^\/private\/var\//,
-  /^\/private\/tmp\//,
-  /^\/private\/home\//
-];
-[
-  ...ENV_PATTERNS,
-  ...GIT_PATTERNS,
-  ...SSH_PATTERNS,
-  ...CREDENTIAL_PATTERNS,
-  ...SYSTEM_DIR_PATTERNS
-];
-function resolveRealPath(inputPath) {
-  const absolutePath = path2.isAbsolute(inputPath) ? inputPath : path2.resolve(getProjectDir2(), inputPath);
-  try {
-    return fs5.realpathSync(absolutePath);
-  } catch {
-    return resolveClosestAncestor(absolutePath);
-  }
-}
-function resolveClosestAncestor(absolutePath) {
-  const components = [];
-  let currentPath = absolutePath;
-  while (currentPath !== path2.dirname(currentPath)) {
-    try {
-      const resolved = fs5.realpathSync(currentPath);
-      return components.length > 0 ? path2.join(resolved, ...components.reverse()) : resolved;
-    } catch {
-      components.push(path2.basename(currentPath));
-      currentPath = path2.dirname(currentPath);
-    }
-  }
-  return path2.resolve(absolutePath);
-}
-function normalizePath(inputPath) {
-  if (!inputPath) {
-    return ".";
-  }
-  let normalized = path2.normalize(inputPath);
-  if (normalized.startsWith("./")) {
-    normalized = normalized.slice(2);
-  }
-  if (!normalized) {
-    return ".";
-  }
-  return normalized;
-}
-function getProjectDir2() {
-  return process.env["CLAUDE_PROJECT_DIR"] || process.cwd();
-}
-function isWithinProject(inputPath, projectDir) {
-  const projectRoot = getProjectDir2();
-  const resolvedPath = resolveRealPath(inputPath);
-  const resolvedProjectRoot = resolveRealPath(projectRoot);
-  const projectRootWithSep = resolvedProjectRoot.endsWith(path2.sep) ? resolvedProjectRoot : resolvedProjectRoot + path2.sep;
-  return resolvedPath === resolvedProjectRoot || resolvedPath.startsWith(projectRootWithSep);
-}
-var PATTERN_CHECKS = [
-  {
-    patterns: ENV_PATTERNS,
-    category: "env",
-    reason: "Environment files contain sensitive credentials"
-  },
-  {
-    patterns: GIT_PATTERNS,
-    category: "git",
-    reason: "Git internals should be modified using git commands"
-  },
-  {
-    patterns: SSH_PATTERNS,
-    category: "ssh",
-    reason: "SSH keys and certificates must be managed manually"
-  },
-  {
-    patterns: CREDENTIAL_PATTERNS,
-    category: "credential",
-    reason: "Credential files must be managed manually or via secrets manager"
-  },
-  {
-    patterns: SYSTEM_DIR_PATTERNS,
-    category: "system",
-    reason: "System directories require elevated privileges and manual authorization"
-  }
-];
-function matchesPatternConfig(pathsToCheck, config) {
-  for (const checkPath of pathsToCheck) {
-    for (const pattern of config.patterns) {
-      if (pattern.test(checkPath)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-function isProtectedPath(inputPath) {
-  const normalized = normalizePath(inputPath);
-  const resolved = resolveRealPath(inputPath);
-  const pathsToCheck = [normalized, resolved];
-  for (const config of PATTERN_CHECKS) {
-    if (matchesPatternConfig(pathsToCheck, config)) {
-      return {
-        isProtected: true,
-        category: config.category,
-        reason: config.reason
-      };
-    }
-  }
-  return { isProtected: false };
 }
 
 // src/pretool/security-blocker.ts
@@ -3114,8 +3160,8 @@ var SAFE_EXTENSIONS = [
 ];
 function isProtectedDirectory(normalizedPath) {
   const lower = normalizedPath.toLowerCase();
-  const path26 = lower.endsWith("/") ? lower : `${lower}/`;
-  return PROTECTED_DIRS.some((dir) => path26.includes(`/${dir}`) || path26.startsWith(dir));
+  const path27 = lower.endsWith("/") ? lower : `${lower}/`;
+  return PROTECTED_DIRS.some((dir) => path27.includes(`/${dir}`) || path27.startsWith(dir));
 }
 function isProtectedFile(normalizedPath) {
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(normalizedPath));
@@ -3168,22 +3214,22 @@ async function loadPermissionProfile(projectDir, profileName = "default") {
     return profileCache.get(cacheKey) || null;
   }
   let profilePath = getProfilePath(cwd, profileName);
-  if (!fs5.existsSync(profilePath)) {
+  if (!fs6.existsSync(profilePath)) {
     const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
     if (pluginRoot) {
       const pluginProfilePath = getProfilePath(pluginRoot, profileName);
-      if (fs5.existsSync(pluginProfilePath)) {
+      if (fs6.existsSync(pluginProfilePath)) {
         logDebug(HOOK_NAME9, "Using plugin default permission profile");
         profilePath = pluginProfilePath;
       }
     }
   }
-  if (!fs5.existsSync(profilePath)) {
+  if (!fs6.existsSync(profilePath)) {
     logDebug(HOOK_NAME9, `Permission profile not found: ${profilePath}`);
     return null;
   }
   try {
-    const content = fs5.readFileSync(profilePath, "utf-8");
+    const content = fs6.readFileSync(profilePath, "utf-8");
     const profile = JSON.parse(content);
     if (!profile.name) {
       logError(HOOK_NAME9, "Invalid permission profile: missing name");
@@ -3407,12 +3453,12 @@ function loadBranchPatterns(projectDir) {
     return branchPatternsCache.get(cwd) || null;
   }
   const patternsPath = getBranchPatternsPath(cwd);
-  if (!fs5.existsSync(patternsPath)) {
+  if (!fs6.existsSync(patternsPath)) {
     logDebug(HOOK_NAME12, `Branch patterns file not found: ${patternsPath}`);
     return null;
   }
   try {
-    const content = fs5.readFileSync(patternsPath, "utf-8");
+    const content = fs6.readFileSync(patternsPath, "utf-8");
     const config = JSON.parse(content);
     branchPatternsCache.set(cwd, config);
     logDebug(
@@ -3990,18 +4036,18 @@ var HOOK_NAME18 = "post-tool-use";
 async function acquireLock2(lockPath, maxAttempts = 50) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      fs5.mkdirSync(lockPath);
-      fs5.writeFileSync(path2.join(lockPath, "pid"), process.pid.toString());
+      fs6.mkdirSync(lockPath);
+      fs6.writeFileSync(path2.join(lockPath, "pid"), process.pid.toString());
       return true;
     } catch {
-      await new Promise((resolve6) => setTimeout(resolve6, 100));
+      await new Promise((resolve7) => setTimeout(resolve7, 100));
     }
   }
   return false;
 }
 function releaseLock2(lockPath) {
   try {
-    fs5.rmSync(lockPath, { recursive: true, force: true });
+    fs6.rmSync(lockPath, { recursive: true, force: true });
   } catch {
   }
 }
@@ -4010,7 +4056,7 @@ function getContextFilePath(projectDir) {
 }
 function readContextFile(contextFile) {
   try {
-    const content = fs5.readFileSync(contextFile, "utf-8");
+    const content = fs6.readFileSync(contextFile, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -4018,8 +4064,8 @@ function readContextFile(contextFile) {
 }
 function writeContextFile(contextFile, context) {
   const tmpFile = `${contextFile}.tmp`;
-  fs5.writeFileSync(tmpFile, JSON.stringify(context, null, 2));
-  fs5.renameSync(tmpFile, contextFile);
+  fs6.writeFileSync(tmpFile, JSON.stringify(context, null, 2));
+  fs6.renameSync(tmpFile, contextFile);
 }
 function updateContextWithEdit(context, filePath) {
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
@@ -4083,12 +4129,12 @@ async function dirtyStateTracker(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const contextFile = getContextFilePath(projectDir);
   const lockDir = `${contextFile}.lock`;
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME18, `Context file not found: ${contextFile}`);
     return outputSilentSuccess();
   }
   try {
-    fs5.accessSync(contextFile, fs5.constants.W_OK);
+    fs6.accessSync(contextFile, fs6.constants.W_OK);
   } catch {
     logWarn(HOOK_NAME18, "Context file not writable");
     return outputSilentSuccess();
@@ -4234,22 +4280,22 @@ async function loadErrorRules(projectDir) {
     return rulesCache.get(cwd) || null;
   }
   let rulesPath = getErrorRulesPath(cwd);
-  if (!fs5.existsSync(rulesPath)) {
+  if (!fs6.existsSync(rulesPath)) {
     const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
     if (pluginRoot) {
       const pluginRulesPath = getErrorRulesPath(pluginRoot);
-      if (fs5.existsSync(pluginRulesPath)) {
+      if (fs6.existsSync(pluginRulesPath)) {
         logDebug(HOOK_NAME20, "Using plugin default error rules");
         rulesPath = pluginRulesPath;
       }
     }
   }
-  if (!fs5.existsSync(rulesPath)) {
+  if (!fs6.existsSync(rulesPath)) {
     logDebug(HOOK_NAME20, `Error rules file not found: ${rulesPath}`);
     return null;
   }
   try {
-    const content = fs5.readFileSync(rulesPath, "utf-8");
+    const content = fs6.readFileSync(rulesPath, "utf-8");
     const config = JSON.parse(content);
     if (!config.rules || !Array.isArray(config.rules)) {
       logError(HOOK_NAME20, "Invalid error rules: missing rules array");
@@ -4390,14 +4436,14 @@ function findLinter(projectDir) {
     return cachedLinterPath ?? void 0;
   }
   const venvRuff = path2.join(projectDir, ".venv", "bin", "ruff");
-  if (fs5.existsSync(venvRuff)) {
+  if (fs6.existsSync(venvRuff)) {
     cachedLinterPath = venvRuff;
     logDebug(HOOK_NAME23, `Found ruff in venv: ${venvRuff}`);
     return venvRuff;
   }
   const homeDir = process.env["HOME"] || "/tmp";
   const miseRuff = path2.join(homeDir, ".local", "share", "mise", "shims", "ruff");
-  if (fs5.existsSync(miseRuff)) {
+  if (fs6.existsSync(miseRuff)) {
     cachedLinterPath = miseRuff;
     logDebug(HOOK_NAME23, `Found ruff in mise shims: ${miseRuff}`);
     return miseRuff;
@@ -4594,7 +4640,7 @@ async function lintChecker(input) {
     return outputSilentSuccess();
   }
   const existingFiles = pythonFiles.filter((fp) => {
-    if (!fs5.existsSync(fp)) {
+    if (!fs6.existsSync(fp)) {
       logDebug(HOOK_NAME23, `File not found: ${fp}`);
       return false;
     }
@@ -4644,7 +4690,7 @@ async function teammateIdleSaver(input) {
   const agentType = input.agent_type || "unknown";
   logDebug(HOOK_NAME25, `Teammate idle: agent_id=${agentId}, agent_type=${agentType}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME25, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -4654,7 +4700,7 @@ async function teammateIdleSaver(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs5.readFileSync(contextFile, "utf8");
+    const raw = fs6.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -4672,9 +4718,9 @@ async function teammateIdleSaver(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME25, `Heartbeat updated on teammate idle (agent: ${agentId})`);
   } catch (error) {
     logError(HOOK_NAME25, `Failed to update context file: ${error}`);
@@ -4695,8 +4741,8 @@ async function taskCompletedLogger(input) {
   const metricsDir = path2.join(projectDir, METRICS_DIR);
   const metricsFile = path2.join(metricsDir, METRICS_FILE);
   try {
-    if (!fs5.existsSync(metricsDir)) {
-      fs5.mkdirSync(metricsDir, { recursive: true });
+    if (!fs6.existsSync(metricsDir)) {
+      fs6.mkdirSync(metricsDir, { recursive: true });
     }
     const entry = {
       timestamp: formatTimestamp(),
@@ -4704,7 +4750,7 @@ async function taskCompletedLogger(input) {
       session_id: sessionId,
       ...toolUseId && { tool_use_id: toolUseId }
     };
-    fs5.appendFileSync(metricsFile, `${JSON.stringify(entry)}
+    fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME26, `Task completion logged for agent ${agentId}`);
   } catch (error) {
@@ -4724,8 +4770,8 @@ async function taskCreatedLogger(input) {
   const metricsDir = path2.join(projectDir, METRICS_DIR2);
   const metricsFile = path2.join(metricsDir, METRICS_FILE2);
   try {
-    if (!fs5.existsSync(metricsDir)) {
-      fs5.mkdirSync(metricsDir, { recursive: true });
+    if (!fs6.existsSync(metricsDir)) {
+      fs6.mkdirSync(metricsDir, { recursive: true });
     }
     const entry = {
       event: "created",
@@ -4734,7 +4780,7 @@ async function taskCreatedLogger(input) {
       session_id: sessionId,
       ...toolUseId && { tool_use_id: toolUseId }
     };
-    fs5.appendFileSync(metricsFile, `${JSON.stringify(entry)}
+    fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME27, `Task creation logged for agent ${agentId}`);
   } catch (error) {
@@ -4750,11 +4796,11 @@ async function worktreeCreate(input) {
   logDebug(HOOK_NAME28, `Worktree created: path=${worktreePath}, branch=${worktreeBranch}`);
   try {
     const contextDir = path2.join(worktreePath, CONTINUITY_DIRS.context);
-    if (!fs5.existsSync(contextDir)) {
-      fs5.mkdirSync(contextDir, { recursive: true });
+    if (!fs6.existsSync(contextDir)) {
+      fs6.mkdirSync(contextDir, { recursive: true });
     }
     const contextFile = path2.join(contextDir, "shared-context.json");
-    if (!fs5.existsSync(contextFile)) {
+    if (!fs6.existsSync(contextFile)) {
       const timestamp = formatTimestamp();
       const worktreeContext = {
         version: "1.0.0",
@@ -4777,7 +4823,7 @@ async function worktreeCreate(input) {
           threshold_auto_suggest: 25
         }
       };
-      fs5.writeFileSync(contextFile, `${JSON.stringify(worktreeContext, null, 2)}
+      fs6.writeFileSync(contextFile, `${JSON.stringify(worktreeContext, null, 2)}
 `);
       logInfo(HOOK_NAME28, `Initialized continuity context for worktree: ${worktreeBranch}`);
     } else {
@@ -4795,7 +4841,7 @@ async function worktreeRemove(input) {
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   logDebug(HOOK_NAME29, `Worktree removed: path=${worktreePath}`);
   const contextFile = path2.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME29, "No main context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -4805,7 +4851,7 @@ async function worktreeRemove(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs5.readFileSync(contextFile, "utf8");
+    const raw = fs6.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -4821,9 +4867,9 @@ async function worktreeRemove(input) {
     });
     context["archived_worktrees"] = archivedWorktrees;
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME29, `Worktree removal recorded: ${worktreePath}`);
   } catch (error) {
     logError(HOOK_NAME29, `Failed to update context file: ${error}`);
@@ -4840,7 +4886,7 @@ async function stopStateSaver(input) {
   const source = input.source || "unknown";
   logDebug(HOOK_NAME30, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME30, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -4850,7 +4896,7 @@ async function stopStateSaver(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs5.readFileSync(contextFile, "utf8");
+    const raw = fs6.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -4868,9 +4914,9 @@ async function stopStateSaver(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME30, `Stop state captured (reason: ${source})`);
   } catch (error) {
     logError(HOOK_NAME30, `Failed to update context file: ${error}`);
@@ -4887,7 +4933,7 @@ async function stopFailureHandler(input) {
   const errorType = input.source || "unknown";
   logWarn(HOOK_NAME31, `API failure: type=${errorType}, session=${sessionId}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs5.existsSync(contextFile)) {
+  if (!fs6.existsSync(contextFile)) {
     logInfo(HOOK_NAME31, "No context file found, logging failure without context update");
     return outputSilentSuccess();
   }
@@ -4897,7 +4943,7 @@ async function stopFailureHandler(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs5.readFileSync(contextFile, "utf8");
+    const raw = fs6.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -4915,9 +4961,9 @@ async function stopFailureHandler(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs5.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs5.renameSync(tempFile, contextFile);
+    fs6.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME31, `API failure recorded (type: ${errorType})`);
   } catch (error) {
     logError(HOOK_NAME31, `Failed to update context file: ${error}`);
@@ -4935,20 +4981,20 @@ function getReviewLogPath() {
 }
 function rotateIfNeeded(logPath) {
   try {
-    const stats = fs5.statSync(logPath);
+    const stats = fs6.statSync(logPath);
     if (stats.size > MAX_LOG_SIZE) {
       const rotatedPath = `${logPath}.1`;
-      fs5.renameSync(logPath, rotatedPath);
+      fs6.renameSync(logPath, rotatedPath);
     }
   } catch {
   }
 }
 function appendReviewEntry(logPath, entry) {
   const dir = path2.dirname(logPath);
-  if (!fs5.existsSync(dir)) {
-    fs5.mkdirSync(dir, { recursive: true });
+  if (!fs6.existsSync(dir)) {
+    fs6.mkdirSync(dir, { recursive: true });
   }
-  fs5.appendFileSync(logPath, `${JSON.stringify(entry)}
+  fs6.appendFileSync(logPath, `${JSON.stringify(entry)}
 `);
 }
 async function reviewLogger(input) {
@@ -4990,7 +5036,7 @@ async function denialLogger(input) {
   try {
     const projectDir = getProjectDir();
     const feedbackDir = path2.join(projectDir, ".claude", "feedback");
-    fs5.mkdirSync(feedbackDir, { recursive: true });
+    fs6.mkdirSync(feedbackDir, { recursive: true });
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       session_id: input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown",
@@ -4999,7 +5045,7 @@ async function denialLogger(input) {
       agent_id: input.agent_id
     };
     const logFile = path2.join(feedbackDir, "denials.jsonl");
-    fs5.appendFileSync(logFile, `${JSON.stringify(entry)}
+    fs6.appendFileSync(logFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME33, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
   } catch (err) {
@@ -5490,7 +5536,7 @@ function appendMeasurement(sessionId, record) {
     ensureSessionDir(sessionId);
     const line = `${JSON.stringify(record)}
 `;
-    fs5.appendFileSync(getMeasurementsPath(sessionId), line, { mode: 384 });
+    fs6.appendFileSync(getMeasurementsPath(sessionId), line, { mode: 384 });
   } catch {
   }
 }
@@ -5542,12 +5588,12 @@ async function readCacheHook(input) {
     return outputSilentSuccess();
   }
   const absPath = path2.resolve(filePath);
-  if (!fs5.existsSync(absPath)) {
+  if (!fs6.existsSync(absPath)) {
     return outputSilentSuccess();
   }
   let stat;
   try {
-    stat = fs5.statSync(absPath);
+    stat = fs6.statSync(absPath);
   } catch (e) {
     logDebug(HOOK_NAME41, `stat failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
@@ -5567,7 +5613,7 @@ async function readCacheHook(input) {
   }
   let currentContent;
   try {
-    currentContent = fs5.readFileSync(absPath, "utf8");
+    currentContent = fs6.readFileSync(absPath, "utf8");
   } catch (e) {
     logWarn(HOOK_NAME41, `read failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
@@ -5600,6 +5646,7 @@ async function readCacheHook(input) {
   } catch (e) {
     logDebug(HOOK_NAME41, `measurement record failed: ${e}`);
   }
+  await snapshotFileToCache(sessionId, absPath);
   const message = [
     `[delta-cache] File ${absPath} was previously read this session.`,
     "Showing unified diff against the cached version. If you need the full file, re-issue the Read explicitly or modify it; large changes auto-fall-through to a full read.",
@@ -5628,60 +5675,58 @@ async function readCacheWriterHook(input) {
       return outputSilentSuccess();
     }
     const absPath = path2.resolve(filePath);
-    if (!fs5.existsSync(absPath)) {
-      logDebug(HOOK_NAME42, `file no longer exists: ${absPath}`);
-      return outputSilentSuccess();
-    }
-    let stat;
-    try {
-      stat = fs5.statSync(absPath);
-    } catch (e) {
-      logDebug(HOOK_NAME42, `stat failed: ${e}`);
-      return outputSilentSuccess();
-    }
-    if (!stat.isFile()) {
-      return outputSilentSuccess();
-    }
-    let content;
-    try {
-      content = fs5.readFileSync(absPath, "utf8");
-    } catch (e) {
-      logWarn(HOOK_NAME42, `read failed for ${absPath}: ${e}`);
-      return outputSilentSuccess();
-    }
-    const entry = {
-      absPath,
-      contentHash: computeContentHash(content),
-      size: stat.size,
-      mtimeMs: stat.mtimeMs,
-      cachedContent: content,
-      recordedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      schemaVersion: 1
-    };
+    let wasMiss = false;
     try {
       const prior = await readEntry(sessionId, absPath);
-      if (!prior) {
-        recordReadEvent(sessionId, absPath, "cache_miss", stat.size);
+      wasMiss = !prior;
+    } catch (e) {
+      logDebug(HOOK_NAME42, `measurement probe failed: ${e}`);
+    }
+    const size = await snapshotFileToCache(sessionId, absPath);
+    if (size === null) {
+      logDebug(HOOK_NAME42, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
+      return outputSilentSuccess();
+    }
+    if (wasMiss) {
+      try {
+        recordReadEvent(sessionId, absPath, "cache_miss", size);
+      } catch (e) {
+        logDebug(HOOK_NAME42, `measurement record failed: ${e}`);
       }
-    } catch (e) {
-      logDebug(HOOK_NAME42, `measurement record failed: ${e}`);
     }
-    try {
-      ensureSessionDir(sessionId);
-      await writeEntry(sessionId, entry);
-      logDebug(HOOK_NAME42, `cached read of ${absPath} (${stat.size} bytes)`);
-    } catch (e) {
-      logWarn(HOOK_NAME42, `cache write failed for ${absPath}: ${e}`);
-    }
+    logDebug(HOOK_NAME42, `cached read of ${absPath} (${size} bytes)`);
     return outputSilentSuccess();
   } catch (e) {
     logWarn(HOOK_NAME42, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
+var HOOK_NAME43 = "read-cache-invalidator";
+async function readCacheInvalidatorHook(input) {
+  try {
+    const skipped = runGuards(input, (i) => guardTool(i, "Write", "Edit", "MultiEdit"));
+    if (skipped) return skipped;
+    const filePath = getFilePath(input);
+    const sessionId = getSessionId(input);
+    if (!filePath || !sessionId || sessionId === "unknown") {
+      return outputSilentSuccess();
+    }
+    const absPath = path2.resolve(filePath);
+    const size = await snapshotFileToCache(sessionId, absPath);
+    if (size === null) {
+      logDebug(HOOK_NAME43, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
+      return outputSilentSuccess();
+    }
+    logDebug(HOOK_NAME43, `refreshed cache base for ${absPath} (${size} bytes) after mutation`);
+    return outputSilentSuccess();
+  } catch (e) {
+    logWarn(HOOK_NAME43, `unexpected error: ${e}`);
+    return outputSilentSuccess();
+  }
+}
 
 // src/posttool/bash-output-measurer.ts
-var HOOK_NAME43 = "bash-output-measurer";
+var HOOK_NAME44 = "bash-output-measurer";
 function combineOutput(input) {
   const out = input.tool_output;
   if (!out) return "";
@@ -5699,10 +5744,10 @@ async function bashOutputMeasurerHook(input) {
     const output = combineOutput(input);
     const durationMs = getDurationMs(input);
     recordBashEvent(sessionId, command, output, durationMs);
-    logDebug(HOOK_NAME43, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
+    logDebug(HOOK_NAME44, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
     return outputSilentSuccess();
   } catch (e) {
-    logDebug(HOOK_NAME43, `unexpected error: ${e}`);
+    logDebug(HOOK_NAME44, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
@@ -5875,6 +5920,11 @@ registerHook(
   "posttool/read-cache-writer",
   "Persist the just-read file content into the per-session delta cache",
   readCacheWriterHook
+);
+registerHook(
+  "posttool/read-cache-invalidator",
+  "Refresh the delta-cache base after Write/Edit/MultiEdit so post-edit reads are not intercepted with a stale diff",
+  readCacheInvalidatorHook
 );
 registerHook(
   "posttool/bash-output-measurer",
