@@ -4,7 +4,7 @@ description: "Author a standardized, structured MR/PR description — Background
 effort: xhigh
 ---
 
-# Prepare MR
+# Prepare PR
 
 Authors a standardized MR/PR description from the current branch's changes and opens the merge request (GitLab) or pull request (GitHub). Composable: run it standalone when you are ready to open an MR/PR, or call it at the end of `/develop` or `/fix-bug`. It produces the description contract in `${CLAUDE_SKILL_DIR}/references/description-template.md`; it does **not** review the MR/PR — after opening, it hands off to the read-only/mutating review pair.
 
@@ -36,7 +36,7 @@ Never open an MR/PR on unverified code. Resolve verification in this order:
 - Ticket: parse an `[A-Z]+-\d+` id from the branch name or commit trailers; if it resolves via Atlassian, pull the summary for Background context — never paste PHI.
 
 ### Step 3 — Author the description → draft to file
-Fill every section of the template (`${CLAUDE_SKILL_DIR}/references/description-template.md`), deriving each per `section-authoring.md`; generate the mermaid sequence from the change shape. **Write the body to `.develop/prepare-pr/mr-body-<branch>.md`** — never stream a long body inline (output-token ceiling). Run the **redaction pass** (`create-mr-recipe.md` §Redaction): process/behavior only, no patient/user PII, no violation `file:line`.
+Fill every section of the template (`${CLAUDE_SKILL_DIR}/references/description-template.md`), deriving each per `section-authoring.md`; generate the mermaid sequence from the change shape. **Write the body to `.develop/prepare-pr/mr-body-<branch>.md`** — never stream a long body inline (output-token ceiling). Run the **redaction pass** (`create-pr-recipe.md` §Redaction): process/behavior only, no patient/user PII, no violation `file:line`.
 
 **Gate (mandatory) — restate scope, then confirm:**
 > "MR/PR: `<type>(<scope>): <title>` → `<target>`. Body drafted to `<file>`. Sections filled: Background ✓ · Design ✓ · Pitfalls ✓. Open it now? [yes / edit / dry-run / stop]"
@@ -47,7 +47,7 @@ Never proceed to Step 4 without an explicit **yes**. On **edit**, incorporate th
 If the tree is dirty, commit with a conventional-commit message (`feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert` — matches the `git-validator` hook). **Then always push** so the MR/PR includes every local commit — `git push` (add `-u origin <branch>` when there's no upstream yet). Push even when the tree was already clean: earlier commits may be unpushed (common mid-`/develop`), and the MR/PR must not open missing them. If commits land **after** a prior `/etk:review-mr` run, the review is now stale (the review pair's SHA stale-check will refuse to anchor) — a re-review is required.
 
 ### Step 5 — Create the MR/PR
-Detect the host with the same switch as `/etk:review-mr` Phase 0 (`command -v glab` else `command -v gh`), then call **`glab mr create`** (GitLab) or **`gh pr create`** (GitHub): pass `--title`, the drafted body (glab `--description "$(cat $BODY_FILE)"` / gh `--body-file $BODY_FILE`), the target (glab `--target-branch $TARGET` / gh `--base $TARGET`) as the bare branch name, `--label` for each label given, and `--draft` if requested. The adoption marker is already in the body (added in Step 3); so is the `Closes <ticket>` line if `--closes` was passed. Capture the returned number into `$MR_NUMBER`. Exact per-host invocation + flag mapping: `${CLAUDE_SKILL_DIR}/references/create-mr-recipe.md`.
+Detect the host with the same switch as `/etk:review-mr` Phase 0 (`command -v glab` else `command -v gh`), then call **`glab mr create`** (GitLab) or **`gh pr create`** (GitHub): pass `--title`, the drafted body (glab `--description "$(cat $BODY_FILE)"` / gh `--body-file $BODY_FILE`), the target (glab `--target-branch $TARGET` / gh `--base $TARGET`) as the bare branch name, `--label` for each label given, and `--draft` if requested. The adoption marker is already in the body (added in Step 3); so is the `Closes <ticket>` line if `--closes` was passed. Capture the returned number into `$MR_NUMBER`. Exact per-host invocation + flag mapping: `${CLAUDE_SKILL_DIR}/references/create-pr-recipe.md`.
 
 ### Step 6 — Hand off (do not auto-run)
 Print the review tail for the user to run as deliberate, separate steps:
@@ -78,11 +78,11 @@ Done only when **all** hold:
 
 ## Safety
 
-- **HIPAA / PHI:** the description describes *process and behavior only*. Never include patient/user PII, PHI identifiers, or a specific violation `file:line`. RBAC / audit-logging / least-privilege appear only as principles the change upholds. See `create-mr-recipe.md` §Redaction.
+- **HIPAA / PHI:** the description describes *process and behavior only*. Never include patient/user PII, PHI identifiers, or a specific violation `file:line`. RBAC / audit-logging / least-privilege appear only as principles the change upholds. See `create-pr-recipe.md` §Redaction.
 - **No auto-merge, ever.** This skill opens an MR/PR for review; it never approves or merges.
 - **User instructions win.** If the user says skip a section or a gate, honor it — and note the omission in the body.
 
 ## Reference files
 - `${CLAUDE_SKILL_DIR}/references/description-template.md` — the section contract (also the standalone template for hand-authoring).
 - `${CLAUDE_SKILL_DIR}/references/section-authoring.md` — deriving each section from the diff; the change-taxonomy globs; mermaid generation.
-- `${CLAUDE_SKILL_DIR}/references/create-mr-recipe.md` — the `glab mr create` / `gh pr create` invocation + per-host flag mapping, adoption marker, redaction pass, and conventional-commit title.
+- `${CLAUDE_SKILL_DIR}/references/create-pr-recipe.md` — the `glab mr create` / `gh pr create` invocation + per-host flag mapping, adoption marker, redaction pass, and conventional-commit title.

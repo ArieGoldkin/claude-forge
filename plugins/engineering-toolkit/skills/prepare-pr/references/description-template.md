@@ -2,7 +2,7 @@
 
 This is the standardized MR-description contract `/etk:prepare-pr` authors. It is also usable **standalone** — copy the skeleton into an MR by hand when you are not running the skill.
 
-Fill every section. If a section genuinely does not apply, write `—` and a one-line reason rather than deleting it (a reviewer should see it was considered, not skipped). Keep everything **process/behavior only** — no patient/user PII, no violation `file:line` (see the redaction pass in `create-mr-recipe.md`).
+Fill every section. If a section genuinely does not apply, write `—` and a one-line reason rather than deleting it (a reviewer should see it was considered, not skipped). Keep everything **process/behavior only** — no patient/user PII, no violation `file:line` (see the redaction pass in `create-pr-recipe.md`).
 
 ---
 
