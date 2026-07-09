@@ -118,6 +118,12 @@
           },
           {
             "type": "command",
+            "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/bin/run-hook-wrapper.sh posttool/read-cache-invalidator",
+            "timeout": 5,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/bin/monitor-forward.sh",
             "timeout": 3
           }

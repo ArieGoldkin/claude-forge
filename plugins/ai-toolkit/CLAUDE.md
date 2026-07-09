@@ -1,7 +1,7 @@
 # atk — AI Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: atk (formerly `ai-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.6
+> **Version**: 2.0.7
 
 ## Overview
 

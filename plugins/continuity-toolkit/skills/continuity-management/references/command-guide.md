@@ -67,7 +67,7 @@ Complete reference for each continuity management command, including purpose, tr
    - **Session Activity Log (archived from ledger)**
    - What's next, Blockers, Key context, Session notes
 4. Extract learnings to `extracted-patterns.md`
-5. Write to `handoffs/handoff-<YYYY-MM-DD>.md`
+5. Write to `handoffs/YYYY-MM-DD_<topic>.yaml`
 6. **CLEAN LEDGER**:
    - Archive Session Activity Log to handoff -> Clear in ledger
    - Archive Key Decisions >30 days to quarterly archive
@@ -132,10 +132,7 @@ System Health Report:
 - Recommendation: [action needed or "system healthy"]
 ```
 
-**Thresholds:**
-- Ledger: <500 (healthy) | 500-800 (warning) | >800 (urgent)
-- Handoffs: <20 (healthy) | 20-40 (warning) | >40 (urgent)
-- Shared context: <50KB (healthy) | 50-100KB (warning) | >100KB (urgent)
+**Thresholds:** canonical values are defined once in the /check-maintenance command file (Notes → Health thresholds) — do not restate them here.
 
 ---
 

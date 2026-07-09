@@ -1,6 +1,6 @@
 {
   "name": "atk",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "AI/LLM development toolkit - 14 skills, 1 agent, 23 commands for AI-native development patterns",
   "author": {
     "name": "Arie Goldkin",
@@ -9,7 +9,9 @@
   "homepage": "https://github.com/ArieGoldkin/claude-forge/blob/main/plugins/ai-toolkit/README.md",
   "repository": "https://github.com/ArieGoldkin/claude-forge",
   "license": "MIT",
-  "dependencies": ["ctk"],
+  "dependencies": [
+    "ctk"
+  ],
   "keywords": [
     "ai",
     "llm",

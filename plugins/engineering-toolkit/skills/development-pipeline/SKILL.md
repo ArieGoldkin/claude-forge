@@ -250,7 +250,7 @@ Collect evidence and run quality checks on the completed work.
 
 **State update:** Record evidence results, pass/fail status.
 
-**On approval:** Mark pipeline as done. Offer to create MR with `/review-mr` if appropriate.
+**On approval:** Mark pipeline as done. Offer to open the MR with **`/etk:prepare-mr`** — it authors the standardized description (Background / High-Level Design + sequence / Pitfalls) from the diff plus this pipeline's design/plan/verify context, then hands off to `/review-mr`. The Phase-5 verify result satisfies prepare-mr's Step-1 verify gate (it reuses it — no re-prompt). (`/review-mr` reviews an existing MR; it does not create one — prepare-mr is the surface that opens it.)
 
 ## State Management
 

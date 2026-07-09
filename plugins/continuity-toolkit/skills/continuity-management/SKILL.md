@@ -25,7 +25,8 @@ This skill provides comprehensive guidance for managing context across Claude se
 Automatically tracks file edits and suggests handoffs:
 
 - **Threshold Warning**: 15 edits -> "Approaching handoff threshold"
-- **Auto-Suggest**: 20 edits -> "Consider /create-handoff"
+- **Auto-Suggest**: 25 edits -> "Consider /create-handoff"
+- Canonical values live in the `dirty-state-tracker` hook (`shared/hooks-infra/src/hooks/posttool/dirty-state-tracker.ts`)
 - Stored in `shared-context.json` -> `dirty_tracking`
 
 ### Session Heartbeat
@@ -54,7 +55,7 @@ Detects sessions that ended without proper handoff:
 | Command | When | Action |
 |---------|------|--------|
 | `/save-state` | After 3-5 tasks, at milestones | **APPEND** to Session Activity Log + Key Decisions; **REPLACE** Current State |
-| `/create-handoff` | End of session, before breaks, >=20 edits | Create YAML handoff + **CLEAN** ledger + reset dirty tracking |
+| `/create-handoff` | End of session, before breaks, >=25 edits | Create YAML handoff + **CLEAN** ledger + reset dirty tracking |
 | `/resume-session` | Starting fresh session | Load previous context (auto or manual) |
 | `/check-maintenance` | Weekly, before major work | Check system health (ledger, handoffs) |
 | `/archive-ledger` | When ledger >500 lines | Archive old sections to quarterly files |
@@ -166,24 +167,9 @@ Complement (not replace) existing context management:
 
 ## Health Indicators
 
-**Healthy System:**
-- Ledger: <500 lines, recent content focused
-- Handoffs: <20 files, last 30 days
-- Shared context: <50KB
-- Context loads quickly (<2 seconds)
-- Archives organized by quarter/month
+A healthy system keeps the ledger lean and recent, the handoffs directory to the last ~30 days, shared-context small, and archives organized by quarter/month; context should load in under ~2 seconds. Degradation shows as a bloated ledger/handoffs/shared-context and noticeably slow context loading.
 
-**Needs Maintenance:**
-- Ledger: 500-800 lines
-- Handoffs: 20-40 files
-- Shared context: 50-100KB
-- Context loading noticeable (2-5 seconds)
-
-**Urgent Action Required:**
-- Ledger: >800 lines (quality degradation)
-- Handoffs: >40 files (cluttered)
-- Shared context: >100KB (bloated)
-- Context loading slow (>5 seconds)
+**Canonical numeric thresholds** (ledger lines, handoff count, shared-context KB, archive recency) are defined once in the /check-maintenance command (Notes → Health thresholds) — run /check-maintenance to evaluate them.
 
 ---
 

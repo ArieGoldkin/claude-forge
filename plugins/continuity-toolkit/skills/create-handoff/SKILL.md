@@ -14,7 +14,7 @@ Create a YAML session handoff document for clean resumption later, and clean the
 - Before a long break
 - When context is getting full
 - When `/save-state` warns about ledger >500 lines
-- When dirty tracking shows >=20 file edits
+- When dirty tracking hits the auto-suggest threshold (25 file edits; warning fires at 15 — canonical values in the `dirty-state-tracker` hook)
 
 ## What It Does
 - Summarizes session accomplishments and pending work

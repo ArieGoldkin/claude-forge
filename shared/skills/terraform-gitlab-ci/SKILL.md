@@ -72,14 +72,15 @@ GitLab CI can authenticate to AWS using OIDC tokens - no static credentials need
 
 ```yaml
 assume role web identity:
-  id_token:
-    aud: https://gitlab.com
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
   script:
     - >
       STS=$(aws sts assume-role-with-web-identity
         --role-arn $AWS_ROLE_ARN
         --role-session-name "gitlab-ci-${CI_PIPELINE_ID}"
-        --web-identity-token $CI_JOB_JWT_V2
+        --web-identity-token $GITLAB_OIDC_TOKEN
         --duration-seconds 3600)
 ```
 

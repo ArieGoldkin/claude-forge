@@ -170,7 +170,7 @@ Cross-references in `skills/code-review-playbook/references/`:
 ## Skills used
 
 - `code-review-playbook` (shared) — conventional comments, structured finding format, FP filtering, agent prompts
-- `quality-gates` — MR risk scoring (5 dimensions) and PR description completeness
+- `quality-gates` — MR risk scoring (5 dimensions). (PR-description completeness is graded in Phase 1b against the `/etk:prepare-mr` contract, not here.)
 
 ## VCS CLI commands (auto-detected: glab/gh)
 

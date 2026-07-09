@@ -1,7 +1,7 @@
 # ftk — Frontend Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: ftk (formerly `frontend-toolkit`, renamed in v2.0.0)
-> **Version**: 2.3.9
+> **Version**: 2.3.10
 
 ## Overview
 

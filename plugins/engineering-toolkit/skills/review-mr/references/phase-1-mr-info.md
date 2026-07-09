@@ -71,23 +71,30 @@ If the calculated risk level suggests a deeper mode than selected, recommend upg
 
 ## 1b. PR Description Completeness
 
-Evaluate the MR description against these requirements (mark each present/missing):
+Evaluate the MR description against the **team standard** — the three-section contract authored by `/etk:prepare-mr` (`skills/prepare-mr/references/description-template.md`). Mark each present/missing; for MRs not using the standard, map the equivalent content rather than penalizing the heading names.
 
-**Functional completeness:**
-- [ ] Purpose/motivation stated (why this change?)
-- [ ] Happy path behavior described
-- [ ] Error/edge case handling mentioned
-- [ ] Breaking changes noted (if any)
+**Background:**
+- [ ] What is the need / purpose stated (why this change?)
+- [ ] Before → after contrast (how it worked before, how it should work now)
+- [ ] Related flows identified
 
-**Technical completeness:**
-- [ ] Testing approach described or tests included
-- [ ] Migration steps documented (if schema change)
-- [ ] Dependencies or deployment notes (if applicable)
+**High-Level Design:**
+- [ ] Changes described by area (API / Infra / Schema / UI / Data, as applicable)
+- [ ] A sequence / flow diagram for non-trivial changes
+
+**Pitfalls & Potential Regressions:**
+- [ ] Edge cases enumerated
+- [ ] Regression risks / blast radius noted
+- [ ] Rollout / migration ordering (if a schema or infra change)
 
 **Completeness verdict:**
 - All present: proceed normally
 - 1-2 missing: note as suggestion in final report ("PR description could be improved")
 - 3+ missing: flag as warning ("PR description is incomplete — review may miss intended behavior")
+
+Conditional items that don't apply to this change (a sequence diagram for a trivial change; rollout/migration ordering when there's no schema or infra change) do **not** count as missing.
+
+> The standard deliberately keeps the **test list** in CI/code, not the description — Pitfalls covers *regressions*, not a test enumeration. Do **not** ding a description for lacking a "testing approach" prose section; testing is gated by `/etk:verify` upstream.
 
 ## 1c. Domain Classification
 

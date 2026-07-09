@@ -2,6 +2,18 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.10] - 2026-07-09 — terraform-gitlab-ci OIDC token fix + prune dead session-loader (cross-fork adoption)
+
+Cross-fork adoption from the internal toolkit fork. Docs/skill + dead-code only — no runtime hook behavior changed.
+
+### Fixed
+
+- **terraform-gitlab-ci OIDC**: the CI template declared `id_tokens.GITLAB_OIDC_TOKEN` but the `before_script` read the deprecated `$CI_JOB_JWT_V2` and never used the declared token; the SKILL.md example used the wrong `id_token:` keyword. Both now use `$GITLAB_OIDC_TOKEN` and the `id_tokens:` keyword consistently (template + SKILL.md). `$CI_JOB_JWT_V2` is deprecated/removed on modern GitLab — a genuine functional fix for end users.
+
+### Removed
+
+- Deleted `hooks/src/lifecycle/session-loader.ts` — a real (non-symlink) copy left over from before the shared-hook consolidation. Not wired in `hooks.json`, not registered in `index.ts`, not imported anywhere; no dist artifact. Dead code; no runtime effect (session loading is ctk-owned via the shared hook).
+
 ## [2.0.9] - 2026-06-26 — adopt Claude Code OTEL telemetry in observability-monitoring
 
 Documents the new Claude Code OpenTelemetry surface (CC alignment v2.1.193) in the `observability-monitoring` skill: the `model` attribute on metrics (CC v2.1.180) for per-model cost/latency breakdowns, and the `claude_code.assistant_response` log event (CC v2.1.193, redacted unless `OTEL_LOG_ASSISTANT_RESPONSES=1`). Skill-content only; no hook/dist change.

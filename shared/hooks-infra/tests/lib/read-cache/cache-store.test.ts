@@ -21,6 +21,7 @@ import {
   getSessionDir,
   getSessionSizeBytes,
   readEntry,
+  snapshotFileToCache,
   writeEntry,
 } from '../../../src/lib/read-cache/cache-store.js';
 import type { CachedRead } from '../../../src/lib/read-cache/types.js';
@@ -323,5 +324,85 @@ describe('computeContentHash', () => {
 
   it('differs for different content', () => {
     expect(computeContentHash('a')).not.toBe(computeContentHash('b'));
+  });
+});
+
+describe('snapshotFileToCache', () => {
+  let srcDir: string;
+
+  beforeEach(() => {
+    srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snapshot-src-'));
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(srcDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('persists the current file content as a retrievable cache entry', async () => {
+    const file = path.join(srcDir, 'a.txt');
+    const content = 'line1\nline2\n';
+    fs.writeFileSync(file, content);
+
+    const size = await snapshotFileToCache('s1', file);
+
+    expect(size).toBe(Buffer.byteLength(content, 'utf8'));
+    const entry = await readEntry('s1', file);
+    expect(entry).not.toBeNull();
+    expect(entry?.cachedContent).toBe(content);
+    expect(entry?.contentHash).toBe(computeContentHash(content));
+    expect(entry?.schemaVersion).toBe(1);
+  });
+
+  it('advances the base on a second call (most-recent-wins)', async () => {
+    const file = path.join(srcDir, 'b.txt');
+    fs.writeFileSync(file, 'v1\n');
+    await snapshotFileToCache('s1', file);
+
+    fs.writeFileSync(file, 'v2 changed\n');
+    const size = await snapshotFileToCache('s1', file);
+
+    expect(size).toBe(Buffer.byteLength('v2 changed\n', 'utf8'));
+    const entry = await readEntry('s1', file);
+    expect(entry?.cachedContent).toBe('v2 changed\n');
+    expect(entry?.contentHash).toBe(computeContentHash('v2 changed\n'));
+  });
+
+  it('returns null and writes nothing for a non-existent path', async () => {
+    const missing = path.join(srcDir, 'does-not-exist.txt');
+    const size = await snapshotFileToCache('s1', missing);
+    expect(size).toBeNull();
+    expect(await readEntry('s1', missing)).toBeNull();
+  });
+
+  it('returns null for a directory (non-regular file)', async () => {
+    const size = await snapshotFileToCache('s1', srcDir);
+    expect(size).toBeNull();
+    expect(await readEntry('s1', srcDir)).toBeNull();
+  });
+
+  it('never caches secret-bearing files (env / ssh / credential)', async () => {
+    // Content is irrelevant — the path pattern drives the skip; keep it innocuous.
+    const body = 'placeholder file body\n';
+
+    // env + credential patterns match by filename regardless of directory
+    for (const name of ['.env', '.env.local', 'secrets.yaml', 'credentials.json', '.npmrc', '.netrc']) {
+      const file = path.join(srcDir, name);
+      fs.writeFileSync(file, body);
+      const size = await snapshotFileToCache('s1', file);
+      expect(size, `${name} must not be cached`).toBeNull();
+      expect(await readEntry('s1', file)).toBeNull();
+    }
+
+    // ssh patterns require a .ssh/ path segment
+    const sshDir = path.join(srcDir, '.ssh');
+    fs.mkdirSync(sshDir);
+    const key = path.join(sshDir, 'id_ed25519');
+    fs.writeFileSync(key, body);
+    expect(await snapshotFileToCache('s1', key)).toBeNull();
+    expect(await readEntry('s1', key)).toBeNull();
   });
 });

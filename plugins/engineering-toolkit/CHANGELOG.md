@@ -2,6 +2,24 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.9.0] - 2026-07-09 — new `/etk:prepare-mr` skill (VCS-agnostic) + pipeline wiring (cross-fork adoption)
+
+Cross-fork adoption from the internal toolkit fork. Adds a standardized MR/PR authoring skill and wires it into the pipelines. Adopted **VCS-agnostic** (GitHub `gh` + GitLab `glab`), unlike the fork's GitLab-only version. Documentation/skill-definition only — no runtime hook behavior changed.
+
+### Added
+
+- **`/etk:prepare-mr`** — authors a standardized, structured MR/PR description (**Background** · **High-Level Design** with an API/Infra/Schema/UI/Data change table + mermaid sequence · **Pitfalls & Regressions**) from the branch diff, commit log, and linked ticket; drafts the body **to a file** (output-budgeting rule), runs a HIPAA/PHI redaction pass, gates on human approval, then opens the MR/PR on the detected host (`gh pr create` / `glab mr create`, mirroring review-mr's Phase-0 host switch) and **hands off** (never auto-runs or merges) to `/etk:review-mr` → `/etk:post-mr-comments`. Skill-only (no command wrapper), consistent with the review-mr/post-mr-comments family. Ships `SKILL.md` + 3 references (`description-template`, `section-authoring`, `create-mr-recipe`). Carries none of `/fix-bug`'s bug-only assumptions.
+
+### Changed
+
+- **`/develop`** (command + development-pipeline SKILL Phase 5) — now offers to open the MR via `/etk:prepare-mr` (reusing the Phase-4 verify result), replacing the imprecise "create MR with `/review-mr`" (review-mr reviews an *existing* MR; it never created one).
+- **`/fix-bug`** (command Phase 5) — delegates MR authoring + creation to `/etk:prepare-mr` instead of a hardcoded Summary/Changes/Test-Plan heredoc; bug MRs now carry the standard Background / High-Level-Design / Pitfalls description.
+- **review-mr Phase 1b** — grades the description against the standardized three-section contract (Background / High-Level Design / Pitfalls) instead of the old ad-hoc checklist, and no longer penalizes a body for lacking a prose "testing approach" section (testing is gated by `/etk:verify` upstream).
+
+### Fixed
+
+- De-fingerprinted `commands/fix-bug.md`: replaced the company Jira project key (`NAPP-###` → `PROJ-###`), the bug label/branch convention (`fixie/…` → `fix/…`), and the hardcoded integration branch (`dev` → the repo's integration branch / resolved target) with neutral placeholders — keeping the command domain-agnostic.
+
 ## [2.8.3] - 2026-07-02 — cross-fork adoption: `/etk:audit-skill` + skill-hygiene governance + auto-research single-sourcing + reference-repair sweep
 
 > Ports the company work-copy's etk 2.8.0 + 2.8.1 work into Claude Forge. Because the two forks diverged (Claude Forge already carried the fork's older 2.7.0 auto-research audit as its own 2.8.0, plus 2.7.3–2.7.6 recipe/triple-ceiling/unattended work the fork lacks), each change was re-verified against Claude Forge's **current** files and **merged on top of** them rather than overwritten — via a 10-agent read-only cross-fork diff. Domain-agnostic guardrail held: for the shared `coding-standards` / `testing-strategy-builder` skills only `SKILL.md` was touched; the fork's `member`/`coach`/wellness-fingerprinted satellite files were **not** synced (Claude Forge's neutral satellites stand). Skill-definition + docs only — no runtime hook behavior changed, no `dist/` rebuild.
