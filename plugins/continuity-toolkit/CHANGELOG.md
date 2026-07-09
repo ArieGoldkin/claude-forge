@@ -2,6 +2,18 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.7.1] - 2026-07-09 — archive-handoffs .yaml glob fix + shared-hook-count doc reconciliation
+
+Follow-up cleanup after the 2.7.0 cross-fork adoption. Docs/command-definition only — no runtime hook behavior changed, no `dist` rebuild.
+
+### Fixed
+
+- **`archive-handoffs` false-healthy / miss-all bug**: the command scanned, counted, and archived handoffs with a `*.md`-only glob, but handoffs are `*.yaml` since the v3.0 format — so **no `.yaml` handoff would ever be archived** (same class as the `check-maintenance` bug fixed in 2.7.0). All handoff globs now match `*.yaml` + legacy `*.md` (active scan, archive listing, active count, restore example, expected-format list).
+
+### Changed
+
+- **Shared-hook-count doc reconciliation**: the count was stated inconsistently across docs (27 / 28 / 30). Reconciled to the verifiable basis — `registerHook()` calls in `hooks/src/index.ts` = **35 registered (32 shared, symlinked from `shared/hooks-infra/src/hooks/`, + 3 ctk-specific: `hipaa-context-injector`, `phi-output-redactor`, `session-loader`)**. Updated `plugin.json`/`marketplace.json`/`README`/root `CLAUDE.md`/ctk `CLAUDE.md`, and added a **canonical-basis note** to ctk `CLAUDE.md` so the number can be re-derived and stops drifting.
+
 ## [2.7.0] - 2026-07-09 — read-cache Read/Edit deadlock fix + secret-skip (cross-fork adoption) + continuity-maintenance doc fixes
 
 Cross-fork adoption from the internal toolkit fork. Adds the delta-cache invalidator (27th shared hook) + advance-on-serve, and fixes several continuity-maintenance doc bugs the fork's skill-audit sweep surfaced. Hook source changed → tracked `dist/` rebuilt.
