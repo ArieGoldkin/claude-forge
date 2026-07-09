@@ -50,7 +50,7 @@ if command -v glab &>/dev/null; then VCS_CLI=glab; VCS_PREFIX='!'
 elif command -v gh &>/dev/null; then VCS_CLI=gh; VCS_PREFIX='#'
 else echo "ERROR: No VCS CLI found. Install glab (GitLab) or gh (GitHub)."; exit 1; fi
 
-BODY_FILE=".develop/prepare-mr/mr-body-$(git rev-parse --abbrev-ref HEAD | tr '/' '-').md"
+BODY_FILE=".develop/prepare-pr/mr-body-$(git rev-parse --abbrev-ref HEAD | tr '/' '-').md"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 if [ "$VCS_CLI" = glab ]; then

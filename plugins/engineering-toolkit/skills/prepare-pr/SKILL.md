@@ -1,6 +1,6 @@
 ---
-name: prepare-mr
-description: "Author a standardized, structured MR/PR description — Background (need / before / after / related flows), High-Level Design (API/Infra/Schema/UI/Data change table + mermaid sequence), Pitfalls & Regressions — from the branch diff, then open the MR/PR (draft-to-file, adoption-marked) and hand off to /etk:review-mr. Works on GitLab (glab) and GitHub (gh). Use when: opening a merge request or pull request, preparing an MR/PR, writing an MR/PR description, or wrapping a feature/fix before review. Triggers on: prepare-mr, prepare mr, open MR, open PR, create merge request, create pull request, MR description, PR description, write the MR, ready for review, ship it"
+name: prepare-pr
+description: "Author a standardized, structured MR/PR description — Background (need / before / after / related flows), High-Level Design (API/Infra/Schema/UI/Data change table + mermaid sequence), Pitfalls & Regressions — from the branch diff, then open the MR/PR (draft-to-file, adoption-marked) and hand off to /etk:review-mr. Works on GitLab (glab) and GitHub (gh). Use when: opening a merge request or pull request, preparing an MR/PR, writing an MR/PR description, or wrapping a feature/fix before review. Triggers on: prepare-pr, prepare pr, prepare-mr, prepare mr, open PR, open MR, create pull request, create merge request, PR description, MR description, ready for review, ship it"
 effort: xhigh
 ---
 
@@ -36,7 +36,7 @@ Never open an MR/PR on unverified code. Resolve verification in this order:
 - Ticket: parse an `[A-Z]+-\d+` id from the branch name or commit trailers; if it resolves via Atlassian, pull the summary for Background context — never paste PHI.
 
 ### Step 3 — Author the description → draft to file
-Fill every section of the template (`${CLAUDE_SKILL_DIR}/references/description-template.md`), deriving each per `section-authoring.md`; generate the mermaid sequence from the change shape. **Write the body to `.develop/prepare-mr/mr-body-<branch>.md`** — never stream a long body inline (output-token ceiling). Run the **redaction pass** (`create-mr-recipe.md` §Redaction): process/behavior only, no patient/user PII, no violation `file:line`.
+Fill every section of the template (`${CLAUDE_SKILL_DIR}/references/description-template.md`), deriving each per `section-authoring.md`; generate the mermaid sequence from the change shape. **Write the body to `.develop/prepare-pr/mr-body-<branch>.md`** — never stream a long body inline (output-token ceiling). Run the **redaction pass** (`create-mr-recipe.md` §Redaction): process/behavior only, no patient/user PII, no violation `file:line`.
 
 **Gate (mandatory) — restate scope, then confirm:**
 > "MR/PR: `<type>(<scope>): <title>` → `<target>`. Body drafted to `<file>`. Sections filled: Background ✓ · Design ✓ · Pitfalls ✓. Open it now? [yes / edit / dry-run / stop]"

@@ -71,7 +71,7 @@ If the calculated risk level suggests a deeper mode than selected, recommend upg
 
 ## 1b. PR Description Completeness
 
-Evaluate the MR description against the **team standard** — the three-section contract authored by `/etk:prepare-mr` (`skills/prepare-mr/references/description-template.md`). Mark each present/missing; for MRs not using the standard, map the equivalent content rather than penalizing the heading names.
+Evaluate the MR description against the **team standard** — the three-section contract authored by `/etk:prepare-pr` (`skills/prepare-pr/references/description-template.md`). Mark each present/missing; for MRs not using the standard, map the equivalent content rather than penalizing the heading names.
 
 **Background:**
 - [ ] What is the need / purpose stated (why this change?)

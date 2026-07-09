@@ -9,7 +9,7 @@ Claude Code plugin for engineering practices: architecture decision records, TDD
 
 ## Contents
 
-- **26 skills**: agent-loops, architecture-decision-record, atlassian-integration, audit-skill, auto-research, brainstorming, caveman, cmux, code-review-playbook, coding-standards, cover, development-pipeline, evidence-verification, experiment, fix-bug, hipaa-compliance-checker, investigate-sentry, prepare-mr, quality-gates, review-mr, scope-check, security-checklist, testing-strategy-builder, tool-wrapper-patterns, verify, zoom-out
+- **26 skills**: agent-loops, architecture-decision-record, atlassian-integration, audit-skill, auto-research, brainstorming, caveman, cmux, code-review-playbook, coding-standards, cover, development-pipeline, evidence-verification, experiment, fix-bug, hipaa-compliance-checker, investigate-sentry, prepare-pr, quality-gates, review-mr, scope-check, security-checklist, testing-strategy-builder, tool-wrapper-patterns, verify, zoom-out
 - **4 agents**: product-manager, quality-reviewer, sprint-prioritizer, tdd-implementer
 - **20 commands**: agent-loops, allocate-tasks-parallel, architecture-decision-record, atlassian-integration, audit-skill, auto-research, brainstorm, code-review-playbook, cover, develop, experiment, fix-bug, generate-agents-md, hipaa-compliance-checker, investigate-sentry, post-mr-comments, review-stats, start-parallel, sync-parallel, verify
 - **1 hook**: review-logger (PostToolUse/Bash) - logs review submissions to JSONL history

@@ -1,6 +1,6 @@
 # MR Description Template (the contract)
 
-This is the standardized MR-description contract `/etk:prepare-mr` authors. It is also usable **standalone** — copy the skeleton into an MR by hand when you are not running the skill.
+This is the standardized MR-description contract `/etk:prepare-pr` authors. It is also usable **standalone** — copy the skeleton into an MR by hand when you are not running the skill.
 
 Fill every section. If a section genuinely does not apply, write `—` and a one-line reason rather than deleting it (a reviewer should see it was considered, not skipped). Keep everything **process/behavior only** — no patient/user PII, no violation `file:line` (see the redaction pass in `create-mr-recipe.md`).
 
@@ -48,8 +48,8 @@ sequenceDiagram
 
 ---
 Closes <ticket>   <!-- only when --closes <ticket> is passed; links/closes the tracker item on merge -->
-Prepared with /etk:prepare-mr via Claude Code
-<!-- prepare-mr:v1 -->  <!-- adoption marker: counted via the VCS API (GitLab / GitHub); do not remove -->
+Prepared with /etk:prepare-pr via Claude Code
+<!-- prepare-pr:v1 -->  <!-- adoption marker: counted via the VCS API (GitLab / GitHub); do not remove -->
 ```
 
 > The `Closes <ticket>` line appears only when the caller passes `--closes` (e.g. `/fix-bug` passes its Jira id). On a GitLab-native issue (`Closes #123`) or a GitHub issue (`Closes #123` in the PR body) merge auto-closes it; for an external tracker (e.g. Jira `PROJ-123`) it is a reference the tracker integration links.
@@ -64,4 +64,4 @@ Prepared with /etk:prepare-mr via Claude Code
 
 ## The adoption marker
 
-The trailing `<!-- prepare-mr:v1 -->` HTML comment is the org-level adoption metric: count MRs/PRs carrying it via the VCS API (GitLab / GitHub) (`review-stats` is per-user-local and cannot measure team uptake). Keep it stable; bump the version suffix only if the template's shape changes.
+The trailing `<!-- prepare-pr:v1 -->` HTML comment is the org-level adoption metric: count MRs/PRs carrying it via the VCS API (GitLab / GitHub) (`review-stats` is per-user-local and cannot measure team uptake). Keep it stable; bump the version suffix only if the template's shape changes.

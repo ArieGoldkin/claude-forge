@@ -147,25 +147,25 @@ git commit -m "fix: <summary from investigation> [<ticket>]
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-### Create the MR — delegate to `/etk:prepare-mr`
+### Create the MR — delegate to `/etk:prepare-pr`
 
-Route MR authoring + creation through **`/etk:prepare-mr`** so the bug MR carries the standardized description (Background / High-Level Design / Pitfalls) instead of an ad-hoc format. prepare-mr pushes the branch, drafts the body to a file (with a HIPAA redaction pass), opens the MR on the detected VCS (`gh` or `glab`), and hands off to `/review-mr`:
+Route MR authoring + creation through **`/etk:prepare-pr`** so the bug MR carries the standardized description (Background / High-Level Design / Pitfalls) instead of an ad-hoc format. prepare-pr pushes the branch, drafts the body to a file (with a HIPAA redaction pass), opens the MR on the detected VCS (`gh` or `glab`), and hands off to `/review-mr`:
 
 ```bash
-/etk:prepare-mr --closes <ticket>
+/etk:prepare-pr --closes <ticket>
 ```
 
 (Add `--target <branch>` and `--label <name>` if the project uses a fixed integration branch or a bug label.)
 
-Give prepare-mr the Phase-3 investigation context so it fills the sections from the bug:
+Give prepare-pr the Phase-3 investigation context so it fills the sections from the bug:
 - **Background** — *need*: the bug's user/system impact; *how it worked before*: the buggy behavior; *how it should work now*: the fixed behavior (root cause from Phase 3); *related flows*: what the bug touched.
 - **High-Level Design** — the changed files by area + a sequence of the corrected flow.
 - **Pitfalls & Regressions** — the regression test written in Phase 4 + the edge cases it guards.
 
 Notes:
-- The **Commit** step above already ran, so prepare-mr finds a clean tree and goes straight to push → create.
-- The Phase-4 tests already ran, so pass that context to prepare-mr's Step-1 gate; it treats that as partial evidence and **runs the lint/typecheck** that Phase 4 didn't cover (Phase 4 runs tests only, not a full `/etk:verify`).
-- Do **not** also hand-write the MR-create command; prepare-mr owns the description contract now.
+- The **Commit** step above already ran, so prepare-pr finds a clean tree and goes straight to push → create.
+- The Phase-4 tests already ran, so pass that context to prepare-pr's Step-1 gate; it treats that as partial evidence and **runs the lint/typecheck** that Phase 4 didn't cover (Phase 4 runs tests only, not a full `/etk:verify`).
+- Do **not** also hand-write the MR-create command; prepare-pr owns the description contract now.
 
 ### Update Jira (if ticket provided)
 
@@ -215,7 +215,7 @@ Present a summary to the user:
 | `mcp__atlassian__getJiraIssue` | Read bug ticket details |
 | `mcp__atlassian__addCommentToJiraIssue` | Post fix comment to ticket |
 | `mcp__atlassian__transitionJiraIssue` | Move ticket to In Progress |
-| `/etk:prepare-mr` | Author the standardized MR description + open the MR (Phase 5) |
+| `/etk:prepare-pr` | Author the standardized MR description + open the MR (Phase 5) |
 | `glab mr view` | View MR details |
 | Glob, Grep, Read | Search and read codebase |
 | Edit, Write | Apply code fixes |
