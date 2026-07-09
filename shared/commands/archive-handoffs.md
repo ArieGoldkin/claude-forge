@@ -29,13 +29,13 @@ Archive old handoff files to keep the handoffs directory clean and focused on re
 
 ```bash
 HANDOFFS_DIR=".claude/continuity/handoffs"
-find "$HANDOFFS_DIR" -name "*.md" -type f | sort
+find "$HANDOFFS_DIR" -type f \( -name "*.yaml" -o -name "*.md" \) | sort
 ```
 
-**Expected filename formats**:
-- `handoff-YYYY-MM-DD.md`
-- `YYYY-MM-DD_topic-name.md`
-- `handoff-YYYY-MM-DD_topic.md`
+**Expected filename formats** (current convention is `.yaml`; `.md` covers pre-v3.0 installs):
+- `YYYY-MM-DD_topic-name.yaml`
+- `handoff-YYYY-MM-DD.md` (legacy)
+- `handoff-YYYY-MM-DD_topic.md` (legacy)
 
 ### Step 2: Determine Archive Cutoff Date
 
@@ -51,7 +51,7 @@ CURRENT_MONTH=$(date +%Y-%m)
 
 ```bash
 # Find handoffs older than cutoff
-OLD_HANDOFFS=$(find "$HANDOFFS_DIR" -name "*.md" -type f | while read file; do
+OLD_HANDOFFS=$(find "$HANDOFFS_DIR" -type f \( -name "*.yaml" -o -name "*.md" \) | while read file; do
     # Extract date from filename
     FILENAME=$(basename "$file")
     FILE_DATE=$(echo "$FILENAME" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
@@ -96,20 +96,20 @@ cat > "$ARCHIVE_INDEX" <<EOF
 
 ## Handoffs in This Archive
 
-$(ls -1 "$ARCHIVE_MONTH_DIR"/*.md | grep -v README | while read f; do
+$(ls -1 "$ARCHIVE_MONTH_DIR"/*.yaml "$ARCHIVE_MONTH_DIR"/*.md 2>/dev/null | grep -v README | while read f; do
     echo "- $(basename "$f")"
 done)
 
 ## Total Files
 
-- Count: $(ls -1 "$ARCHIVE_MONTH_DIR"/*.md | grep -v README | wc -l)
-- Date range: $(ls -1 "$ARCHIVE_MONTH_DIR"/*.md | grep -v README | head -1 | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}') to $(ls -1 "$ARCHIVE_MONTH_DIR"/*.md | grep -v README | tail -1 | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
+- Count: $(ls -1 "$ARCHIVE_MONTH_DIR"/*.yaml "$ARCHIVE_MONTH_DIR"/*.md 2>/dev/null | grep -v README | wc -l)
+- Date range: $(ls -1 "$ARCHIVE_MONTH_DIR"/*.yaml "$ARCHIVE_MONTH_DIR"/*.md 2>/dev/null | grep -v README | head -1 | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}') to $(ls -1 "$ARCHIVE_MONTH_DIR"/*.yaml "$ARCHIVE_MONTH_DIR"/*.md 2>/dev/null | grep -v README | tail -1 | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}')
 
 ## Access
 
 These handoffs are archived for historical reference. To access:
 \`\`\`bash
-cat .claude/continuity/archive/handoffs-$MONTH/handoff-YYYY-MM-DD.md
+cat .claude/continuity/archive/handoffs-$MONTH/YYYY-MM-DD_topic.yaml
 \`\`\`
 
 ## Retention
@@ -123,7 +123,7 @@ EOF
 
 ```bash
 # Ensure recent handoffs remain
-ACTIVE_COUNT=$(find "$HANDOFFS_DIR" -name "*.md" -type f | wc -l)
+ACTIVE_COUNT=$(find "$HANDOFFS_DIR" -type f \( -name "*.yaml" -o -name "*.md" \) | wc -l)
 ARCHIVED_COUNT=$(echo "$OLD_HANDOFFS" | wc -l)
 
 echo "Active handoffs: $ACTIVE_COUNT (recent 30 days)"
@@ -247,8 +247,8 @@ cat .claude/continuity/archive/handoffs-2025-10/handoff-2025-10-15.md
 **Rollback if needed**:
 ```bash
 # Restore archived handoffs
-mv .claude/continuity/archive/handoffs-2025-12/*.md \
-   .claude/continuity/handoffs/
+mv .claude/continuity/archive/handoffs-2025-12/*.yaml \
+   .claude/continuity/handoffs/          # (use *.md for legacy archives)
 ```
 
 ## Edge Cases
