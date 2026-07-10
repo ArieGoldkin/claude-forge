@@ -22,7 +22,7 @@
  */
 
 import { guardBash, guardHasCommand, runGuards } from '../lib/guards.js';
-import { getCommand, getSessionId } from '../lib/input.js';
+import { getCommand, getSessionId, stripProxyPrefix } from '../lib/input.js';
 import { logDebug, logInfo, logPermission } from '../lib/logging.js';
 import { outputAllow, outputSilentSuccess } from '../lib/output.js';
 import type { HookInput, HookResult } from '../types.js';
@@ -528,7 +528,13 @@ export async function autoApproveSafeBash(input: HookInput): Promise<HookResult>
     return outputSilentSuccess();
   }
 
-  for (const segment of segments) {
+  for (const rawSegment of segments) {
+    // Unwrap a token-optimizing proxy prefix (`rtk git status` → `git status`)
+    // so the allowlist keeps matching when a proxy like rtk is active. Mirrors
+    // security-blocker, which already strips before its own matching. Stripping
+    // also hardens approval: `rtk rm -rf ~` unwraps to `rm -rf ~` and is caught
+    // by requiresApproval for the right reason, not merely as an unknown prefix.
+    const segment = stripProxyPrefix(rawSegment);
     if (requiresApproval(segment)) {
       logDebug(HOOK_NAME, `Requires approval: segment '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();

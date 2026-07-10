@@ -11,7 +11,13 @@
  * @module permission/profile-evaluator
  */
 
-import { getCommand, getFilePath, getSessionId, getToolName } from '../lib/input.js';
+import {
+  getCommand,
+  getFilePath,
+  getSessionId,
+  getToolName,
+  stripProxyPrefix,
+} from '../lib/input.js';
 import { logDebug, logInfo, logPermission } from '../lib/logging.js';
 import { outputAllow, outputDeny, outputSilentSuccess } from '../lib/output.js';
 import { evaluatePermission, loadPermissionProfile } from '../lib/permission-profiles.js';
@@ -42,7 +48,10 @@ const HOOK_NAME = 'profile-evaluator';
 export async function profileEvaluator(input: HookInput): Promise<HookResult> {
   const toolName = getToolName(input);
   const filePath = getFilePath(input);
-  const command = getCommand(input);
+  // Unwrap a token-optimizing proxy prefix (`rtk git status` → `git status`) so
+  // profile rules keyed on the command still match when a proxy is active.
+  const rawCommand = getCommand(input);
+  const command = rawCommand ? stripProxyPrefix(rawCommand) : rawCommand;
   const sessionId = getSessionId(input);
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
 

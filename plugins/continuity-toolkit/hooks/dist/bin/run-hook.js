@@ -2892,7 +2892,8 @@ async function autoApproveSafeBash(input) {
     logDebug(HOOK_NAME7, "No parseable segment, deferring to standard flow");
     return outputSilentSuccess();
   }
-  for (const segment of segments) {
+  for (const rawSegment of segments) {
+    const segment = stripProxyPrefix(rawSegment);
     if (requiresApproval(segment)) {
       logDebug(HOOK_NAME7, `Requires approval: segment '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();
@@ -3178,7 +3179,8 @@ var HOOK_NAME10 = "profile-evaluator";
 async function profileEvaluator(input) {
   const toolName = getToolName(input);
   const filePath = getFilePath(input);
-  const command = getCommand(input);
+  const rawCommand = getCommand(input);
+  const command = rawCommand ? stripProxyPrefix(rawCommand) : rawCommand;
   const sessionId = getSessionId(input);
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   logDebug(HOOK_NAME10, `Evaluating ${toolName} with profile`);
@@ -3506,7 +3508,7 @@ function checkBranch() {
 async function gitValidator(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
-  const command = getCommand(input);
+  const command = stripProxyPrefix(getCommand(input));
   if (!isGitCommitCommand(command)) {
     return outputSilentSuccess();
   }
@@ -3580,7 +3582,8 @@ async function bashCombined(input) {
     logInfo(HOOK_NAME14, "Denied by profile");
     return profileResult;
   }
-  const command = getCommand(input);
+  const rawCommand = getCommand(input);
+  const command = rawCommand ? stripProxyPrefix(rawCommand) : rawCommand;
   if (command && /^npm\s+(install|ci|i)\b/.test(command)) {
     warnings.push(
       "npm install detected \u2014 consider running `npm audit` after install to check for vulnerabilities."

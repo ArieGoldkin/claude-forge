@@ -2,6 +2,23 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.7.2] - 2026-07-10 — rtk (token-optimizing proxy) compatibility for command-matching hooks
+
+Makes ctk's command-matching hooks proxy-aware so a token-optimizing CLI proxy — e.g. [rtk](https://github.com/rtk-ai/rtk), whose PreToolUse hook rewrites `git status` → `rtk git status` via `updatedInput` — does not regress permissions or git validation. `security-blocker` already stripped the proxy prefix; the remaining matchers did not — a latent, half-wired gap (the `stripProxyPrefix()` helper existed but was wired into only one of the command-matching hooks). **`dist` rebuilt** (shared hook source changed).
+
+### Fixed
+
+- **Permission regression under an active CLI proxy**: `auto-approve-safe-bash` matched the raw command, so `rtk git status` / `rtk ls` / `rtk grep …` missed the read-only allowlist and fell through to a prompt — defeating the proxy's transparency. It now unwraps the proxy prefix **per segment** before the safe/approval checks. Verified by a runtime harness against the live rtk 0.43.0 hook: every proxied read-only command flips back to auto-approve, while `rtk git push` and `rtk rm -rf ~` still correctly defer.
+- **`git-validator`** no longer skips commit-message / branch validation for `rtk git commit …`.
+- **`profile-evaluator`** now matches permission-profile rules against the unwrapped command.
+- **`bash-combined`** npm-audit advisory unwraps the prefix too (npm isn't rtk-proxied today; keeps the combined pretool path uniformly proxy-aware).
+
+### Notes
+
+- Reuses the existing `stripProxyPrefix()` helper (single source in `lib/input.ts`), mirroring `security-blocker` — no new mechanism, no rebuild of rtk's capability.
+- `preflight-context-injector` (advisory context injection only) is intentionally left unchanged; a missed hint is benign, not a security or permission regression.
+- 8 rtk regression cases added to the `auto-approve-safe-bash` test suite (1889 ctk tests green).
+
 ## [2.7.1] - 2026-07-09 — archive-handoffs .yaml glob fix + shared-hook-count doc reconciliation
 
 Follow-up cleanup after the 2.7.0 cross-fork adoption. Docs/command-definition only — no runtime hook behavior changed, no `dist` rebuild.

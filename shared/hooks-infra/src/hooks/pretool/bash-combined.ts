@@ -19,7 +19,7 @@
  */
 
 import { guardBash, runGuards } from '../lib/guards.js';
-import { getCommand } from '../lib/input.js';
+import { getCommand, stripProxyPrefix } from '../lib/input.js';
 import { logDebug, logInfo, logWarn } from '../lib/logging.js';
 import { outputDeny, outputSilentSuccess, outputWithNotification } from '../lib/output.js';
 import { autoApproveSafeBash } from '../permission/auto-approve-safe-bash.js';
@@ -140,8 +140,11 @@ export async function bashCombined(input: HookInput): Promise<HookResult> {
     return profileResult;
   }
 
-  // 5. npm-audit advisory (warn on npm install/ci)
-  const command = getCommand(input);
+  // 5. npm-audit advisory (warn on npm install/ci). Unwrap a proxy prefix so the
+  // advisory still fires under an active proxy (npm isn't rtk-proxied today, but
+  // this keeps the whole combined pretool path uniformly proxy-aware).
+  const rawCommand = getCommand(input);
+  const command = rawCommand ? stripProxyPrefix(rawCommand) : rawCommand;
   if (command && /^npm\s+(install|ci|i)\b/.test(command)) {
     warnings.push(
       'npm install detected — consider running `npm audit` after install to check for vulnerabilities.'
