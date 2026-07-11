@@ -77,9 +77,26 @@ SKIP_PATHS=$(jq -r '.skip_paths // [] | .[]' .claude/policies/review-policy.json
 - `skip_paths: ["src/gen/**", "*.lock"]`; agent flags a `suggestion` in `src/gen/api-client.ts:88` -> dropped (generated code).
 - Same config; agent flags `security [blocking]` (hardcoded token) in `src/gen/api-client.ts:90` -> kept (security exemption).
 
+## Security-finding precedents (what is NOT a vulnerability)
+
+Filters 1–4 **exempt** `security` findings from being downgraded — so a *real* vuln always survives. This section is the complement: a curated set of precedents for what does **not** count as a real security finding in the first place, so the Security agent doesn't manufacture high-confidence noise. Adapted from Anthropic's bundled `/security-review` precedents (extracted 2026-07-10; see `docs/reviews/2026-07-10_anthropic-review-skills-vs-etk.md`). Apply these **before** labeling a finding `security`; only raise a `security` finding with a **concrete, exploitable attack path** (author's confidence ≥ 80%).
+
+A finding is **not** a security vulnerability when it is only:
+
+1. **Denial-of-service / resource exhaustion** (memory, CPU, file descriptors, rate-limiting) — out of scope; report as `issue`/`suggestion` if it matters, not `security`.
+2. **Framework-safe XSS.** React and Angular escape by default — do **not** raise XSS on `.tsx`/component code unless it uses `dangerouslySetInnerHTML`, `bypassSecurityTrustHtml`, or equivalent unsafe escape hatch.
+3. **Client-side authz / validation "gaps."** Missing auth or input validation in client-side JS/TS is not a vuln — the server is responsible. The same applies to any untrusted data sent to a backend: backend validation is the control.
+4. **Trusted inputs.** Environment variables and CLI flags are trusted in a secure environment; an attack that relies on controlling them is invalid. UUIDs may be assumed unguessable and need no validation.
+5. **Non-security logging.** Logging URLs or non-PII data is safe; only flag logging that exposes secrets, passwords, or PII. Log-spoofing (unsanitized user input in logs) is not a vuln.
+6. **Theoretical timing/races** with no concrete, practical trigger; **path-only SSRF** (SSRF matters only when host or protocol is controllable); **regex injection / ReDoS**; outdated third-party deps (managed separately).
+7. **Memory-safety issues in memory-safe languages** (buffer overflow / use-after-free in Rust/JS/Python/Go — not applicable).
+8. **Test-only / docs-only code** — findings in unit-test files or markdown/docs are not vulnerabilities.
+
+When in doubt on a **security** label, prefer a concrete downgrade to `issue` over a speculative `security [blocking]` — but never suppress a finding with a nameable exploit path.
+
 ## Application Order
 
-Filters are applied in order. The FIRST matching filter sets the confidence; Filter 4 is a hard DROP that runs last:
+Filters are applied in order. The FIRST matching filter sets the confidence; Filter 4 is a hard DROP that runs last. The security-finding precedents above are a **validity gate** applied when an agent is deciding whether to label a finding `security` — they run before the exemptions in Filters 1–4 take effect:
 
 1. Linter-catchable (and NOT `security`)? -> confidence 50
 2. Pre-existing? -> confidence 30
@@ -96,3 +113,5 @@ If none match, the agent's original confidence stands.
 | Pre-existing | 30 | Yes | Security issue newly exploitable |
 | Intentional | 40 | Yes | Security findings |
 | Skip-path glob (`skip_paths`) | DROP | Always (removed) | Security findings |
+
+> **Related:** the hunting method that generates findings (before they reach these filters) is the [finder-angle taxonomy](finder-angles.md).

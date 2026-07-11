@@ -224,7 +224,8 @@ This skill is automatically used by the `/review-mr` command:
 - [Review Process Detailed](${CLAUDE_SKILL_DIR}/references/review-process-detailed.md) - Deep analysis steps and submit guidance
 - [Feedback Patterns](${CLAUDE_SKILL_DIR}/references/feedback-patterns.md) - Feedback principles, comment templates, warning signs
 - [Structured Output Format](${CLAUDE_SKILL_DIR}/references/structured-output-format.md) - Confidence scoring, finding format, filtering rules
-- [False Positive Filtering](${CLAUDE_SKILL_DIR}/references/false-positive-filtering.md) - Anti-FP rules for linter-catchable, pre-existing, intentional
+- [Finder Angles](${CLAUDE_SKILL_DIR}/references/finder-angles.md) - Correctness (A–E incl. wrapper/proxy), cleanup (reuse/simplify/efficiency/altitude), and Conventions/CLAUDE.md hunting lenses
+- [False Positive Filtering](${CLAUDE_SKILL_DIR}/references/false-positive-filtering.md) - Anti-FP rules for linter-catchable, pre-existing, intentional + security-finding validity precedents
 - [Architectural Review Dimensions](${CLAUDE_SKILL_DIR}/references/architectural-review-dimensions.md) - 5-dimension scoring rubric (Scalability, Data Integrity, Security, Ops, Coherence)
 - [Agent Review Templates](${CLAUDE_SKILL_DIR}/references/agent-review-templates.md) - Shared format templates for all review agents
 - [Business Invariants — Authoring](${CLAUDE_SKILL_DIR}/references/business-invariants-authoring.md) - Canonical `.claude/business-invariants.md` format, 3-question test, per-rule schema, anti-patterns

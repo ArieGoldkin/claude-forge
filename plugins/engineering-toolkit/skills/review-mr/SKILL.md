@@ -24,6 +24,17 @@ CC v2.1.111+ includes `/ultrareview` — parallel multi-agent cloud code review 
 
 **Use `/review-mr`** for GitLab MRs or GitHub PRs, policy-controlled workflows, incremental re-reviews, when you need audit trails via `review-logger`, or when you need the inline-anchored post workflow via `/etk:post-mr-comments`. **Use `/ultrareview`** for quick external GitHub PR reviews where cloud parallelism beats local depth.
 
+### The local pre-commit layer (`/code-review`, `/simplify`)
+
+`/review-mr` is the **MR/PR / team / posting** layer. CC's built-in `/code-review` and `/simplify` are the **local / working-tree / pre-commit** layer — reach for them *before* opening the MR, then run `/review-mr` on the pushed MR/PR.
+
+| Built-in | Use before the MR for | Note |
+|----------|-----------------------|------|
+| **`/code-review [low..max]`** | a fast diff-scoped pass on your **uncommitted / working-tree** changes; `--fix` applies fixes, `--comment` posts inline (GitHub only) | effort-tiered; our `review-mr` agents share its [finder-angle taxonomy](../code-review-playbook/references/finder-angles.md) |
+| **`/simplify`** | quality-only cleanup (reuse / simplification / efficiency / altitude), **auto-applied** — not a bug hunt | complements `/code-review`; both are local + apply-to-tree, which `review-mr` deliberately never does (review→draft→post) |
+
+These compose: `/code-review` + `/simplify` locally → `/etk:prepare-pr` → `/review-mr` on the MR → `/etk:post-mr-comments`. They are **not** rebuilt here — cite-don't-duplicate; `review-mr`'s value is the policy/grading/dual-VCS-posting layer the built-ins don't have.
+
 ## Modes
 
 - **Default (Quick)**: Quality checks + concise inline review (5-10 min, no agents)

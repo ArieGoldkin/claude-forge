@@ -1,7 +1,7 @@
 # Engineering Toolkit - Claude Code Plugin
 
 > **Plugin Name**: etk (formerly `engineering-toolkit`, renamed in v2.0.0)
-> **Version**: 2.9.0
+> **Version**: 2.10.0
 
 ## Overview
 
