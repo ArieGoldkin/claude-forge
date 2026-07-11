@@ -39,7 +39,7 @@ claude-forge/
 │   │   └── prompt/             # context-monitor, hipaa-context-injector
 │   └── tests/lib/              # 11 shared library test files
 ├── plugins/
-│   ├── continuity-toolkit/     # Session continuity management (v2.7.1, installed as ctk)
+│   ├── continuity-toolkit/     # Session continuity management (v2.7.2, installed as ctk)
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.10, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.7, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.10, installed as ftk)

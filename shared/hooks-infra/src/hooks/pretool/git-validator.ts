@@ -21,7 +21,7 @@ import {
   validateCommitMessage,
 } from '../lib/git-validators.js';
 import { guardBash, guardHasCommand, runGuards } from '../lib/guards.js';
-import { getCommand } from '../lib/input.js';
+import { getCommand, stripProxyPrefix } from '../lib/input.js';
 import { logDebug, logInfo, logWarn } from '../lib/logging.js';
 import { outputSilentSuccess, outputWarning } from '../lib/output.js';
 import type { HookInput, HookResult } from '../types.js';
@@ -101,8 +101,10 @@ export async function gitValidator(input: HookInput): Promise<HookResult> {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
 
-  // guardHasCommand ensures command is present; narrow for TypeScript
-  const command = getCommand(input) as string;
+  // guardHasCommand ensures command is present; narrow for TypeScript.
+  // Unwrap a token-optimizing proxy prefix (`rtk git commit …` → `git commit …`)
+  // so commit-message/branch validation still fires when a proxy is active.
+  const command = stripProxyPrefix(getCommand(input) as string);
   if (!isGitCommitCommand(command)) {
     return outputSilentSuccess();
   }

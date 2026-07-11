@@ -749,6 +749,60 @@ describe('autoApproveSafeBash', () => {
     });
   });
 
+  describe('rtk proxy prefix (token-optimizing proxy)', () => {
+    // When a proxy like rtk (github.com/rtk-ai/rtk) is active, its PreToolUse
+    // hook rewrites `git status` → `rtk git status`. Without unwrapping, every
+    // proxied read-only command would miss the allowlist and prompt — the
+    // regression this block guards against.
+    it('should auto-approve rtk-proxied git status', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk git status'));
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('should auto-approve rtk-proxied ls', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk ls -la'));
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('should auto-approve rtk-proxied grep', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk grep -rn foo .'));
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('should auto-approve rtk-proxied git log', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk git log --oneline'));
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('should still defer rtk-proxied git push (proxy does not launder a write)', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk git push'));
+
+      expect(result.hookSpecificOutput).toBeUndefined();
+    });
+
+    it('should still defer rtk-proxied rm (dangerous after unwrap)', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk rm -rf ~'));
+
+      expect(result.hookSpecificOutput).toBeUndefined();
+    });
+
+    it('should auto-approve a compound of two rtk-proxied safe commands', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk ls && rtk grep foo .'));
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('should defer a compound where a proxied segment requires approval', async () => {
+      const result = await autoApproveSafeBash(createBashInput('rtk ls && rtk rm file.txt'));
+
+      expect(result.hookSpecificOutput).toBeUndefined();
+    });
+  });
+
   describe('exact safe commands', () => {
     it('should auto-approve pwd', async () => {
       const result = await autoApproveSafeBash(createBashInput('pwd'));
