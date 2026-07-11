@@ -2,6 +2,20 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.10.0] - 2026-07-10 — adopt Anthropic's review-skill patterns into the review process
+
+Capability adoption from Anthropic's bundled `code-review` / `simplify` / `security-review` / `verify` skills (extracted from the Claude Code binary and compared in `docs/reviews/2026-07-10_anthropic-review-skills-vs-etk.md`). Sharpens `review-mr` and disambiguates `verify` — **capability, not substrate** (the built-ins are cited, never rebuilt). Documentation/skill-definition only — no runtime hook behavior changed, no `dist` rebuild.
+
+### Added
+
+- **Finder-angle taxonomy** (`code-review-playbook/references/finder-angles.md`, new): single-sourced correctness angles **A–E** (line-scan, removed-behavior auditor, cross-file tracer, language pitfalls, **wrapper/proxy correctness**), cleanup angles (Reuse / Simplification / Efficiency / Altitude), and a **Conventions (CLAUDE.md)** angle (quote the exact rule + line, no style vibes). Wired into the always-launched Code Quality agent and referenced from `review-mr` Phase 5 so every agent hunts with the relevant lenses.
+- **Security-finding precedents** in `false-positive-filtering.md`: a curated validity gate (framework-safe XSS, client-side authz, trusted env/CLI inputs, path-only SSRF, DOS out of scope, memory-safety in memory-safe languages, test/docs-only) so the Security agent raises only concrete, exploitable findings — complements (does not weaken) the existing "security is never downgraded" exemptions.
+
+### Changed
+
+- **`review-mr` positioning**: added a **local pre-commit layer** note positioning CC's built-in **`/code-review`** (working-tree diff pass, `--fix`/`--comment`) and **`/simplify`** (auto-applied cleanup) as the local layer that precedes an MR-level `review-mr` — alongside the existing `/ultrareview` + `/security-review` cross-references. Cite-don't-duplicate; `review-mr` keeps the policy/grading/dual-VCS-posting layer the built-ins lack.
+- **`verify` disambiguation**: `/etk:verify` (static checks — tests / lint / typecheck evidence) vs the built-in `/verify` (runtime observation — runs the app, drives the surface) are now explicitly positioned as **complementary** (same name, opposite method), resolving the collision. The runtime-observation capability is deliberately **not** rebuilt.
+
 ## [2.9.0] - 2026-07-09 — new `/etk:prepare-pr` skill (VCS-agnostic) + pipeline wiring (cross-fork adoption)
 
 Cross-fork adoption from the internal toolkit fork. Adds a standardized MR/PR authoring skill and wires it into the pipelines. Adopted **VCS-agnostic** (GitHub `gh` + GitLab `glab`), unlike the fork's GitLab-only version. Documentation/skill-definition only — no runtime hook behavior changed.

@@ -15,6 +15,19 @@ keep-coding-instructions: true
 
 Run a structured quality verification pass and collect evidence. Works standalone or as the final phase of `/develop`.
 
+## `/etk:verify` vs the built-in `/verify` (different questions, same name)
+
+Claude Code ships a built-in **`/verify`** with the same name but the **opposite method** — know which you want:
+
+| | **`/etk:verify`** (this skill) | built-in **`/verify`** |
+|---|---|---|
+| Question | *"Is it green / CI-ready?"* | *"Does it actually work when run?"* |
+| Method | **Static checks** — runs tests, lint, typecheck; collects pass/fail evidence | **Runtime observation** — builds + **runs the app**, drives the surface, observes behavior (explicitly *does not* run tests/typecheck) |
+| Evidence | check results, streak gate | stdout / response bodies / screenshots from the running app |
+| Verdict | all-clear / warnings / failures / blocked | PASS / FAIL / BLOCKED / SKIP |
+
+They are **complementary, not redundant** — a change can be green (`/etk:verify`) yet not actually work when run (built-in `/verify`), and vice-versa. For high-stakes changes, run **both**: `/etk:verify` for the CI-readiness evidence a PR needs, then the built-in `/verify` to confirm the behavior end-to-end. `/develop` Phase 5 uses **this** skill for its evidence gate; drive the built-in `/verify` separately when behavioral confirmation matters. (We deliberately do **not** rebuild the runtime-observation capability — the built-in owns it.)
+
 ## Verification Pass
 
 Execute these checks in order. Skip any that don't apply to the current project (e.g., skip typecheck if no TypeScript).
