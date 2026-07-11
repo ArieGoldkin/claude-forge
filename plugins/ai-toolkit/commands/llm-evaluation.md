@@ -1,5 +1,5 @@
 ---
-description: LLM output evaluation and quality assessment. Use when implementing LLM-as-judge patterns, quality gates for AI outputs, or automated evaluation pipel
+description: LLM output evaluation and quality assessment. Use when implementing LLM-as-judge patterns, adding quality gates for AI outputs, or building automated evaluation pipelines. Triggers on LLM evaluation, LLM-as-judge, quality gate, output scoring, hallucination detection, eval pipeline, multi-dimension scoring
 ---
 
 # llm-evaluation

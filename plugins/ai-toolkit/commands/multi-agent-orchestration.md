@@ -1,5 +1,5 @@
 ---
-description: Multi-agent coordination and synthesis patterns. Use when orchestrating multiple specialized agents, implementing fan-out/fan-in workflows, or synthes
+description: Multi-agent fan-out/fan-in orchestration and synthesis. Use when coordinating multiple specialized agents, delegating via a supervisor, resolving conflicting agent outputs, or synthesizing parallel research. Triggers on multi-agent, orchestration, fan-out, fan-in, supervisor delegation, agent coordination, synthesis, parallel agents
 ---
 
 # multi-agent-orchestration

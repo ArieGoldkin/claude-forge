@@ -1,5 +1,5 @@
 ---
-description: Redis semantic caching for LLM applications. Use when implementing vector similarity caching, optimizing LLM costs through cached responses, or buildi
+description: Redis semantic caching for LLM applications. Use when caching LLM responses by vector similarity, cutting cost on repeated queries, or building a multi-level cache. Triggers on semantic cache, Redis cache, vector similarity cache, LLM cache, response caching, cache warming, TTL cache
 ---
 
 # semantic-caching

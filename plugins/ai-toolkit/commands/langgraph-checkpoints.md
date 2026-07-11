@@ -1,5 +1,5 @@
 ---
-description: LangGraph checkpointing and persistence. Use when implementing fault-tolerant workflows, resuming interrupted executions, debugging with state history
+description: LangGraph checkpointing and persistence. Use when implementing fault-tolerant workflows, resuming interrupted executions, or debugging with state history. Triggers on LangGraph checkpoint, persistence, fault tolerance, resume workflow, state history, checkpointer, thread state
 ---
 
 # langgraph-checkpoints

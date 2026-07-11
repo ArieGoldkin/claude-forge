@@ -1,5 +1,5 @@
 ---
-description: Testing patterns for LLM-based applications. Use when testing AI/ML integrations, mocking LLM responses, testing async timeouts, or validating structu
+description: Testing patterns for LLM-based applications. Use when testing AI/ML integrations, mocking LLM responses, handling async timeouts, or validating structured output. Triggers on LLM testing, mock LLM, VCR, test AI, async timeout, structured output validation, deterministic LLM test
 ---
 
 # llm-testing

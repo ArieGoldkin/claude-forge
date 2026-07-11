@@ -1,5 +1,5 @@
 ---
-description: Google NotebookLM - create notebooks, add sources, generate audio/video/slides, chat with documents
+description: Google NotebookLM programmatic access — create notebooks, manage sources (URLs, PDFs, YouTube, Drive), generate audio/video/slides/quizzes, and chat with documents. Use when building a research notebook, generating a podcast from docs, or querying a source collection. Triggers on notebooklm, podcast from docs, research notebook, audio overview, source grounding
 ---
 
 # notebooklm

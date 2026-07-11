@@ -26,8 +26,8 @@
     {
       "name": "atk",
       "source": "./plugins/ai-toolkit",
-      "description": "AI/LLM development toolkit (atk, formerly ai-toolkit) - 14 skills, 1 agent, 23 commands for AI-native development patterns",
-      "version": "2.0.7",
+      "description": "AI/LLM development toolkit (atk, formerly ai-toolkit) - 16 skills, 1 agent, 25 commands for AI-native development patterns",
+      "version": "2.0.8",
       "category": "development"
     },
     {
