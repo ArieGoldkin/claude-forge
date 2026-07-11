@@ -14,10 +14,10 @@ baseline layered on top.
   of the wrapped delegate — recurses or re-enters).
 - **Cleanup** — Reuse / Simplification / Efficiency / Altitude (state the concrete
   cost, not a crash; correctness outranks cleanup on a cap).
-- **Conventions (CLAUDE.md)** — check the diff against the governing CLAUDE.md files
-  (repo-root + any in an ancestor directory of a changed file). **Only flag a
-  violation when you can quote the exact rule and the exact line that breaks it** —
-  no style preferences, no "spirit of the doc." Name the CLAUDE.md path in the finding.
+- **Conventions (CLAUDE.md)** — flag only what you can pin to an **exact rule + exact
+  violating line** (no style preferences, no "spirit of the doc"); name the CLAUDE.md path
+  in the finding. Which CLAUDE.md files govern a changed file is defined once in
+  `references/finder-angles.md` — don't restate it here.
 
 Quality baseline (conventional comments):
 
