@@ -1,24 +1,24 @@
 # atk — AI Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: atk (formerly `ai-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.7
+> **Version**: 2.0.8
 
 ## Overview
 
-Claude Code plugin for AI/LLM development patterns. Provides 14 skills, 1 agent, and 23 commands for AI-native development.
+Claude Code plugin for AI/LLM development patterns. Provides 16 skills, 1 agent, and 25 commands for AI-native development.
 
 **Hooks**: No hooks (shared hooks provided by ctk).
 
 ## Content
 
-### Skills (14)
-ai-native-development, embeddings, function-calling, golden-dataset, langfuse-observability, langgraph, llm-patterns, multi-agent-orchestration, notebooklm, ollama-local, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
+### Skills (16)
+ai-native-development, coaching-conversation-patterns, embeddings, function-calling, golden-dataset, langfuse-observability, langgraph, llm-patterns, multi-agent-orchestration, notebooklm, ollama-local, pgvector-search, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
 
 ### Agents (1)
 ai-ml-engineer
 
-### Commands (23)
-ai-native-development, embeddings, function-calling, golden-dataset-curation, golden-dataset-management, golden-dataset-validation, langfuse-observability, langgraph-checkpoints, langgraph-human-in-loop, langgraph-parallel, langgraph-routing, langgraph-state, langgraph-supervisor, llm-evaluation, llm-streaming, llm-testing, multi-agent-orchestration, notebooklm, ollama-local, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
+### Commands (25)
+ai-native-development, coaching-conversation-patterns, embeddings, function-calling, golden-dataset-curation, golden-dataset-management, golden-dataset-validation, langfuse-observability, langgraph-checkpoints, langgraph-human-in-loop, langgraph-parallel, langgraph-routing, langgraph-state, langgraph-supervisor, llm-evaluation, llm-streaming, llm-testing, multi-agent-orchestration, notebooklm, ollama-local, pgvector-search, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
 
 ## Environment Variables
 

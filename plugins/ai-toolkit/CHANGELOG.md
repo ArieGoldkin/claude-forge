@@ -2,6 +2,15 @@
 
 All notable changes to the ai-toolkit (`atk`) plugin will be documented in this file.
 
+## [2.0.8] - 2026-07-11 — CSO-compliant command descriptions + doc count reconciliation
+
+### Fixed
+
+- **Command descriptions (all 25)**: 17 command `description` fields were hard-truncated at exactly 150 characters, cut mid-word, dropping their `Triggers on` trigger keywords (e.g. `/atk:function-calling` ended `…tool execution loops, o` and `/atk:langgraph-routing` ended `…retry loops wi`). Rewrote every command description to be complete and CSO-compliant (`Use when … Triggers on …`), restoring command-palette discoverability. Commands with a 1:1 skill are aligned to the skill's curated description; themed entry points into consolidated skills (`langgraph-*` → `atk:langgraph`, `llm-*` → `atk:llm-patterns`) keep distinct per-topic descriptions.
+- **Doc count drift**: `.claude-plugin/marketplace.json` and `CLAUDE.md` reported "14 skills, 23 commands"; the actual content is **16 skills, 25 commands** (`coaching-conversation-patterns` and `pgvector-search` were missing from both lists). Reconciled the counts and lists (README was already correct).
+
+No `dist` rebuild — commands and docs only; no hook code changed.
+
 ## [2.0.7] - 2026-07-09 — prune dead session-loader.ts (cross-fork adoption)
 
 ### Removed

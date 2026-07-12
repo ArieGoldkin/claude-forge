@@ -1,5 +1,5 @@
 ---
-description: Retrieval-Augmented Generation patterns for grounded LLM responses. Use when building RAG pipelines, constructing context from retrieved documents, ad
+description: RAG pipeline patterns for grounded LLM responses. Use when building a Q&A system, adding citations, implementing a knowledge base, or preventing hallucinations. Triggers on RAG, retrieval augmented, knowledge base, Q&A pipeline, citations, hybrid search, context retrieval, hallucination prevention
 ---
 
 # rag-retrieval

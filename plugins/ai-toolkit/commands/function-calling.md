@@ -1,5 +1,5 @@
 ---
-description: LLM function calling and tool use patterns. Use when enabling LLMs to call external tools, defining tool schemas, implementing tool execution loops, o
+description: LLM function calling and tool use patterns. Use when enabling LLMs to call external tools, defining tool schemas, building tool execution loops, or returning structured JSON. Triggers on function calling, tool use, tool schema, structured output, Pydantic validation, parallel tool calls, bind tools
 ---
 
 # function-calling
