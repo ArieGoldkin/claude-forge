@@ -70,6 +70,24 @@ jobs:
       - name: good-nested-experimental must pass
         run: bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/good-nested-experimental.json
 
+  # Version consistency across plugin.json / marketplace.json / CHANGELOG /
+  # README / both CLAUDE.md files. Previously enforced by neither CI nor an
+  # installed git hook -- Release Checklist compliance rested on agent memory,
+  # and ftk's skill count had already drifted. Negative fixtures guard against
+  # the "silently validated nothing" failure mode this script has a history of.
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: real repo must pass
+        run: bash scripts/validate-versions.sh
+      - name: good fixture must pass
+        run: bash scripts/validate-versions.sh tests/fixtures/versions/good
+      - name: bad-marketplace fixture must fail
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-marketplace"
+      - name: bad-changelog fixture must fail
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-changelog"
+
   # Static plugin-structure validation via the Claude Code CLI. Non-blocking
   # (mirrors the GitLab `allow_failure: true`): the CLI install/validate path
   # may not be available in every fork.
