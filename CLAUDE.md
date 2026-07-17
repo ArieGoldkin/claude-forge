@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.10, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.8, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.10, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.13.0, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.14.0, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -329,6 +329,8 @@ The model-economics guidance above is **advisory**. As of the v2.1.175–187 lin
 2. **`autoMode.soft_deny: ["Agent(model:fable)"]`** — prompt before an expensive subagent spawn instead of hard-blocking it (respects the `$defaults` merge semantics).
 
 Why this matters here: **auto-research is the repo's highest-fan-out entry point** (a `design` route spawns ~11 agents), so it is exactly where an unconstrained model choice is most expensive. These settings are the enforceable backing for the advisory rule that fan-out must not defeat the cost ceiling. Configure in managed settings (org-wide) or `~/.claude/settings.local.json` (gitignored, per-developer).
+
+> **Note — unattended / cloud routines.** These keys govern *local* sessions (interactive and in-session `--unattended`/`/loop`). A `/schedule` **cloud routine** runs on Anthropic-managed VMs and does **not** read `.claude/settings.json` — govern it through its creation-form scopes (the model selector is the *documented* cost pin; plus network/connectors, branch-push). `enforceAvailableModels` reaches a routine only via **server-managed** settings, and its effect on routine model choice is *inferred, not documented*. The full two-context map is `plugins/engineering-toolkit/skills/auto-research/references/unattended-governance.md`.
 
 ## Output Budgeting
 

@@ -130,12 +130,14 @@ that safe, and both are policy, not code in this file:
 1. **Propose-don't-apply is the load-bearing rail.** For anything above L1 it is the only thing
    between a 2am routine and an unsupervised commit (`unattended-mode.md` rail 1). Never schedule a
    confirmed (L3) write-loop against `main`.
-2. **The model/permission floor** — `enforceAvailableModels` (no expensive model on an unattended
-   routine), the `autoMode.hard_deny` baseline, and `soft_deny: ["Agent(model:fable)"]` — is what
-   makes "leave it running" defensible. It lives in root `CLAUDE.md` → *Model & MCP governance* as
-   advice today; a **pending governance-defaults effort** is meant to turn it into the enforced
-   default set for routines. Until that lands, keep routines at **L1**, or L2 propose-only with a
-   hard `--tokens` cap.
+2. **The model/permission floor differs by context — and for a cloud routine it is NOT your
+   `.claude/settings.json`.** An in-session `--unattended` loop honors the settings floor
+   (`enforceAvailableModels` + the `autoMode.hard_deny` baseline). A `/schedule` **cloud routine reads
+   only server-managed settings** and is governed by its creation-form scopes (model selector,
+   network/connectors, "unrestricted branch pushes" OFF) plus a propose-only prompt — `soft_deny` is
+   "prompt before" and near-useless with no human. The full two-context map is
+   [`unattended-governance.md`](unattended-governance.md). Until you've confirmed a routine's
+   guardrails there, keep it at **L1**, or L2 propose-only with a hard `--tokens` cap.
 
 And the invariant that predates all of it: **routines are user-initiated only** — a human creates
 the `/schedule`; no loop bootstraps a paid background routine on its own (`unattended-mode.md` rail 3,
