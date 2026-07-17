@@ -27,7 +27,11 @@ import {
   resetLinterCache,
   runBiomeCheck,
 } from '../../src/posttool/lint-checker.js';
-import type { BiomeDiagnostic, LintResults, LintViolation } from '../../src/posttool/lint-checker.js';
+import type {
+  BiomeDiagnostic,
+  LintResults,
+  LintViolation,
+} from '../../src/posttool/lint-checker.js';
 import type { HookInput } from '../../src/types.js';
 
 vi.mock('node:child_process', () => ({
