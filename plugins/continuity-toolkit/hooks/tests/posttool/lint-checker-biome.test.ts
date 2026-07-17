@@ -125,6 +125,24 @@ describe('offsetToRowCol', () => {
     expect(() => offsetToRowCol('abc', 9999)).not.toThrow();
     expect(offsetToRowCol('abc', 9999).row).toBe(1);
   });
+
+  it('counts an astral char as ONE column, not two (regression)', () => {
+    // '😀' is 4 UTF-8 bytes and 2 UTF-16 code units, but ONE column to biome.
+    // Using .length (code units) drifted the column +1 per astral char.
+    // Ground truth from biome 1.9.4 on this exact source: 2:22
+    const content = 'const a = 1;\nconst s = "😀"; if (a == 2) { }\n';
+    const byteOffset = Buffer.from('const a = 1;\nconst s = "😀"; if (a ', 'utf8').length;
+    expect(offsetToRowCol(content, byteOffset)).toEqual({ row: 2, column: 22 });
+  });
+
+  it('still gets BMP multi-byte chars right (no regression)', () => {
+    // 'é' is 2 UTF-8 bytes but 1 code unit AND 1 code point -- already correct
+    // before the astral fix, and must stay correct after it.
+    // 'const é' = 7 code points, so the offset just past it is column 8.
+    const content = 'const x = 1;\nconst é = 2;\n';
+    const byteOffset = Buffer.from('const x = 1;\nconst é', 'utf8').length;
+    expect(offsetToRowCol(content, byteOffset)).toEqual({ row: 2, column: 8 });
+  });
 });
 
 describe('normalizeBiomeDiagnostic', () => {
@@ -232,12 +250,37 @@ describe('runBiomeCheck', () => {
     expect(formatIssueFiles).toEqual(['/repo/src/app.ts']);
   });
 
-  it('returns clean on exit code 0', () => {
+  it('returns clean on exit code 0 with empty output', () => {
     mockExecFileSync.mockReturnValue('' as never);
     expect(runBiomeCheck('/bin/biome', ['/repo/a.ts'])).toEqual({
       violations: [],
       formatIssueFiles: [],
     });
+  });
+
+  it('parses warn-severity diagnostics that biome reports on EXIT 0 (regression)', () => {
+    // Verified against biome 1.9.4: a file tripping only a `level: "warn"` rule
+    // exits 0 AND emits the diagnostic. The old code returned null on exit 0,
+    // silently swallowing every biome warning -- the same silent-no-op class
+    // this hook was revived to fix.
+    const WARN_JSON = JSON.stringify({
+      summary: { errors: 0, warnings: 1 },
+      diagnostics: [
+        {
+          category: 'lint/complexity/noExcessiveCognitiveComplexity',
+          severity: 'warning',
+          description: 'Excessive complexity of 22 detected (max: 15).',
+          location: { path: { file: '/repo/src/app.ts' }, span: [16, 18] },
+        },
+      ],
+    });
+    // exit 0 => execFileSync RETURNS stdout rather than throwing
+    mockExecFileSync.mockReturnValue(WARN_JSON as never);
+
+    const { violations } = runBiomeCheck('/bin/biome', ['/repo/src/app.ts']);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.code).toBe('lint/complexity/noExcessiveCognitiveComplexity');
   });
 
   it('returns clean on unparseable output rather than throwing', () => {
@@ -258,12 +301,11 @@ describe('findBiome', () => {
   });
 });
 
-describe('formatMessage — linter-aware format hint', () => {
+describe('formatMessage — format hint is derived PER FILE', () => {
   it('tells a TS author to run biome, not ruff', () => {
     const results: LintResults = {
       violations: { security: [], general: [], totalCount: 0 },
       formatIssueFiles: ['/repo/src/app.ts'],
-      formatter: 'biome',
     };
     const msg = formatMessage(results, 1);
     expect(msg).toContain('biome format --write');
@@ -274,9 +316,21 @@ describe('formatMessage — linter-aware format hint', () => {
     const results: LintResults = {
       violations: { security: [], general: [], totalCount: 0 },
       formatIssueFiles: ['/repo/a.py'],
-      formatter: 'ruff',
     };
     expect(formatMessage(results, 1)).toContain('ruff format');
+  });
+
+  it('names the RIGHT formatter for each file in a MIXED batch (regression)', () => {
+    // A MultiEdit touching both. The old single `formatter` scalar resolved to
+    // 'ruff' for the whole batch, telling the TS author to run `ruff format`
+    // -- which the code's own docstring called "worse than useless".
+    const results: LintResults = {
+      violations: { security: [], general: [], totalCount: 0 },
+      formatIssueFiles: ['/repo/a.py', '/repo/component.ts'],
+    };
+    const msg = formatMessage(results, 2);
+    expect(msg).toContain('a.py needs formatting (run `ruff format`)');
+    expect(msg).toContain('component.ts needs formatting (run `biome format --write`)');
   });
 });
 
