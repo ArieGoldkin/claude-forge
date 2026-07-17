@@ -4549,9 +4549,13 @@ function offsetToRowCol(content, byteOffset) {
   const clamped = Math.max(0, Math.min(byteOffset, buf.length));
   const before = buf.subarray(0, clamped).toString("utf8");
   const lines = before.split("\n");
+  const lastLine = lines[lines.length - 1] ?? "";
   return {
     row: lines.length,
-    column: (lines[lines.length - 1]?.length ?? 0) + 1
+    // Count CODE POINTS, not UTF-16 code units: an astral char (emoji, some
+    // CJK ext) is one column to biome but `.length` 2 in JS, which drifted the
+    // reported column by +1 per astral char earlier on the line.
+    column: [...lastLine].length + 1
   };
 }
 function normalizeBiomeDiagnostic(diag, fileContents) {
@@ -4574,12 +4578,12 @@ function normalizeBiomeDiagnostic(diag, fileContents) {
 }
 function execBiomeJson(biomePath, filePaths) {
   try {
-    execFileSync(biomePath, ["check", "--reporter=json", ...filePaths], {
+    const stdout = execFileSync(biomePath, ["check", "--reporter=json", ...filePaths], {
       timeout: LINTER_TIMEOUT_MS,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"]
     });
-    return null;
+    return stdout || null;
   } catch (err) {
     const execError = err;
     if (execError.status === 1 && execError.stdout) {
@@ -4674,9 +4678,13 @@ ${lines.join("\n")}`;
   }
   return section;
 }
-function formatFormatSection(files, formatter = "ruff") {
-  const cmd = formatter === "biome" ? "biome format --write" : "ruff format";
-  const fileLines = files.map((f) => `  ${path2.basename(f)} needs formatting (run \`${cmd}\`)`);
+function formatterFor(file) {
+  return JS_EXTENSIONS.has(path2.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
+}
+function formatFormatSection(files) {
+  const fileLines = files.map(
+    (f) => `  ${path2.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
+  );
   return `Format issues (${plural(files.length, "file")}):
 ${fileLines.join("\n")}`;
 }
@@ -4692,7 +4700,7 @@ function formatSummaryLine(classified, formatIssueFiles, fileCount) {
   return `Total: ${parts.join(", ")} in ${plural(fileCount, "file")}.`;
 }
 function formatMessage(results, fileCount) {
-  const { violations, formatIssueFiles, formatter } = results;
+  const { violations, formatIssueFiles } = results;
   const { security, general, totalCount } = violations;
   if (totalCount === 0 && formatIssueFiles.length === 0) {
     return "";
@@ -4705,7 +4713,7 @@ function formatMessage(results, fileCount) {
     sections.push(formatGeneralSection(general, security.length));
   }
   if (formatIssueFiles.length > 0) {
-    sections.push(formatFormatSection(formatIssueFiles, formatter));
+    sections.push(formatFormatSection(formatIssueFiles));
   }
   sections.push(formatSummaryLine(violations, formatIssueFiles, fileCount));
   let message = sections.join("\n\n");
@@ -4808,12 +4816,8 @@ async function lintChecker(input) {
     return outputSilentSuccess();
   }
   const formatIssueFiles = [...ruffRun.formatIssueFiles, ...biomeRun.formatIssueFiles];
-  const formatter = ruffRun.formatIssueFiles.length === 0 && biomeRun.formatIssueFiles.length > 0 ? "biome" : "ruff";
   const classified = classifyViolations([...ruffRun.violations, ...biomeRun.violations]);
-  const message = formatMessage(
-    { violations: classified, formatIssueFiles, formatter },
-    checkedCount
-  );
+  const message = formatMessage({ violations: classified, formatIssueFiles }, checkedCount);
   if (!message) {
     logDebug(HOOK_NAME23, `Lint clean: ${[...existingPython, ...existingJs].join(", ")}`);
     return outputSilentSuccess();

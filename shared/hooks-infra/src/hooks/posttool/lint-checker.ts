@@ -117,9 +117,8 @@ export interface ClassifiedViolations {
  */
 export interface LintResults {
   violations: ClassifiedViolations;
+  /** Fix hints are derived per file from its extension -- see `formatterFor`. */
   formatIssueFiles: string[];
-  /** Formatter named in the format-issue hint. Defaults to ruff (Python). */
-  formatter?: 'ruff' | 'biome';
 }
 
 // =============================================================================
@@ -401,9 +400,13 @@ export function offsetToRowCol(
   const clamped = Math.max(0, Math.min(byteOffset, buf.length));
   const before = buf.subarray(0, clamped).toString('utf8');
   const lines = before.split('\n');
+  const lastLine = lines[lines.length - 1] ?? '';
   return {
     row: lines.length,
-    column: (lines[lines.length - 1]?.length ?? 0) + 1,
+    // Count CODE POINTS, not UTF-16 code units: an astral char (emoji, some
+    // CJK ext) is one column to biome but `.length` 2 in JS, which drifted the
+    // reported column by +1 per astral char earlier on the line.
+    column: [...lastLine].length + 1,
   };
 }
 
@@ -457,15 +460,20 @@ export function normalizeBiomeDiagnostic(
  */
 function execBiomeJson(biomePath: string, filePaths: string[]): string | null {
   try {
-    execFileSync(biomePath, ['check', '--reporter=json', ...filePaths], {
+    // Exit 0 does NOT mean "no diagnostics" -- biome exits 0 while still
+    // reporting every warn-level rule (verified: a file tripping only
+    // noExcessiveCognitiveComplexity exits 0 with 1 diagnostic). Returning
+    // null here silently swallowed every biome warning, which is the same
+    // silent-no-op class this hook was revived to fix.
+    const stdout = execFileSync(biomePath, ['check', '--reporter=json', ...filePaths], {
       timeout: LINTER_TIMEOUT_MS,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return null; // exit 0 = clean, nothing to parse
+    return stdout || null;
   } catch (err: unknown) {
     const execError = err as { stdout?: string; status?: number };
-    // Exit code 1 = diagnostics found, JSON on stdout
+    // Exit code 1 = error-level diagnostics found, JSON still on stdout
     if (execError.status === 1 && execError.stdout) {
       return execError.stdout;
     }
@@ -606,10 +614,20 @@ function formatGeneralSection(general: LintViolation[], securityCount: number): 
  *
  * The fix hint must name the formatter that actually owns the file --
  * telling a TypeScript author to run `ruff format` is worse than useless.
+ * Derived PER FILE from its extension: a single scalar cannot describe a
+ * mixed batch (a MultiEdit touching app.py and component.ts), which is
+ * exactly how the earlier version told TS authors to run `ruff format`.
  */
-function formatFormatSection(files: string[], formatter: 'ruff' | 'biome' = 'ruff'): string {
-  const cmd = formatter === 'biome' ? 'biome format --write' : 'ruff format';
-  const fileLines = files.map((f) => `  ${path.basename(f)} needs formatting (run \`${cmd}\`)`);
+function formatterFor(file: string): string {
+  return JS_EXTENSIONS.has(path.extname(file).toLowerCase())
+    ? 'biome format --write'
+    : 'ruff format';
+}
+
+function formatFormatSection(files: string[]): string {
+  const fileLines = files.map(
+    (f) => `  ${path.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
+  );
   return `Format issues (${plural(files.length, 'file')}):\n${fileLines.join('\n')}`;
 }
 
@@ -641,7 +659,7 @@ function formatSummaryLine(
  * @returns Formatted message string, empty if nothing to report
  */
 export function formatMessage(results: LintResults, fileCount: number): string {
-  const { violations, formatIssueFiles, formatter } = results;
+  const { violations, formatIssueFiles } = results;
   const { security, general, totalCount } = violations;
 
   if (totalCount === 0 && formatIssueFiles.length === 0) {
@@ -657,7 +675,7 @@ export function formatMessage(results: LintResults, fileCount: number): string {
     sections.push(formatGeneralSection(general, security.length));
   }
   if (formatIssueFiles.length > 0) {
-    sections.push(formatFormatSection(formatIssueFiles, formatter));
+    sections.push(formatFormatSection(formatIssueFiles));
   }
   sections.push(formatSummaryLine(violations, formatIssueFiles, fileCount));
 
@@ -794,11 +812,9 @@ function lintJsFiles(files: string[], projectDir: string): LinterRun {
 }
 
 /**
- * Label the terminal summary by which linter actually ran.
- *
- * Deliberately NOT derived from `formatter`: a TS file with lint errors but
- * clean formatting leaves `formatter` at its 'ruff' default, which would
- * label a biome run "ruff".
+ * Label the terminal summary by which linter actually ran -- derived from the
+ * files checked, not from anything format-related (a TS file can have lint
+ * errors and clean formatting).
  */
 function linterLabelFor(pythonCount: number, jsCount: number): string {
   if (pythonCount > 0 && jsCount > 0) return 'lint';
@@ -838,18 +854,8 @@ export async function lintChecker(input: HookInput): Promise<HookResult> {
   }
 
   const formatIssueFiles = [...ruffRun.formatIssueFiles, ...biomeRun.formatIssueFiles];
-  // Name the formatter that owns the format issues. Ruff wins a mixed batch;
-  // biome only when it is the sole contributor.
-  const formatter: 'ruff' | 'biome' =
-    ruffRun.formatIssueFiles.length === 0 && biomeRun.formatIssueFiles.length > 0
-      ? 'biome'
-      : 'ruff';
-
   const classified = classifyViolations([...ruffRun.violations, ...biomeRun.violations]);
-  const message = formatMessage(
-    { violations: classified, formatIssueFiles, formatter },
-    checkedCount
-  );
+  const message = formatMessage({ violations: classified, formatIssueFiles }, checkedCount);
   if (!message) {
     logDebug(HOOK_NAME, `Lint clean: ${[...existingPython, ...existingJs].join(', ')}`);
     return outputSilentSuccess();
