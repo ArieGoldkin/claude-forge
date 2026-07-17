@@ -24,16 +24,17 @@ If `--resume` is present:
 
 ## Execute Development Pipeline Skill
 
-Follow the development-pipeline skill exactly as written in `.claude/skills/development-pipeline/SKILL.md`.
+Follow the instructions in the `development-pipeline` skill exactly as written.
 
 The skill will:
 1. Detect or use the specified mode (greenfield/brownfield/bugfix/refactor)
-2. Run Phase 0 (Gating) — identify critical unknowns, block if too many
+2. Run Phase 0 (Gate) — identify critical unknowns, block if too many
 3. Run Phase 1 (Design) — brainstorm approach (skipped for bugfix or `--skip-design`)
-4. Run Phase 2 (Plan) — quality gates, task breakdown, test strategy
-5. Run Phase 3 (Build) — TDD implementation per task
-6. Run Phase 4 (Verify) — evidence collection, quality checks
-7. Present summary and offer to open the MR via `/etk:prepare-pr`
+4. Run Phase 2 (Hypothesize) — assumptions, risks, success criteria (skipped for bugfix)
+5. Run Phase 3 (Plan) — quality gates, task breakdown, test strategy
+6. Run Phase 4 (Build) — TDD implementation per task
+7. Run Phase 5 (Verify) — evidence collection, quality checks
+8. Present summary and offer to open the MR/PR via `/etk:prepare-pr`
 
 Each phase has a human checkpoint. Respond with: **yes**, **adjust**, **skip**, or **stop**.
 

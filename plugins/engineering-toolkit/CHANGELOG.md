@@ -2,6 +2,55 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.12.0] - 2026-07-17 — four new router routes (ship · triage · compliance · audit-skill) + two tiebreaks
+
+`/etk:auto-research` classified goals into 10 categories across 8 target skills. Four capabilities it should already have reached were unroutable: you could say *"ship it"* or *"is this HIPAA compliant?"* and the router had nowhere to send you. All four targets already carried the trigger vocabulary — no new keywords were authored, only wiring.
+
+### Added
+
+- **`ship` → `/prepare-pr`** (*"ship it"*, *"ready for review"*, *"open a PR"*). The highest-value addition and **the only write-route**: it commits, pushes, and opens the MR/PR. It **gates itself** — `prepare-pr/SKILL.md:17` requires human approval of the drafted body before creating anything — so the router must **not** pass `--no-confirm` through. The router's job is to reach the skill, not to defeat its safety.
+- **`triage` → `/investigate-sentry`** (*"sentry issue"*, *"sentry triage"*). Writes an assessment doc; proposes a fix rather than applying one.
+- **`compliance` → `/hipaa-compliance-checker`** (*"is this compliant?"*, *"PHI"*, *"BAA"*). Analysis-only.
+- **`audit-skill` → `/audit-skill`** (*"skill quality"*, *"prune skill"*, *"sediment"*). The safest possible route — the skill declares `disallowed-tools: Edit/Write/NotebookEdit`, so it is structurally incapable of editing what it audits.
+- **Four disambiguation rules**, because the table is applied top-down and three of the four new routes are shadowed by an earlier row on a bare keyword match:
+  - **`ship` vs `review`** — the widest collision: `review` sits 6 rows earlier and owns "PR / pull request / review", substrings of nearly every `ship` signal. Does the MR/PR already exist? No → `ship`; yes → `review`.
+  - **`triage` vs `fix`/`diagnose`** — `fix` is the **first row** and owns "error", which sits inside `triage`'s own "production error". **The Sentry ID is the tiebreak, not the verb** — present → `triage`, overriding both.
+  - **`compliance` vs `verify`** — `verify` owns "check" and sits earlier. A HIPAA/PHI/BAA term present → `compliance`.
+  - **`audit-skill` vs `improve-skill`** — both target a `SKILL.md`. *Judging* quality → `audit-skill` (read-only); *changing* the skill → `improve-skill` (mutates, 5-iter budget, human gate).
+- Parameter-extraction sections for all four routes in `references/routing-rules.md`, plus disambiguation rules 10–12.
+
+### Fixed
+
+- **The routing map had leaked back into two more places** — the exact drift root `CLAUDE.md:381` names *this skill* as the cautionary example for ("auto-research once encoded its routing map in three places"). The 2.8.3 pass collapsed three encodings inside the skill body but left two outside it: the **frontmatter `description`** and the **command wrapper's `description`** both enumerated all 8 targets, and both went stale the moment a route was added. Neither drove discovery (the `Triggers on:` clause does that) and a model-invoked description is permanent per-turn context rent — so both are now generic ("routes it to the right etk/ctk skill"). The Intent Classification table is the only place the *routing map* exists.
+- **A hardcoded route count** — Phase 1 step 2 said *"Classify into one of **10** intent categories"*, which this change would have silently falsified. Replaced with a pointer to the table; the count is no longer restated anywhere.
+
+### Notes
+
+- **Adding a route touches three tables, not one.** The routing *map* (category → target) is single-sourced in the Intent Classification table, but Phase 4 (heartbeat) and Phase 5 (report sections) are keyed **by target** and needed rows for all four new routes — they had silently gone stale, still listing exactly the pre-PR 8. Both now carry an explicit **fallback line** ("any route not listed: single-pass / delegate to the skill's own format") so the next route added is a one-place edit again.
+- **Route count is now 14 categories → 12 distinct targets** (some categories share a target: `fix`/`diagnose` → `/fix-bug`, `optimize`/`improve-skill` → `/experiment`).
+- **`zoom-out` was deliberately NOT routed.** *"What's the architecture here?"* maps to it perfectly, but it is the only skill in the corpus declaring `disable-model-invocation: true`, justified in-file and explicitly honored by `fix-bug/SKILL.md:59` ("surface the suggestion, don't auto-fire"). Routing to it would reverse a decision documented in two places.
+- **No routes from atk (25 commands), dtk, or ftk.** Their commands are *knowledge libraries*, not processes — "build a RAG pipeline" should route to `/develop`, which then loads `atk:rag-retrieval` as context. A router dispatching to a reference doc is a category error, not a missing feature.
+
+## [2.11.0] - 2026-07-17 — real worktree isolation for parallel agents; stop claiming a mitigation we didn't ship
+
+`/etk:start-parallel` runs several agents concurrently against **one shared working tree**, with `.squad/locks/` as the only thing between two agents and a corrupted file — and those locks are advisory: nothing enforces them, so an agent that never checks simply overwrites. Meanwhile the failure-modes table *claimed* worktree isolation we did not implement. This makes the isolation real and the claim honest.
+
+### Added
+
+- **A worktree per agent in `/etk:start-parallel`** (new Step 2). Each terminal gets its own checkout and branch via `git worktree add`, so collision is structurally impossible rather than merely discouraged; `.squad/` locks drop to belt-and-braces. Coordination state (`locks/`, `comms/`) stays shared via `SQUAD_DIR` — only the *code* is isolated. ctk's `WorktreeCreate` hook fires on each, seeding per-agent continuity.
+- **Portable teardown**, verified on **git 2.15**: `rm -rf` + `git worktree prune` + `git branch -d`. `git worktree remove` requires **git ≥ 2.17** and is documented as the newer-git equivalent, not the only path — it does not exist on the git shipped with some LTS distros and Xcode CLI tools. Order is called out too: `git branch -d` refuses while the branch is still registered to a worktree, so prune first.
+
+### Fixed
+
+- **`loop-failure-modes.md` claimed a mitigation that did not exist.** Mode 9 (Parallel Collision) listed `` `Workflow` `isolation: 'worktree'` `` as active, strength **"structural + worktree"** — but `grep -rn "git worktree add"` returned **0 hits** and no code configured `isolation`. A guardrail table that overstates coverage is worse than no table: it is exactly what a pre-flight check consults before letting a loop run unwatched. Now claims **structural** (every etk agent excludes `Agent`/`Task`, so a routed skill cannot spawn colliding children at all — we buy collision-safety by *forbidding* fan-out, not by isolating it), plus worktree specifically in `start-parallel`. `Workflow` `isolation: 'worktree'` is noted as the native lever *if* we ever ship `agent()` fan-out; we ship none today.
+- **`start-parallel.md` shipped bash that cannot execute.** The lock dashboard's `for lock in .squad/locks/*.lock 2>/dev/null; do` is a syntax error (a redirect is not valid in a `for` list) — proof the block had never been run. Fixed; the `[ -f ]` guard already handled the no-matches case. All 13 bash blocks in the file now pass `bash -n`.
+- **`commands/develop.md` pointed at a path that does not exist** (`.claude/skills/development-pipeline/SKILL.md`) and listed **pre-Hypothesize phase numbering** (Plan as Phase 2, Verify as Phase 4) against a skill that has had 6 phases since Hypothesize was added. Both would misdirect anyone running `/etk:develop`. Now names the skill (matching sibling commands) and lists all 6 phases.
+
+### Notes
+
+- Isolation was **verified, not asserted**: a probe worktree was created, written to, and confirmed not to leak into the main tree, then torn down with zero residue — on this machine's actual git 2.15.
+- Reading the doc would not have caught the teardown bug. This is the `loop-failure-modes` pre-flight discipline applied to itself: *"if you haven't run the task node-by-node by hand once, you haven't found the failure points."*
+
 ## [2.10.0] - 2026-07-10 — adopt Anthropic's review-skill patterns into the review process
 
 Capability adoption from Anthropic's bundled `code-review` / `simplify` / `security-review` / `verify` skills (extracted from the Claude Code binary and compared in `docs/reviews/2026-07-10_anthropic-review-skills-vs-etk.md`). Sharpens `review-mr` and disambiguates `verify` — **capability, not substrate** (the built-ins are cited, never rebuilt). Documentation/skill-definition only — no runtime hook behavior changed, no `dist` rebuild.
