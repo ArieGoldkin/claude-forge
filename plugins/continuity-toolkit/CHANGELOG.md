@@ -2,6 +2,30 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.7.3] - 2026-07-17 — revive two hooks that shipped dead (TypeScript lint + error rules)
+
+Two PostToolUse hooks fired on every matching edit and did nothing. Both were **silent** no-ops, which is why they survived: a hook that reports nothing is indistinguishable from a hook that finds nothing. Found by a Software Factory audit of our own guardrails. **`dist` rebuilt** (shared hook source changed).
+
+### Fixed
+
+- **`lint-checker` linted no TypeScript at all — in a TypeScript monorepo.** `hooks.json` gated the hook on `*.ts`/`*.tsx`/`*.js`/`*.py`, but the implementation only ever handled `.py`/`.pyi`, so every TS edit spawned the hook and got zero lint. Biome was configured but no PostToolUse hook invoked it. The hook now lints JS/TS via **biome** alongside Python via **ruff**, routing per file extension. Verified end-to-end against the real built hook + real biome 1.9.4: an `x == 1` / `console.log` edit now returns `lint/suspicious/noDoubleEquals real.ts:2:7` where it previously returned silence.
+- **`error-warner` could never load its rules.** Rules resolve from `$CLAUDE_PLUGIN_ROOT/.claude/rules/error_rules.json`; the hook is wired from ctk, and ctk shipped no `.claude/` directory — so `loadErrorRules()` returned `null` and the hook silently no-oped for every user, in every session. ctk now ships the default rules at the fallback path (a symlink to `shared/configs/rules/`, mirroring dtk). **No code change** — the resolution logic was always correct; the file was simply absent.
+- **`lint-checker` never ran on `MultiEdit`, and never on `.jsx`/`.mjs`/`.cjs`/`.pyi`.** The `if` condition listed only `Write()`/`Edit()` clauses while the matcher claimed `Write|Edit|MultiEdit`, so no MultiEdit ever satisfied it — leaving multi-file edits unlinted **including Python**, a pre-existing gap in the ruff path. All clauses and extensions added.
+
+### Added
+
+- **Biome support in `lint-checker`**: `findBiome()` (project `node_modules/.bin` → PATH), `runBiomeCheck()`, `normalizeBiomeDiagnostic()`, and `offsetToRowCol()`. A single `biome check` yields both lint and format results, unlike ruff's separate `check` / `format --check`.
+- **`LintViolation`**, the shared display shape both linters normalize into. `RuffViolation` is structurally assignable to it, so widening the formatters left all 46 existing ruff tests passing untouched — and the biome path avoids forging ruff-only fields (`noqa_row`, `end_location`) that would have been meaningless.
+- **Security classification spans both linters**: ruff's bandit `S`-prefix *or* biome's `lint/security/*` category.
+- **Format hints name the right formatter** — `biome format --write` for JS/TS, `ruff format` for Python.
+- **28 regression tests** (`lint-checker-biome.test.ts`, `error-warner-rules-resolution.test.ts`). The error-warner tests deliberately **do not mock** `loadErrorRules` — the existing suite mocks it, supplying rules production never had, which is precisely how the hook shipped inert.
+
+### Notes
+
+- Biome's JSON schema is not ruff-shaped and the tests are pinned to real 1.9.4 output: `location.path` is an object, `location.span` is a **byte-offset pair** (converted via `Buffer` — UTF-16 string slicing corrupts any non-ASCII source), and `format` diagnostics carry a **null span**.
+- Both hooks remain **advisory** (`continue: true`) by design. PostToolUse fires after the tool has run, so it cannot un-run it; blocking belongs to PreToolUse.
+- Unverified: whether CC's `if` evaluator extracts paths from `MultiEdit`'s `edits` array. The added clauses are monotonic — worst case a no-op, best case they close the gap.
+
 ## [2.7.2] - 2026-07-10 — rtk (token-optimizing proxy) compatibility for command-matching hooks
 
 Makes ctk's command-matching hooks proxy-aware so a token-optimizing CLI proxy — e.g. [rtk](https://github.com/rtk-ai/rtk), whose PreToolUse hook rewrites `git status` → `rtk git status` via `updatedInput` — does not regress permissions or git validation. `security-blocker` already stripped the proxy prefix; the remaining matchers did not — a latent, half-wired gap (the `stripProxyPrefix()` helper existed but was wired into only one of the command-matching hooks). **`dist` rebuilt** (shared hook source changed).

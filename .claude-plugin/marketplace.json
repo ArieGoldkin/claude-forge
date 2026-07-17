@@ -5,15 +5,15 @@
     "email": "ariegoldkin88@gmail.com"
   },
   "metadata": {
-    "description": "Claude Forge — a suite of domain-agnostic Claude Code plugins sharing hook infrastructure via directory-level symlinks (session continuity, DevOps/AWS/Terraform, AI/LLM patterns, frontend & UI, engineering & code review).",
+    "description": "Claude Forge \u2014 a suite of domain-agnostic Claude Code plugins sharing hook infrastructure via directory-level symlinks (session continuity, DevOps/AWS/Terraform, AI/LLM patterns, frontend & UI, engineering & code review).",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
-      "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 10 skills, 11 commands, 32 shared hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact → SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.7.2",
+      "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 10 skills, 11 commands, 32 shared hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact \u2192 SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
+      "version": "2.7.3",
       "category": "development"
     },
     {

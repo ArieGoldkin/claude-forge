@@ -4430,6 +4430,9 @@ async function failureLogger(input) {
 }
 var HOOK_NAME23 = "lint-checker";
 var PYTHON_EXTENSIONS = /* @__PURE__ */ new Set([".py", ".pyi"]);
+var JS_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+var BIOME_SECURITY_PREFIX = "lint/security/";
+var BIOME_FORMAT_CATEGORY = "format";
 var MAX_VIOLATIONS_SHOWN = 20;
 var MAX_MESSAGE_LENGTH = 3e3;
 var LINTER_TIMEOUT_MS = 5e3;
@@ -4514,11 +4517,126 @@ function runRuffFormat(linterPath, filePaths) {
     return [];
   }
 }
+var cachedBiomePath = null;
+function findBiome(projectDir) {
+  if (cachedBiomePath !== null) {
+    return cachedBiomePath ?? void 0;
+  }
+  const localBiome = path2.join(projectDir, "node_modules", ".bin", "biome");
+  if (fs6.existsSync(localBiome)) {
+    cachedBiomePath = localBiome;
+    logDebug(HOOK_NAME23, `Found biome in node_modules: ${localBiome}`);
+    return localBiome;
+  }
+  try {
+    const whichResult = execSync("which biome 2>/dev/null", {
+      timeout: 2e3,
+      encoding: "utf8"
+    }).trim();
+    if (whichResult) {
+      cachedBiomePath = whichResult;
+      logDebug(HOOK_NAME23, `Found biome in PATH: ${whichResult}`);
+      return whichResult;
+    }
+  } catch {
+  }
+  cachedBiomePath = void 0;
+  logDebug(HOOK_NAME23, "biome not found");
+  return void 0;
+}
+function offsetToRowCol(content, byteOffset) {
+  const buf = Buffer.from(content, "utf8");
+  const clamped = Math.max(0, Math.min(byteOffset, buf.length));
+  const before = buf.subarray(0, clamped).toString("utf8");
+  const lines = before.split("\n");
+  const lastLine = lines[lines.length - 1] ?? "";
+  return {
+    row: lines.length,
+    // Count CODE POINTS, not UTF-16 code units: an astral char (emoji, some
+    // CJK ext) is one column to biome but `.length` 2 in JS, which drifted the
+    // reported column by +1 per astral char earlier on the line.
+    column: [...lastLine].length + 1
+  };
+}
+function normalizeBiomeDiagnostic(diag, fileContents) {
+  const filename = diag.location?.path?.file;
+  if (!filename) return null;
+  const span = diag.location?.span;
+  let location = { row: 1, column: 1 };
+  if (span && Array.isArray(span) && typeof span[0] === "number") {
+    const content = fileContents.get(filename);
+    if (content !== void 0) {
+      location = offsetToRowCol(content, span[0]);
+    }
+  }
+  return {
+    code: diag.category,
+    message: diag.description || "(no description)",
+    filename,
+    location
+  };
+}
+function execBiomeJson(biomePath, filePaths) {
+  try {
+    const stdout = execFileSync(biomePath, ["check", "--reporter=json", ...filePaths], {
+      timeout: LINTER_TIMEOUT_MS,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    return stdout || null;
+  } catch (err) {
+    const execError = err;
+    if (execError.status === 1 && execError.stdout) {
+      return execError.stdout;
+    }
+    logWarn(HOOK_NAME23, `biome execution error: ${String(err)}`);
+    return null;
+  }
+}
+function parseBiomeDiagnostics(stdout) {
+  try {
+    const parsed = JSON.parse(stdout);
+    return Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
+  } catch {
+    logWarn(HOOK_NAME23, "Failed to parse biome JSON output, skipping");
+    return [];
+  }
+}
+function readDiagnosticSources(diagnostics) {
+  const contents = /* @__PURE__ */ new Map();
+  for (const diag of diagnostics) {
+    const f = diag.location?.path?.file;
+    if (!f || contents.has(f)) continue;
+    try {
+      contents.set(f, fs6.readFileSync(f, "utf8"));
+    } catch {
+    }
+  }
+  return contents;
+}
+function runBiomeCheck(biomePath, filePaths) {
+  const stdout = execBiomeJson(biomePath, filePaths);
+  if (!stdout) return { violations: [], formatIssueFiles: [] };
+  const diagnostics = parseBiomeDiagnostics(stdout);
+  const fileContents = readDiagnosticSources(diagnostics);
+  const violations = [];
+  const formatIssueFiles = /* @__PURE__ */ new Set();
+  for (const diag of diagnostics) {
+    if (diag.category === BIOME_FORMAT_CATEGORY) {
+      const f = diag.location?.path?.file;
+      if (f) formatIssueFiles.add(f);
+      continue;
+    }
+    const normalized = normalizeBiomeDiagnostic(diag, fileContents);
+    if (normalized) violations.push(normalized);
+  }
+  return { violations, formatIssueFiles: Array.from(formatIssueFiles) };
+}
 function classifyViolations(violations) {
   const security = [];
   const general = [];
   for (const v of violations) {
-    if (v.code.startsWith("S")) {
+    if (v.code.startsWith("S") || v.code.startsWith(BIOME_SECURITY_PREFIX)) {
       security.push(v);
     } else {
       general.push(v);
@@ -4560,9 +4678,12 @@ ${lines.join("\n")}`;
   }
   return section;
 }
+function formatterFor(file) {
+  return JS_EXTENSIONS.has(path2.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
+}
 function formatFormatSection(files) {
   const fileLines = files.map(
-    (f) => `  ${path2.basename(f)} needs formatting (run \`ruff format\`)`
+    (f) => `  ${path2.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
   );
   return `Format issues (${plural(files.length, "file")}):
 ${fileLines.join("\n")}`;
@@ -4615,7 +4736,7 @@ function getMultiEditPaths(input) {
   }
   return Array.from(paths);
 }
-function collectPythonFiles(input, toolName) {
+function collectLintableFiles(input, toolName) {
   let filePaths;
   if (toolName === "MultiEdit") {
     filePaths = getMultiEditPaths(input);
@@ -4623,57 +4744,93 @@ function collectPythonFiles(input, toolName) {
     const fp = getFilePath(input);
     filePaths = fp ? [fp] : [];
   }
-  return filePaths.filter((fp) => {
+  const python = [];
+  const js = [];
+  for (const fp of filePaths) {
     const ext = path2.extname(fp).toLowerCase();
-    return PYTHON_EXTENSIONS.has(ext);
-  });
+    if (PYTHON_EXTENSIONS.has(ext)) {
+      python.push(fp);
+    } else if (JS_EXTENSIONS.has(ext)) {
+      js.push(fp);
+    }
+  }
+  return { python, js };
 }
-async function lintChecker(input) {
-  const skipped = runGuards(input, guardWriteEdit);
-  if (skipped) return skipped;
-  const toolName = getToolName(input);
-  const pythonFiles = collectPythonFiles(input, toolName);
-  if (pythonFiles.length === 0) {
-    return outputSilentSuccess();
-  }
-  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const linterPath = findLinter(projectDir);
-  if (!linterPath) {
-    logDebug(HOOK_NAME23, "No linter available, skipping");
-    return outputSilentSuccess();
-  }
-  const existingFiles = pythonFiles.filter((fp) => {
+function filterExisting(filePaths) {
+  return filePaths.filter((fp) => {
     if (!fs6.existsSync(fp)) {
       logDebug(HOOK_NAME23, `File not found: ${fp}`);
       return false;
     }
     return true;
   });
-  if (existingFiles.length === 0) {
+}
+var EMPTY_RUN = { violations: [], formatIssueFiles: [], checkedCount: 0 };
+function lintPythonFiles(files, projectDir) {
+  if (files.length === 0) return EMPTY_RUN;
+  const ruffPath = findLinter(projectDir);
+  if (!ruffPath) {
+    logDebug(HOOK_NAME23, "ruff not available, skipping Python files");
+    return EMPTY_RUN;
+  }
+  return {
+    violations: runRuffCheck(ruffPath, files),
+    formatIssueFiles: runRuffFormat(ruffPath, files),
+    checkedCount: files.length
+  };
+}
+function lintJsFiles(files, projectDir) {
+  if (files.length === 0) return EMPTY_RUN;
+  const biomePath = findBiome(projectDir);
+  if (!biomePath) {
+    logDebug(HOOK_NAME23, "biome not available, skipping JS/TS files");
+    return EMPTY_RUN;
+  }
+  const { violations, formatIssueFiles } = runBiomeCheck(biomePath, files);
+  return { violations, formatIssueFiles, checkedCount: files.length };
+}
+function linterLabelFor(pythonCount, jsCount) {
+  if (pythonCount > 0 && jsCount > 0) return "lint";
+  return pythonCount > 0 ? "ruff" : "biome";
+}
+function buildUserSummary(label, classified, formatIssueCount, fileCount) {
+  const { totalCount, security } = classified;
+  const secNote = security.length > 0 ? ` (${security.length} security)` : "";
+  const fmtNote = formatIssueCount > 0 ? `, ${formatIssueCount} formatting` : "";
+  return `${label}: ${plural(totalCount, "lint issue")}${secNote}${fmtNote} in ${plural(fileCount, "file")} -- fix before continuing`;
+}
+async function lintChecker(input) {
+  const skipped = runGuards(input, guardWriteEdit);
+  if (skipped) return skipped;
+  const { python, js } = collectLintableFiles(input, getToolName(input));
+  const existingPython = filterExisting(python);
+  const existingJs = filterExisting(js);
+  if (existingPython.length === 0 && existingJs.length === 0) {
     return outputSilentSuccess();
   }
-  const violations = runRuffCheck(linterPath, existingFiles);
-  const formatIssueFiles = runRuffFormat(linterPath, existingFiles);
-  const classified = classifyViolations(violations);
-  const results = { violations: classified, formatIssueFiles };
-  const message = formatMessage(results, existingFiles.length);
+  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
+  const ruffRun = lintPythonFiles(existingPython, projectDir);
+  const biomeRun = lintJsFiles(existingJs, projectDir);
+  const checkedCount = ruffRun.checkedCount + biomeRun.checkedCount;
+  if (checkedCount === 0) {
+    return outputSilentSuccess();
+  }
+  const formatIssueFiles = [...ruffRun.formatIssueFiles, ...biomeRun.formatIssueFiles];
+  const classified = classifyViolations([...ruffRun.violations, ...biomeRun.violations]);
+  const message = formatMessage({ violations: classified, formatIssueFiles }, checkedCount);
   if (!message) {
-    logDebug(HOOK_NAME23, `Lint clean: ${existingFiles.join(", ")}`);
+    logDebug(HOOK_NAME23, `Lint clean: ${[...existingPython, ...existingJs].join(", ")}`);
     return outputSilentSuccess();
   }
-  logInfo(
-    HOOK_NAME23,
-    `Found ${classified.totalCount} lint issues in ${existingFiles.length} file(s)`
-  );
-  const { totalCount } = classified;
-  const secNote = classified.security.length > 0 ? ` (${classified.security.length} security)` : "";
-  const fmtNote = formatIssueFiles.length > 0 ? `, ${formatIssueFiles.length} formatting` : "";
-  const userSummary = `ruff: ${totalCount} lint issue${totalCount !== 1 ? "s" : ""}${secNote}${fmtNote} in ${existingFiles.length} file${existingFiles.length !== 1 ? "s" : ""} -- fix before continuing`;
-  const claudeDetails = `Lint issues found -- please fix before continuing:
+  logInfo(HOOK_NAME23, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
+  const label = linterLabelFor(ruffRun.checkedCount, biomeRun.checkedCount);
+  return outputWithNotification(
+    buildUserSummary(label, classified, formatIssueFiles.length, checkedCount),
+    `Lint issues found -- please fix before continuing:
 \`\`\`
 ${message}
-\`\`\``;
-  return outputWithNotification(userSummary, claudeDetails);
+\`\`\``
+  );
 }
 
 // src/lifecycle/instructions-loaded.ts
