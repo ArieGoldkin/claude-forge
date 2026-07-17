@@ -2,6 +2,32 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.12.0] - 2026-07-17 — four new router routes (ship · triage · compliance · audit-skill) + two tiebreaks
+
+`/etk:auto-research` classified goals into 10 categories across 8 target skills. Four capabilities it should already have reached were unroutable: you could say *"ship it"* or *"is this HIPAA compliant?"* and the router had nowhere to send you. All four targets already carried the trigger vocabulary — no new keywords were authored, only wiring.
+
+### Added
+
+- **`ship` → `/prepare-pr`** (*"ship it"*, *"ready for review"*, *"open a PR"*). The highest-value addition and **the only write-route**: it commits, pushes, and opens the MR/PR. It **gates itself** — `prepare-pr/SKILL.md:17` requires human approval of the drafted body before creating anything — so the router must **not** pass `--no-confirm` through. The router's job is to reach the skill, not to defeat its safety.
+- **`triage` → `/investigate-sentry`** (*"sentry issue"*, *"sentry triage"*). Writes an assessment doc; proposes a fix rather than applying one.
+- **`compliance` → `/hipaa-compliance-checker`** (*"is this compliant?"*, *"PHI"*, *"BAA"*). Analysis-only.
+- **`audit-skill` → `/audit-skill`** (*"skill quality"*, *"prune skill"*, *"sediment"*). The safest possible route — the skill declares `disallowed-tools: Edit/Write/NotebookEdit`, so it is structurally incapable of editing what it audits.
+- **Two tiebreaks**, because each new route overlaps an existing one on the same verb:
+  - **`triage` vs `diagnose`** — both own *"investigate"*. **The Sentry issue ID is the tiebreak, not the verb**: present → `triage`; absent → `diagnose` (`/fix-bug`). Rationale: `investigate-sentry` needs a resolvable reference to fetch; without one it has nothing to open.
+  - **`audit-skill` vs `improve-skill`** — both target a `SKILL.md`. *Judging* quality → `audit-skill` (read-only); *changing* the skill → `improve-skill` (mutates, 5-iter budget, human gate).
+- Parameter-extraction sections for all four routes in `references/routing-rules.md`, plus disambiguation rules 10–12.
+
+### Fixed
+
+- **The routing map had leaked back into two more places** — the exact drift root `CLAUDE.md:381` names *this skill* as the cautionary example for ("auto-research once encoded its routing map in three places"). The 2.8.3 pass collapsed three encodings inside the skill body but left two outside it: the **frontmatter `description`** and the **command wrapper's `description`** both enumerated all 8 targets, and both went stale the moment a route was added. Neither drove discovery (the `Triggers on:` clause does that) and a model-invoked description is permanent per-turn context rent — so both are now generic ("routes it to the right etk/ctk skill"). The Intent Classification table is once again the only place the map exists.
+- **A hardcoded route count** — Phase 1 step 2 said *"Classify into one of **10** intent categories"*, which this change would have silently falsified. Replaced with a pointer to the table; the count is no longer restated anywhere.
+
+### Notes
+
+- **Route count is now 14 categories → 12 distinct targets** (some categories share a target: `fix`/`diagnose` → `/fix-bug`, `optimize`/`improve-skill` → `/experiment`).
+- **`zoom-out` was deliberately NOT routed.** *"What's the architecture here?"* maps to it perfectly, but it is the only skill in the corpus declaring `disable-model-invocation: true`, justified in-file and explicitly honored by `fix-bug/SKILL.md:59` ("surface the suggestion, don't auto-fire"). Routing to it would reverse a decision documented in two places.
+- **No routes from atk (25 commands), dtk, or ftk.** Their commands are *knowledge libraries*, not processes — "build a RAG pipeline" should route to `/develop`, which then loads `atk:rag-retrieval` as context. A router dispatching to a reference doc is a category error, not a missing feature.
+
 ## [2.11.0] - 2026-07-17 — real worktree isolation for parallel agents; stop claiming a mitigation we didn't ship
 
 `/etk:start-parallel` runs several agents concurrently against **one shared working tree**, with `.squad/locks/` as the only thing between two agents and a corrupted file — and those locks are advisory: nothing enforces them, so an agent that never checks simply overwrites. Meanwhile the failure-modes table *claimed* worktree isolation we did not implement. This makes the isolation real and the claim honest.

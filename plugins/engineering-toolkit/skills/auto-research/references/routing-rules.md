@@ -12,7 +12,11 @@ to configure the target skill correctly.
 - [Route: build → /develop](#route-build--develop)
 - [Route: review → /review-mr](#route-review--review-mr)
 - [Route: verify → /verify](#route-verify--verify)
+- [Route: triage → /investigate-sentry](#route-triage--investigate-sentry)
 - [Route: improve-skill → /experiment on SKILL.md](#route-improve-skill--experiment-on-skillmd)
+- [Route: audit-skill → /audit-skill](#route-audit-skill--audit-skill)
+- [Route: ship → /prepare-pr](#route-ship--prepare-pr)
+- [Route: compliance → /hipaa-compliance-checker](#route-compliance--hipaa-compliance-checker)
 - [Route: research → /ctk:web-research](#route-research--ctkweb-research)
 - [Disambiguation Rules](#disambiguation-rules)
 
@@ -211,6 +215,94 @@ For a deep, multi-source, adversarially-verified report (not a quick lookup), es
 
 ---
 
+## Route: triage → /investigate-sentry
+
+**Extract from goal:**
+- Sentry issue ID or short-id (`PROJ-4F2`, `ABC-123`) or a Sentry issue URL
+- Environment, if mentioned ("in prod", "staging")
+- Time window, if mentioned ("since Tuesday", "after the deploy")
+
+**Invocation:**
+```
+/investigate-sentry {issue id or url}
+```
+
+**Budget:** Default 30 minutes. Investigation-shaped, like `fix` — not an iteration loop.
+
+**Edge cases:**
+- **No Sentry ID → this is not `triage`.** "Investigate the crash" with no issue reference is
+  `diagnose` (`/fix-bug`). The ID is what makes the route resolvable.
+- Writes an assessment doc, not code. It ends by *proposing* a fix — it does not apply one. If the
+  user wants the fix applied, that is a follow-on `/fix-bug`.
+
+---
+
+## Route: audit-skill → /audit-skill
+
+**Extract from goal:**
+- Target `SKILL.md` path(s), or the skill name ("audit the review-mr skill")
+- Scope: one skill, a plugin's skills, or a corpus sweep
+
+**Invocation:**
+```
+/audit-skill {path to SKILL.md}
+```
+
+**Budget:** Cheap and bounded — a read pass per skill. No iteration loop.
+
+**Edge cases:**
+- **Read-only, structurally.** The skill declares `disallowed-tools: Edit/Write/NotebookEdit`; it
+  emits *candidate flags* for a human, never edits. Safe to route without a confirm gate.
+- **vs `improve-skill`**: auditing *judges* the skill; `improve-skill` *changes* it. If the user
+  wants the flags acted on, that is a separate, human-decided step — do not chain automatically.
+
+---
+
+## Route: ship → /prepare-pr
+
+**Extract from goal:**
+- Target branch, if named ("into develop") — else `prepare-pr` resolves the repo default
+- Draft intent ("as a draft" → `--draft`)
+- Ticket ID to close, if mentioned (`--closes PROJ-142`)
+
+**Invocation:**
+```
+/prepare-pr
+```
+
+**Budget:** Single pass. Not a loop.
+
+**Edge cases:**
+- **The only write-route added to the router.** It commits, pushes, and opens the MR/PR.
+- **Do not pass `--no-confirm` through.** `prepare-pr` has its own mandatory gate (the drafted body
+  must be human-approved before creation) and its own verify pre-gate. The router's job is to reach
+  the skill, not to defeat its safety. `--no-confirm` on the router is honored for read-only routes
+  only — this is not one.
+- **vs `review`**: `ship` *opens* the MR/PR; `review` (`/review-mr`) reviews one that already
+  exists. "Ship it" → `ship`. "Review !42" → `review`.
+
+---
+
+## Route: compliance → /hipaa-compliance-checker
+
+**Extract from goal:**
+- Scope: the paths/modules to check, else the working tree
+- Specific concern, if named (RBAC, audit logging, token expiry, encryption at rest)
+
+**Invocation:**
+```
+/hipaa-compliance-checker {scope}
+```
+
+**Budget:** Single analysis pass.
+
+**Edge cases:**
+- Analysis-only — reports findings, does not remediate. A fix is a follow-on `/fix-bug` or
+  `/develop`.
+- Never echo PHI into the goal, the plan, or the report. Findings are process/behavior only.
+
+---
+
 ## Disambiguation Rules
 
 When a goal matches multiple categories:
@@ -224,3 +316,6 @@ When a goal matches multiple categories:
 7. **When truly ambiguous**, ask one question: "I see this as both {A} and {B}. Which approach: {A description} or {B description}?"
 8. **Skill/prompt target → improve-skill; metric/code target → optimize.** "Optimize the review SKILL.md" / "improve the X skill" → `improve-skill` (skill-file mutation, conservative 5-iter budget, human review gate). "Optimize {metric}" / "optimize {code path}" → `optimize` (10-iter metric loop). Distinguishing signal: the target is a `SKILL.md` / named skill vs a runtime metric or source file.
 9. **External-web question → research; internal-design question → design.** "What's the state of X in 2026" / "survey approaches to Y" → `research` (`/ctk:web-research`). "How should WE build Y" → `design` (`/brainstorming`).
+10. **Sentry ID present → triage; otherwise → diagnose.** `triage` and `diagnose` both own the word "investigate", so the *ID is the tiebreak*, not the verb. "Investigate PROJ-4F2" / "triage this sentry issue {url}" → `triage` (`/investigate-sentry`). "Investigate why checkout crashes" → `diagnose` (`/fix-bug`). Rationale: `investigate-sentry` needs a resolvable issue reference to fetch; without one it has nothing to open, and `/fix-bug`'s observation loop is the right tool anyway.
+11. **Judging a skill → audit-skill; changing one → improve-skill.** Both target a `SKILL.md`. "Audit the review-mr skill" / "is this skill any good" / "find sediment" → `audit-skill` (read-only, emits flags for a human). "Optimize the review SKILL.md" / "make this skill better" → `improve-skill` (mutates the file, conservative 5-iter budget, human review gate). Signal: *assess* vs *change*.
+12. **Opening an MR/PR → ship; reviewing an existing one → review.** "Ship it" / "ready for review" / "open a PR" → `ship` (`/prepare-pr` — authors the description and creates it). "Review !42" / "look at PR 26" → `review` (`/review-mr` — reviews one that exists; it never creates one).

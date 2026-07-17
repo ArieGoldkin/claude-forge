@@ -1,6 +1,6 @@
 ---
 name: auto-research
-description: "Autonomous goal-driven research orchestrator. Classifies natural language goals, selects the right skill, confirms plan, and executes. Routes to /fix-bug, /experiment, /cover, /brainstorming, /develop, /review-mr, /verify, or /ctk:web-research. Use when: user describes a goal not a method, the right skill is unclear, or you want the agent to pick the approach. Triggers on: auto-research, figure out, fix the, improve the, get coverage, design a, build the, make sure, optimize the, why isn't"
+description: "Autonomous goal-driven orchestrator. Classifies a natural-language goal, routes it to the right etk/ctk skill, confirms the plan, and executes. Use when: user describes a goal not a method, the right skill is unclear, or you want the agent to pick the approach. Triggers on: auto-research, figure out, fix the, improve the, get coverage, design a, build the, make sure, optimize the, why isn't"
 effort: xhigh
 context: fork
 ---
@@ -85,7 +85,7 @@ Apply the **Intent Classification table** (Phase 1 → §Classify) top-down: rou
 Parse the user's natural language goal into a structured intent.
 
 1. Read the user's goal (the `$ARGUMENTS` string)
-2. Classify into one of 10 intent categories (see Intent Classification below)
+2. Classify into an intent category (see the Intent Classification table below — it is the single source; do not restate its size or contents here)
 3. Extract key parameters: target files, metric, threshold, scope
 4. If ambiguous, ask ONE clarifying question before proceeding
 
@@ -101,11 +101,27 @@ Parse the user's natural language goal into a structured intent.
 | `review` | review, MR, PR, merge request, pull request, !{number} | `/review-mr` |
 | `verify` | verify, check, validate, ensure, passes, green | `/verify` |
 | `diagnose` | why, why not, why isn't, why does, why can't, investigate | `/fix-bug` (investigation-first) |
+| `triage` | sentry, sentry issue, sentry triage, production error + issue id | `/investigate-sentry` |
 | `improve-skill` | optimize prompt, improve skill, SKILL.md, better instructions | `/experiment` on SKILL.md |
+| `audit-skill` | skill quality, audit skill, prune skill, sediment, no-op, lint skill | `/audit-skill` (read-only) |
+| `ship` | ship it, ready for review, open a PR, open an MR, PR description, create pull request | `/prepare-pr` |
+| `compliance` | HIPAA, PHI, compliant, protected health information, BAA, data privacy | `/hipaa-compliance-checker` |
 | `research` | research, landscape, survey, compare options, state of, find out about, look into | `/ctk:web-research` |
 
 When multiple categories match, prefer the more specific one. `"fix the slow query"` is `fix`
 (not `optimize`) because the user said "fix." `"make the API faster"` is `optimize`.
+
+Two pairs overlap by design and need a tiebreak (full rules in
+`${CLAUDE_SKILL_DIR}/references/routing-rules.md` §Disambiguation):
+
+- **`triage` vs `diagnose`** — both own "investigate". A **Sentry issue ID is present** → `triage`;
+  otherwise → `diagnose`.
+- **`audit-skill` vs `improve-skill`** — both target a `SKILL.md`. *Judging* quality → `audit-skill`
+  (read-only, never edits); *changing* the skill to improve it → `improve-skill`.
+
+`ship` is the only added route that **writes** (it commits, pushes, and opens the MR/PR). It gates
+itself — `prepare-pr` requires human approval of the drafted body before creating anything — so the
+router must **not** pass `--no-confirm` through to it. Let the skill's own gate fire.
 
 ### Phase 2: Plan
 
