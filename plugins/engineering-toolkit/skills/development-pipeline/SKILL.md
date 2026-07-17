@@ -55,7 +55,16 @@ When `--parallel` is present in arguments, Phase 4 (Build) dispatches tasks to f
 
 1. Extract all tasks from the Phase 3 plan
 2. Identify independent tasks (no shared file dependencies)
-3. Dispatch each independent task to a fresh subagent using the implementer prompt template
+3. Dispatch each independent task to a fresh subagent using the implementer prompt template — **selecting the specialist by task domain**:
+
+   | Task domain | Dispatch to | Do NOT use for |
+   |---|---|---|
+   | Tests-first build task (default) | `etk:tdd-implementer` | design, planning, review |
+   | Frontend (React, UI components, styling) | `ftk:ui-developer` | backend/Python, schemas, infra |
+   | Backend (Python, Lambda, SQL, REST) | `dtk:devops-architect` | frontend/React, UI, Terraform |
+   | LLM/AI feature (prompts, RAG, embeddings) | `atk:ai-ml-engineer` | general CRUD, UI, non-AI infra |
+
+   Honor each agent's "Do NOT use for" clause — a mis-routed specialist flounders (dispatch-ladder failure mode *wrong-specialist dispatch*). When a task spans domains, split it or fall back to `etk:tdd-implementer`. **Emit all Agent calls in a single message** (soft phrasing serializes). This is the pipeline's **L2 rung** — full escalation criteria in `agent-loops/references/dispatch-policy.md`; tasks whose files could collide get worktree isolation.
 4. Each subagent gets: task description, file ownership, test requirements, and the status protocol (DONE/DONE_WITH_CONCERNS/NEEDS_CONTEXT/BLOCKED)
 5. Controller collects results, runs spec compliance review, then proceeds to Phase 5 (Verify)
 
@@ -234,7 +243,8 @@ Collect evidence and run quality checks on the completed work.
 1. Announce: "Phase 5: Verify — Collecting evidence and running quality checks"
 2. Run the `/verify` skill pipeline: detect stack → run checks → collect evidence → assess quality
 3. Verify coding standards compliance
-4. Compile evidence summary
+4. **Independent review gate (L1)**: for any non-trivial build, dispatch `etk:adversarial-verifier` (or `etk:quality-reviewer`) over the changes — self-report and green checks miss what an independent reviewer catches. Skip only for trivial single-file changes; note the skip in the state file. (Dispatch rationale: `agent-loops/references/dispatch-policy.md`.)
+5. Compile evidence summary
 
 **Evidence checklist:**
 - [ ] All tests pass (exit code 0)

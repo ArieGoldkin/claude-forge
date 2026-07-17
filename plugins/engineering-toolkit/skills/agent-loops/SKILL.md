@@ -38,6 +38,13 @@ Metric-driven autonomous improvement loop. Establish baseline, then iterate: hyp
 
 See `/experiment` skill for full implementation. See `/cover --target` for specialized coverage variant.
 
+## Deciding how many agents a task gets
+
+The [dispatch ladder](${CLAUDE_SKILL_DIR}/references/dispatch-policy.md) — L0 solo (default) → L1
+single specialist → L2 team fan-out → L3 dynamic `Workflow` — is the single source for when a routed
+skill spawns sub-agents, which pre-built agents to select, and why escalation must be earned. The
+orthogonal axis to the autonomy ladder: *how many minds*, not *how unattended*.
+
 ## Before running an unattended loop
 
 Walk the [loop failure-mode checklist](${CLAUDE_SKILL_DIR}/references/loop-failure-modes.md) — ten
