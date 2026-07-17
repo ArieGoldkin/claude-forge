@@ -2,6 +2,26 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.11.0] - 2026-07-17 — real worktree isolation for parallel agents; stop claiming a mitigation we didn't ship
+
+`/etk:start-parallel` runs several agents concurrently against **one shared working tree**, with `.squad/locks/` as the only thing between two agents and a corrupted file — and those locks are advisory: nothing enforces them, so an agent that never checks simply overwrites. Meanwhile the failure-modes table *claimed* worktree isolation we did not implement. This makes the isolation real and the claim honest.
+
+### Added
+
+- **A worktree per agent in `/etk:start-parallel`** (new Step 2). Each terminal gets its own checkout and branch via `git worktree add`, so collision is structurally impossible rather than merely discouraged; `.squad/` locks drop to belt-and-braces. Coordination state (`locks/`, `comms/`) stays shared via `SQUAD_DIR` — only the *code* is isolated. ctk's `WorktreeCreate` hook fires on each, seeding per-agent continuity.
+- **Portable teardown**, verified on **git 2.15**: `rm -rf` + `git worktree prune` + `git branch -d`. `git worktree remove` requires **git ≥ 2.17** and is documented as the newer-git equivalent, not the only path — it does not exist on the git shipped with some LTS distros and Xcode CLI tools. Order is called out too: `git branch -d` refuses while the branch is still registered to a worktree, so prune first.
+
+### Fixed
+
+- **`loop-failure-modes.md` claimed a mitigation that did not exist.** Mode 9 (Parallel Collision) listed `` `Workflow` `isolation: 'worktree'` `` as active, strength **"structural + worktree"** — but `grep -rn "git worktree add"` returned **0 hits** and no code configured `isolation`. A guardrail table that overstates coverage is worse than no table: it is exactly what a pre-flight check consults before letting a loop run unwatched. Now claims **structural** (every etk agent excludes `Agent`/`Task`, so a routed skill cannot spawn colliding children at all — we buy collision-safety by *forbidding* fan-out, not by isolating it), plus worktree specifically in `start-parallel`. `Workflow` `isolation: 'worktree'` is noted as the native lever *if* we ever ship `agent()` fan-out; we ship none today.
+- **`start-parallel.md` shipped bash that cannot execute.** The lock dashboard's `for lock in .squad/locks/*.lock 2>/dev/null; do` is a syntax error (a redirect is not valid in a `for` list) — proof the block had never been run. Fixed; the `[ -f ]` guard already handled the no-matches case. All 13 bash blocks in the file now pass `bash -n`.
+- **`commands/develop.md` pointed at a path that does not exist** (`.claude/skills/development-pipeline/SKILL.md`) and listed **pre-Hypothesize phase numbering** (Plan as Phase 2, Verify as Phase 4) against a skill that has had 6 phases since Hypothesize was added. Both would misdirect anyone running `/etk:develop`. Now names the skill (matching sibling commands) and lists all 6 phases.
+
+### Notes
+
+- Isolation was **verified, not asserted**: a probe worktree was created, written to, and confirmed not to leak into the main tree, then torn down with zero residue — on this machine's actual git 2.15.
+- Reading the doc would not have caught the teardown bug. This is the `loop-failure-modes` pre-flight discipline applied to itself: *"if you haven't run the task node-by-node by hand once, you haven't found the failure points."*
+
 ## [2.10.0] - 2026-07-10 — adopt Anthropic's review-skill patterns into the review process
 
 Capability adoption from Anthropic's bundled `code-review` / `simplify` / `security-review` / `verify` skills (extracted from the Claude Code binary and compared in `docs/reviews/2026-07-10_anthropic-review-skills-vs-etk.md`). Sharpens `review-mr` and disambiguates `verify` — **capability, not substrate** (the built-ins are cited, never rebuilt). Documentation/skill-definition only — no runtime hook behavior changed, no `dist` rebuild.

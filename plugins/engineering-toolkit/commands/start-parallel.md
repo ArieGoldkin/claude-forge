@@ -183,52 +183,103 @@ Once requirements are confirmed:
 
 ### Step 1: Prepare Environment
 
+Run this from the **coordinator** terminal, at the repo root.
+
 ```bash
-# Initialize parallel execution environment
-mkdir -p .squad/locks
-mkdir -p .squad/comms
-mkdir -p .squad/logs
-mkdir -p .squad/metrics
+# Shared coordination state (lives in the main checkout, visible to every worktree)
+mkdir -p .squad/locks .squad/comms .squad/logs .squad/metrics
 
 # Clear any stale locks
 rm -f .squad/locks/*.lock
 
 # Initialize communication files
 for i in 1 2 3; do
-  echo "# Agent $i Communication Log" > .squad/comms/agent-$i-comm.md
-  echo "Status: READY" >> .squad/comms/agent-$i-comm.md
-  echo "Initialized: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> .squad/comms/agent-$i-comm.md
+  {
+    echo "# Agent $i Communication Log"
+    echo "Status: READY"
+    echo "Initialized: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  } > ".squad/comms/agent-$i-comm.md"
 done
 ```
 
-### Step 2: Set Agent Environment Variables
+### Step 2: Give Each Agent Its Own Worktree
 
-Each terminal/agent needs unique identification:
+**This is the isolation boundary — do not skip it.** Without it, every agent
+shares one working tree and the `.squad/locks/` protocol is the *only* thing
+standing between two agents and a corrupted file. Locks here are advisory:
+nothing enforces them, so an agent that never checks simply overwrites. A git
+worktree makes collision *structurally impossible* rather than merely
+discouraged — each agent gets its own checkout and its own branch, and you
+resolve conflicts once, at merge, where git is designed to handle them.
+
+```bash
+# One worktree + branch per agent, as siblings of the repo
+REPO="$(basename "$(pwd)")"
+git worktree add "../${REPO}-agent-1" -b parallel/agent-1
+git worktree add "../${REPO}-agent-2" -b parallel/agent-2
+git worktree add "../${REPO}-agent-3" -b parallel/agent-3
+
+git worktree list   # verify: 1 main + 3 agent worktrees
+```
+
+ctk's `WorktreeCreate` hook fires on each, seeding continuity state in the new
+worktree — so each agent starts with its own context rather than inheriting the
+coordinator's.
+
+**Teardown** (after the merge in Step 6). `git worktree remove` requires
+**git ≥ 2.17**; `rm -rf` + `prune` is the portable form that works everywhere,
+including the 2.15 still shipped by some LTS distros and Xcode CLI tools:
+
+```bash
+# Portable (any git that has worktrees at all, i.e. >= 2.5)
+rm -rf "../${REPO}-agent-1"
+git worktree prune                # drops the now-dangling registration
+git branch -d parallel/agent-1    # -D to discard unmerged work
+
+# git >= 2.17 equivalent for the first two lines:
+#   git worktree remove "../${REPO}-agent-1"     # -f if the tree is dirty
+```
+
+> Order matters: `git branch -d` refuses while the branch is still checked out
+> in a registered worktree (`Cannot delete branch ... checked out at ...`), so
+> prune first, delete second.
+
+### Step 3: Set Agent Environment Variables
+
+Each terminal `cd`s into **its own worktree** first. `SQUAD_DIR` points back at
+the coordinator's `.squad/` so all agents share one lock/comm namespace — the
+coordination state is shared on purpose; only the *code* is isolated.
 
 **Terminal 1 - Frontend Agent:**
 ```bash
+cd "../${REPO}-agent-1"          # isolated checkout
+export SQUAD_DIR="../${REPO}/.squad"
 export AGENT_ID="agent-1-ui-developer"
 export AGENT_TYPE="ui-developer"
-export AGENT_PLAN=".squad/parallel-plans/agent-1-plan.md"
-export AGENT_COMM=".squad/comms/agent-1-comm.md"
+export AGENT_PLAN="$SQUAD_DIR/parallel-plans/agent-1-plan.md"
+export AGENT_COMM="$SQUAD_DIR/comms/agent-1-comm.md"
 export PARALLEL_MODE="true"
 ```
 
 **Terminal 2 - Backend Agent:**
 ```bash
+cd "../${REPO}-agent-2"
+export SQUAD_DIR="../${REPO}/.squad"
 export AGENT_ID="agent-2-devops-architect"
 export AGENT_TYPE="devops-architect"
-export AGENT_PLAN=".squad/parallel-plans/agent-2-plan.md"
-export AGENT_COMM=".squad/comms/agent-2-comm.md"
+export AGENT_PLAN="$SQUAD_DIR/parallel-plans/agent-2-plan.md"
+export AGENT_COMM="$SQUAD_DIR/comms/agent-2-comm.md"
 export PARALLEL_MODE="true"
 ```
 
 **Terminal 3 - AI/ML Agent:**
 ```bash
+cd "../${REPO}-agent-3"
+export SQUAD_DIR="../${REPO}/.squad"
 export AGENT_ID="agent-3-ai-ml-engineer"
 export AGENT_TYPE="ai-ml-engineer"
-export AGENT_PLAN=".squad/parallel-plans/agent-3-plan.md"
-export AGENT_COMM=".squad/comms/agent-3-comm.md"
+export AGENT_PLAN="$SQUAD_DIR/parallel-plans/agent-3-plan.md"
+export AGENT_COMM="$SQUAD_DIR/comms/agent-3-comm.md"
 export PARALLEL_MODE="true"
 ```
 
@@ -286,7 +337,10 @@ while true; do
   done
   
   echo -e "\n🔒 ACTIVE LOCKS:"
-  for lock in .squad/locks/*.lock 2>/dev/null; do
+  # No redirect in the `for` list -- `for x in *.glob 2>/dev/null` is a syntax
+  # error, not a "hide errors" idiom. The [ -f ] guard already handles the
+  # no-matches case (the glob stays literal when nothing matches).
+  for lock in .squad/locks/*.lock; do
     if [ -f "$lock" ]; then
       filename=$(basename "$lock" .lock)
       locked_by=$(grep "LOCKED_BY:" "$lock" | cut -d: -f2)

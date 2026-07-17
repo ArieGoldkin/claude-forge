@@ -41,7 +41,7 @@
       "name": "etk",
       "source": "./plugins/engineering-toolkit",
       "description": "Engineering practices toolkit (etk, formerly engineering-toolkit) - 26 skills, 4 agents, 20 commands for quality, architecture, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
-      "version": "2.10.0",
+      "version": "2.11.0",
       "category": "development"
     }
   ]
