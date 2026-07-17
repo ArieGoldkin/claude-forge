@@ -111,11 +111,20 @@ Parse the user's natural language goal into a structured intent.
 When multiple categories match, prefer the more specific one. `"fix the slow query"` is `fix`
 (not `optimize`) because the user said "fix." `"make the API faster"` is `optimize`.
 
-Two pairs overlap by design and need a tiebreak (full rules in
-`${CLAUDE_SKILL_DIR}/references/routing-rules.md` §Disambiguation):
+**Row order is not a tiebreak — four pairs collide, and in three of them the
+earlier row would win on a bare keyword match.** Apply these before falling back
+to "first match" (full rules in `${CLAUDE_SKILL_DIR}/references/routing-rules.md`
+§Disambiguation, rules 10–13):
 
-- **`triage` vs `diagnose`** — both own "investigate". A **Sentry issue ID is present** → `triage`;
-  otherwise → `diagnose`.
+- **`ship` vs `review`** — `review` sits **6 rows earlier** and owns "PR / pull request / review",
+  which appear inside nearly every `ship` signal. **Opening** an MR/PR → `ship` (`/prepare-pr`).
+  **Reviewing one that already exists** → `review`. `"create a pull request"` is `ship`, even though
+  `review` matches "pull request" first.
+- **`triage` vs `fix` / `diagnose`** — `fix` is the **first row** and owns "error", which sits inside
+  `triage`'s own "production error". A **Sentry issue ID or URL is present** → `triage`, overriding
+  both. No ID → `fix` (explicit "fix" verb) or `diagnose` (a "why" question).
+- **`compliance` vs `verify`** — `verify` owns "check" and sits earlier. A **HIPAA/PHI/BAA term is
+  present** → `compliance`, even though `"check if we're compliant"` matches `verify` first.
 - **`audit-skill` vs `improve-skill`** — both target a `SKILL.md`. *Judging* quality → `audit-skill`
   (read-only, never edits); *changing* the skill to improve it → `improve-skill`.
 
@@ -200,8 +209,15 @@ Hand off to the target skill and provide progress visibility.
 | `/develop` | At pipeline phase boundaries | `phase: design/plan/build/verify \| task N/M` |
 | `/brainstorming` | At agent launches | `phase: agents launched/synthesis/complete` |
 | `/ctk:web-research` | At source milestones | `phase: searching/fetching/synthesizing \| sources: N` |
+| `/investigate-sentry` | At investigation phase boundaries | `phase: fetch/correlate/assess \| issue: {id}` |
 | `/review-mr` | None (fast, single-pass) | — |
 | `/verify` | None (fast, single-pass) | — |
+| `/prepare-pr` | None (single-pass; it has its own approval gate) | — |
+| `/hipaa-compliance-checker` | None (single-pass) | — |
+| `/audit-skill` | None (single-pass, read-only) | — |
+
+> **Any route not listed above: no heartbeat, single-pass.** Add a row only when a
+> route is iterative or long enough that silence would look like a hang.
 
 **Example heartbeat for /experiment:**
 ```
@@ -240,8 +256,15 @@ STATUS:   {DONE | DONE_WITH_CONCERNS | BLOCKED}   # canonical machine-parseable 
 | `/develop` | Features Built, Tests Added, Remaining Tasks |
 | `/brainstorming` | Link to design output, Next Steps (offer to build) |
 | `/ctk:web-research` | Sources consulted, key findings, confidence/caveats (delegate to web-research's own format) |
+| `/investigate-sentry` | Issue summary, root-cause assessment, proposed fix (it proposes; it does not apply) |
 | `/review-mr` | Summary of findings (delegate to review-mr's own format) |
 | `/verify` | Pass/fail summary (delegate to verify's own format) |
+| `/prepare-pr` | MR/PR link + title; note that the body was human-approved at its own gate |
+| `/hipaa-compliance-checker` | Findings by severity — process/behavior only, never PHI |
+| `/audit-skill` | Candidate flags for human review (it never edits) |
+
+> **Any route not listed above:** delegate to the routed skill's own output format
+> and summarize in one line. Do not invent sections for it.
 
 **For iterative skills** (/experiment, /cover), include the iteration log:
 ```
