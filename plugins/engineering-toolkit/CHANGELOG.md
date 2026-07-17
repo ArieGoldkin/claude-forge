@@ -2,6 +2,19 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.13.0] - 2026-07-17 — routine recipes: skill→routine-safety classifier + BUY-NOT-BUILD scheduling
+
+The autonomy docs mapped the ~6 auto-research *routes* to rungs, but never answered "can I run **this** skill as a scheduled routine, and how?" — the question an installer with ~85 skills actually asks. This adds that layer without adding machinery: routines ride Claude Code's native `/schedule` (persistent cloud routines) and inherit the existing rungs and rails unchanged.
+
+### Added
+
+- **`auto-research/references/routine-recipes.md`** — a new reference with four things that existed nowhere: (1) **buy-not-build** framing — `/schedule` (the claude.ai triggers API, persistent cloud routines) *is* the scheduler; we ship recipes over it, not a daemon; (2) a **skill→routine-safety classifier** — the rule ("produces a report/proposal from observable state with no human in the loop; writes only a ledger") plus the routine-worthy L1 shortlist (`audit-skill`, `verify`, `review-mr`, `doctor`, `check-maintenance`, `continuity-metrics`, `review-stats`, and the by-intent reporters `hipaa-compliance-checker`/`investigate-sentry`) and the three "not routine material" buckets (knowledge libraries, interactive orchestrators, setup/one-shot); (3) scheduled routine recipes with the **nightly `/etk:audit-skill` (L1, read-only)** flagship; (4) a governance handoff to the pending unattended-runs work.
+- One pointer line each from `autonomy-ladder.md`, `recipes.md`, and `auto-research/SKILL.md` → the new file. Cite-don't-duplicate: the new file restates **zero** rung definitions, rails, or cadence numbers.
+
+### Fixed
+
+- **Doc-honesty correction** in `unattended-mode.md` and `auto-research/SKILL.md`: both claimed `CronCreate durable:true` persists "across sessions" via "the `/schedule` path". The live `CronCreate` schema is unambiguous — `durable` is a **no-op**, all jobs are session-only, and recurring jobs auto-expire after 7 days. Persistence comes from `/schedule` **cloud routines** (`RemoteTrigger`), a distinct substrate. Split the two flavors correctly so the sibling docs stop contradicting the new one.
+
 ## [2.12.0] - 2026-07-17 — four new router routes (ship · triage · compliance · audit-skill) + two tiebreaks
 
 `/etk:auto-research` classified goals into 10 categories across 8 target skills. Four capabilities it should already have reached were unroutable: you could say *"ship it"* or *"is this HIPAA compliant?"* and the router had nowhere to send you. All four targets already carried the trigger vocabulary — no new keywords were authored, only wiring.

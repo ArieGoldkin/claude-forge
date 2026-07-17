@@ -2,6 +2,8 @@
 
 Recipes are **named goal + stop-condition templates** for `/auto-research --recipe <name>`. They package the common loops so a user names the intent instead of hand-authoring the target skill, budget, and stop-condition every time. A recipe is a preset, not new machinery — it expands to an existing skill invocation and rides the triple ceiling (iters / minutes / tokens) and the [Stop-Conditions](../SKILL.md) model.
 
+> To run a preset as a **persistent, scheduled routine** (fires unattended on its own cron, survives the session) rather than an in-session `/loop`, see [`routine-recipes.md`](routine-recipes.md) — it also classifies which skills beyond these presets are routine-safe.
+
 ## How a recipe expands
 
 `--recipe <name>` resolves to: a **target skill**, its **args**, a **budget** (any of the three ceilings the recipe wants to tighten), and a **stop-condition**. The user can override any field inline — `--recipe coverage-90 --until streak=3 --tokens 400k` keeps the recipe but raises the streak and token budget.
