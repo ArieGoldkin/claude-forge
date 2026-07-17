@@ -455,51 +455,59 @@ export function normalizeBiomeDiagnostic(
  * @param filePaths - Absolute paths to JS/TS files to check
  * @returns Violations plus the files that need formatting
  */
-export function runBiomeCheck(
-  biomePath: string,
-  filePaths: string[]
-): { violations: LintViolation[]; formatIssueFiles: string[] } {
-  let stdout = '';
+function execBiomeJson(biomePath: string, filePaths: string[]): string | null {
   try {
     execFileSync(biomePath, ['check', '--reporter=json', ...filePaths], {
       timeout: LINTER_TIMEOUT_MS,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    // Exit code 0 = clean
-    return { violations: [], formatIssueFiles: [] };
+    return null; // exit 0 = clean, nothing to parse
   } catch (err: unknown) {
-    const execError = err as { stdout?: string; stderr?: string; status?: number };
+    const execError = err as { stdout?: string; status?: number };
     // Exit code 1 = diagnostics found, JSON on stdout
     if (execError.status === 1 && execError.stdout) {
-      stdout = execError.stdout;
-    } else {
-      logWarn(HOOK_NAME, `biome execution error: ${String(err)}`);
-      return { violations: [], formatIssueFiles: [] };
+      return execError.stdout;
     }
+    logWarn(HOOK_NAME, `biome execution error: ${String(err)}`);
+    return null;
   }
+}
 
-  let diagnostics: BiomeDiagnostic[];
+function parseBiomeDiagnostics(stdout: string): BiomeDiagnostic[] {
   try {
     const parsed = JSON.parse(stdout) as { diagnostics?: BiomeDiagnostic[] };
-    diagnostics = Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
+    return Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
   } catch {
     logWarn(HOOK_NAME, 'Failed to parse biome JSON output, skipping');
-    return { violations: [], formatIssueFiles: [] };
+    return [];
   }
+}
 
-  // Read each file once for span -> row/col conversion
-  const fileContents = new Map<string, string>();
+/** Read each referenced file once, for span -> row/col conversion. */
+function readDiagnosticSources(diagnostics: BiomeDiagnostic[]): Map<string, string> {
+  const contents = new Map<string, string>();
   for (const diag of diagnostics) {
     const f = diag.location?.path?.file;
-    if (f && !fileContents.has(f)) {
-      try {
-        fileContents.set(f, fs.readFileSync(f, 'utf8'));
-      } catch {
-        // unreadable -- normalizeBiomeDiagnostic falls back to 1:1
-      }
+    if (!f || contents.has(f)) continue;
+    try {
+      contents.set(f, fs.readFileSync(f, 'utf8'));
+    } catch {
+      // unreadable -- normalizeBiomeDiagnostic falls back to 1:1
     }
   }
+  return contents;
+}
+
+export function runBiomeCheck(
+  biomePath: string,
+  filePaths: string[]
+): { violations: LintViolation[]; formatIssueFiles: string[] } {
+  const stdout = execBiomeJson(biomePath, filePaths);
+  if (!stdout) return { violations: [], formatIssueFiles: [] };
+
+  const diagnostics = parseBiomeDiagnostics(stdout);
+  const fileContents = readDiagnosticSources(diagnostics);
 
   const violations: LintViolation[] = [];
   const formatIssueFiles = new Set<string>();
@@ -751,63 +759,97 @@ function filterExisting(filePaths: string[]): string[] {
  * @param input - Hook input from Claude Code
  * @returns HookResult with lint feedback or silent success
  */
+/** One linter's contribution to the combined run. */
+interface LinterRun {
+  violations: LintViolation[];
+  formatIssueFiles: string[];
+  checkedCount: number;
+}
+
+const EMPTY_RUN: LinterRun = { violations: [], formatIssueFiles: [], checkedCount: 0 };
+
+function lintPythonFiles(files: string[], projectDir: string): LinterRun {
+  if (files.length === 0) return EMPTY_RUN;
+  const ruffPath = findLinter(projectDir);
+  if (!ruffPath) {
+    logDebug(HOOK_NAME, 'ruff not available, skipping Python files');
+    return EMPTY_RUN;
+  }
+  return {
+    violations: runRuffCheck(ruffPath, files),
+    formatIssueFiles: runRuffFormat(ruffPath, files),
+    checkedCount: files.length,
+  };
+}
+
+function lintJsFiles(files: string[], projectDir: string): LinterRun {
+  if (files.length === 0) return EMPTY_RUN;
+  const biomePath = findBiome(projectDir);
+  if (!biomePath) {
+    logDebug(HOOK_NAME, 'biome not available, skipping JS/TS files');
+    return EMPTY_RUN;
+  }
+  const { violations, formatIssueFiles } = runBiomeCheck(biomePath, files);
+  return { violations, formatIssueFiles, checkedCount: files.length };
+}
+
+/**
+ * Label the terminal summary by which linter actually ran.
+ *
+ * Deliberately NOT derived from `formatter`: a TS file with lint errors but
+ * clean formatting leaves `formatter` at its 'ruff' default, which would
+ * label a biome run "ruff".
+ */
+function linterLabelFor(pythonCount: number, jsCount: number): string {
+  if (pythonCount > 0 && jsCount > 0) return 'lint';
+  return pythonCount > 0 ? 'ruff' : 'biome';
+}
+
+function buildUserSummary(
+  label: string,
+  classified: ClassifiedViolations,
+  formatIssueCount: number,
+  fileCount: number
+): string {
+  const { totalCount, security } = classified;
+  const secNote = security.length > 0 ? ` (${security.length} security)` : '';
+  const fmtNote = formatIssueCount > 0 ? `, ${formatIssueCount} formatting` : '';
+  return `${label}: ${plural(totalCount, 'lint issue')}${secNote}${fmtNote} in ${plural(fileCount, 'file')} -- fix before continuing`;
+}
+
 export async function lintChecker(input: HookInput): Promise<HookResult> {
   const skipped = runGuards(input, guardWriteEdit);
   if (skipped) return skipped;
 
-  const toolName = getToolName(input);
-  const { python, js } = collectLintableFiles(input, toolName);
-  if (python.length === 0 && js.length === 0) {
+  const { python, js } = collectLintableFiles(input, getToolName(input));
+  const existingPython = filterExisting(python);
+  const existingJs = filterExisting(js);
+  if (existingPython.length === 0 && existingJs.length === 0) {
     return outputSilentSuccess();
   }
 
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
+  const ruffRun = lintPythonFiles(existingPython, projectDir);
+  const biomeRun = lintJsFiles(existingJs, projectDir);
 
-  const violations: LintViolation[] = [];
-  const formatIssueFiles: string[] = [];
-  let checkedCount = 0;
-  // Which formatter to name in the fix hint. Mixed batches are rare; JS wins
-  // only when it is the sole contributor of format issues.
-  let formatter: 'ruff' | 'biome' = 'ruff';
-
-  // --- Python via ruff ---
-  const existingPython = filterExisting(python);
-  if (existingPython.length > 0) {
-    const ruffPath = findLinter(projectDir);
-    if (ruffPath) {
-      violations.push(...runRuffCheck(ruffPath, existingPython));
-      formatIssueFiles.push(...runRuffFormat(ruffPath, existingPython));
-      checkedCount += existingPython.length;
-    } else {
-      logDebug(HOOK_NAME, 'ruff not available, skipping Python files');
-    }
-  }
-
-  // --- JS/TS via biome ---
-  const existingJs = filterExisting(js);
-  if (existingJs.length > 0) {
-    const biomePath = findBiome(projectDir);
-    if (biomePath) {
-      const biomeResults = runBiomeCheck(biomePath, existingJs);
-      violations.push(...biomeResults.violations);
-      if (formatIssueFiles.length === 0 && biomeResults.formatIssueFiles.length > 0) {
-        formatter = 'biome';
-      }
-      formatIssueFiles.push(...biomeResults.formatIssueFiles);
-      checkedCount += existingJs.length;
-    } else {
-      logDebug(HOOK_NAME, 'biome not available, skipping JS/TS files');
-    }
-  }
-
+  const checkedCount = ruffRun.checkedCount + biomeRun.checkedCount;
   if (checkedCount === 0) {
     return outputSilentSuccess();
   }
 
-  const classified = classifyViolations(violations);
-  const results: LintResults = { violations: classified, formatIssueFiles, formatter };
+  const formatIssueFiles = [...ruffRun.formatIssueFiles, ...biomeRun.formatIssueFiles];
+  // Name the formatter that owns the format issues. Ruff wins a mixed batch;
+  // biome only when it is the sole contributor.
+  const formatter: 'ruff' | 'biome' =
+    ruffRun.formatIssueFiles.length === 0 && biomeRun.formatIssueFiles.length > 0
+      ? 'biome'
+      : 'ruff';
 
-  const message = formatMessage(results, checkedCount);
+  const classified = classifyViolations([...ruffRun.violations, ...biomeRun.violations]);
+  const message = formatMessage(
+    { violations: classified, formatIssueFiles, formatter },
+    checkedCount
+  );
   if (!message) {
     logDebug(HOOK_NAME, `Lint clean: ${[...existingPython, ...existingJs].join(', ')}`);
     return outputSilentSuccess();
@@ -815,24 +857,12 @@ export async function lintChecker(input: HookInput): Promise<HookResult> {
 
   logInfo(HOOK_NAME, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
 
-  // Dual-channel: brief summary for user terminal, full details for Claude via additionalContext
-  const { totalCount } = classified;
-  const secNote = classified.security.length > 0 ? ` (${classified.security.length} security)` : '';
-  const fmtNote = formatIssueFiles.length > 0 ? `, ${formatIssueFiles.length} formatting` : '';
-  // Label by which linter actually ran, NOT by `formatter` -- a TS file with
-  // lint errors but clean formatting leaves `formatter` at its 'ruff' default.
-  let linterLabel: string;
-  if (existingPython.length > 0 && existingJs.length > 0) {
-    linterLabel = 'lint';
-  } else if (existingPython.length > 0) {
-    linterLabel = 'ruff';
-  } else {
-    linterLabel = 'biome';
-  }
-  const userSummary = `${linterLabel}: ${totalCount} lint issue${totalCount !== 1 ? 's' : ''}${secNote}${fmtNote} in ${checkedCount} file${checkedCount !== 1 ? 's' : ''} -- fix before continuing`;
-  const claudeDetails = `Lint issues found -- please fix before continuing:\n\`\`\`\n${message}\n\`\`\``;
-
-  return outputWithNotification(userSummary, claudeDetails);
+  // Dual-channel: brief summary for the user's terminal, full details for Claude
+  const label = linterLabelFor(ruffRun.checkedCount, biomeRun.checkedCount);
+  return outputWithNotification(
+    buildUserSummary(label, classified, formatIssueFiles.length, checkedCount),
+    `Lint issues found -- please fix before continuing:\n\`\`\`\n${message}\n\`\`\``
+  );
 }
 
 export default lintChecker;
