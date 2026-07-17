@@ -2,6 +2,21 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.15.0] - 2026-07-18 — dispatch ladder: per-route agent-dispatch policy + adversarial-verifier agent
+
+The router (auto-research) knew *which skill* handles a goal, but each skill improvised *how many agents* to throw at it — only `review-mr` and `brainstorming --deep` had written dispatch rules, `develop --parallel` spawned "fresh subagents" with no specialist selection, and the adversarial refute-prompt that caught real defects in 4 consecutive PRs was re-typed by hand each time. Design vetted via a strategy-brief playground; decisions: phased A→D, read-only verifier agent, policy lives in agent-loops.
+
+### Added
+
+- **`agent-loops/references/dispatch-policy.md`** — the dispatch ladder (L0 solo default → L1 single specialist → L2 team fan-out → L3 dynamic `Workflow`), single-sourced: escalation criteria per rung, the route→rung map (pointing at the review-mr/brainstorm dispatch tables as exemplars, not duplicating them), the no-nesting structural constraint, model-economics pointers, and the fan-out failure modes (fan-out theater, silent-return orchestration, wrong-specialist dispatch). The orthogonal axis to the autonomy ladder: *how many minds*, not *how unattended*. L3 stays gated on explicit user opt-in — the ladder must not defeat the `Workflow` gate.
+- **`agents/adversarial-verifier.md`** (etk's 5th agent) — codifies the refute-first verification pattern: read-only by construction (no Write/Edit), restates refutation targets, verifies against ground truth (never the author's narrative), cites `file:line` per finding, per-target CLEAN/finding verdicts, SHIP / FIX-FIRST (or CLOSED / NOT-CLOSED) overall.
+- **`develop` Phase 4 domain→agent map** (`development-pipeline/SKILL.md` § Parallel Dispatch): tests→`etk:tdd-implementer` · frontend→`ftk:ui-developer` · backend→`dtk:devops-architect` · LLM→`atk:ai-ml-engineer`, honoring each agent's "Do NOT use for" clause, single-message dispatch, worktrees on file collision. **Phase 5 gains an L1 independent-review gate** (adversarial-verifier / quality-reviewer) for non-trivial builds.
+
+### Notes
+
+- Phase D (cheap-tier model pilot) is deliberately NOT shipped — it piggybacks the next planned review wave per the existing pilot-before-flipping rule.
+- etk agent count 4 → **5** (CLAUDE.md, marketplace, README reconciled).
+
 ## [2.14.1] - 2026-07-17 — fix: /review-mr silently returned nothing (forked return contract)
 
 `/etk:review-mr` runs `context: fork`, so the fork's **final message is the only thing the caller sees**. But the pipeline emitted the synthesized Phase-6 report mid-run and then ended on a terse Phase-7c hand-off block ("✓ Wrote findings… This skill is exiting now") — so the review was buried, not returned. In the common **zero-findings** case (a clean, low-risk PR) there were no artifacts to write and nothing to hand off, so the fork improvised its final message: sometimes the review (worked), sometimes an empty "Skill execution completed" — the review silently lost. This shipped as a real "the review skill returns nothing" failure (observed on PR #32 this session; noted in the 2026-07-17 handoff as a recurring loose thread).
