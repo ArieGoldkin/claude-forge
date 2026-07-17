@@ -131,7 +131,7 @@
       },
       {
         "matcher": "Write|Edit|MultiEdit",
-        "if": "Write(*.ts) || Write(*.tsx) || Write(*.js) || Write(*.py) || Edit(*.ts) || Edit(*.tsx) || Edit(*.js) || Edit(*.py)",
+        "if": "Write(*.ts) || Write(*.tsx) || Write(*.js) || Write(*.jsx) || Write(*.mjs) || Write(*.cjs) || Write(*.py) || Write(*.pyi) || Edit(*.ts) || Edit(*.tsx) || Edit(*.js) || Edit(*.jsx) || Edit(*.mjs) || Edit(*.cjs) || Edit(*.py) || Edit(*.pyi) || MultiEdit(*.ts) || MultiEdit(*.tsx) || MultiEdit(*.js) || MultiEdit(*.jsx) || MultiEdit(*.mjs) || MultiEdit(*.cjs) || MultiEdit(*.py) || MultiEdit(*.pyi)",
         "hooks": [
           {
             "type": "command",

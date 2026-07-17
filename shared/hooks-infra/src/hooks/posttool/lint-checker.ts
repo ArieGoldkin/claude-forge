@@ -60,11 +60,55 @@ export interface RuffViolation {
 }
 
 /**
- * Violations partitioned into security (bandit S-prefix) and general.
+ * A single diagnostic from `biome check --reporter=json` (biome 1.9.x schema).
+ *
+ * Shape differs from ruff in three ways that matter:
+ * - `location.path` is an object, not a string
+ * - `location.span` is a [startByte, endByte] pair, NOT row/column
+ * - `span` is null for `format` diagnostics
+ */
+export interface BiomeDiagnostic {
+  category: string;
+  severity: string;
+  description?: string;
+  location?: {
+    path?: { file?: string };
+    span?: [number, number] | null;
+    sourceCode?: string | null;
+  };
+}
+
+/**
+ * The common display shape both linters normalize into.
+ *
+ * This is the minimum `formatViolationLine` needs. `RuffViolation` is
+ * structurally assignable to it, so widening the formatters to accept
+ * `LintViolation` leaves every existing ruff path untouched -- while
+ * sparing the biome path from forging meaningless ruff-only fields
+ * (`noqa_row`, `end_location`).
+ */
+export interface LintViolation {
+  code: string;
+  message: string;
+  filename: string;
+  location: {
+    row: number;
+    column: number;
+  };
+  fix?: {
+    applicability: 'safe' | 'unsafe' | 'display_only';
+    message?: string;
+  };
+}
+
+/**
+ * Violations partitioned into security and general.
+ *
+ * Security = ruff's bandit `S`-prefix, or biome's `lint/security/*` category.
  */
 export interface ClassifiedViolations {
-  security: RuffViolation[];
-  general: RuffViolation[];
+  security: LintViolation[];
+  general: LintViolation[];
   totalCount: number;
 }
 
@@ -74,6 +118,8 @@ export interface ClassifiedViolations {
 export interface LintResults {
   violations: ClassifiedViolations;
   formatIssueFiles: string[];
+  /** Formatter named in the format-issue hint. Defaults to ruff (Python). */
+  formatter?: 'ruff' | 'biome';
 }
 
 // =============================================================================
@@ -81,9 +127,28 @@ export interface LintResults {
 // =============================================================================
 
 /**
- * File extensions that trigger lint checking.
+ * Python file extensions -- linted by ruff.
  */
 const PYTHON_EXTENSIONS = new Set(['.py', '.pyi']);
+
+/**
+ * JS/TS file extensions -- linted by biome.
+ *
+ * Must stay in sync with the `if` condition wired in each plugin's hooks.json.
+ * They disagreed once already: the matcher fired on .ts/.tsx/.js while this
+ * hook only handled Python, so every TypeScript edit was silently unlinted.
+ */
+const JS_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+
+/**
+ * Biome's category prefix for security rules (its analogue of bandit's `S`).
+ */
+const BIOME_SECURITY_PREFIX = 'lint/security/';
+
+/**
+ * Biome's category for "this file needs formatting". Carries a null span.
+ */
+const BIOME_FORMAT_CATEGORY = 'format';
 
 /**
  * Maximum number of violations to show in the message.
@@ -259,21 +324,219 @@ export function runRuffFormat(linterPath: string, filePaths: string[]): string[]
 }
 
 // =============================================================================
+// BIOME (JS/TS)
+// =============================================================================
+
+/**
+ * Cached biome path (null = not yet checked, undefined = not found).
+ */
+let cachedBiomePath: string | null | undefined = null;
+
+/**
+ * Find the biome binary.
+ *
+ * Search order:
+ * 1. Project node_modules/.bin/biome (the normal case for a JS repo)
+ * 2. PATH (which biome)
+ *
+ * @param projectDir - The project directory to check for node_modules
+ * @returns Path to biome binary, or undefined if not found
+ */
+export function findBiome(projectDir: string): string | undefined {
+  if (cachedBiomePath !== null) {
+    return cachedBiomePath ?? undefined;
+  }
+
+  // 1. Project-local install
+  const localBiome = path.join(projectDir, 'node_modules', '.bin', 'biome');
+  if (fs.existsSync(localBiome)) {
+    cachedBiomePath = localBiome;
+    logDebug(HOOK_NAME, `Found biome in node_modules: ${localBiome}`);
+    return localBiome;
+  }
+
+  // 2. PATH
+  try {
+    const whichResult = execSync('which biome 2>/dev/null', {
+      timeout: 2000,
+      encoding: 'utf8',
+    }).trim();
+    if (whichResult) {
+      cachedBiomePath = whichResult;
+      logDebug(HOOK_NAME, `Found biome in PATH: ${whichResult}`);
+      return whichResult;
+    }
+  } catch {
+    // biome not in PATH
+  }
+
+  cachedBiomePath = undefined;
+  logDebug(HOOK_NAME, 'biome not found');
+  return undefined;
+}
+
+/**
+ * Reset cached biome path. Used for testing.
+ */
+export function resetBiomeCache(): void {
+  cachedBiomePath = null;
+}
+
+/**
+ * Convert a UTF-8 byte offset into a 1-based row/column.
+ *
+ * Biome reports spans as byte offsets; ruff reports row/column. JS strings are
+ * UTF-16, so slicing by a byte offset is wrong for any non-ASCII source --
+ * go through a Buffer.
+ *
+ * @param content - Full file contents
+ * @param byteOffset - UTF-8 byte offset into that content
+ * @returns 1-based row and column
+ */
+export function offsetToRowCol(
+  content: string,
+  byteOffset: number
+): { row: number; column: number } {
+  const buf = Buffer.from(content, 'utf8');
+  const clamped = Math.max(0, Math.min(byteOffset, buf.length));
+  const before = buf.subarray(0, clamped).toString('utf8');
+  const lines = before.split('\n');
+  return {
+    row: lines.length,
+    column: (lines[lines.length - 1]?.length ?? 0) + 1,
+  };
+}
+
+/**
+ * Normalize a biome diagnostic into the common LintViolation shape.
+ *
+ * Returns null for diagnostics that carry no usable location (notably
+ * `format`, whose span is null -- those are handled as format issues, not
+ * violations).
+ *
+ * @param diag - A single biome diagnostic
+ * @param fileContents - Map of filename to contents, for span conversion
+ * @returns LintViolation, or null if not a locatable lint violation
+ */
+export function normalizeBiomeDiagnostic(
+  diag: BiomeDiagnostic,
+  fileContents: Map<string, string>
+): LintViolation | null {
+  const filename = diag.location?.path?.file;
+  if (!filename) return null;
+
+  const span = diag.location?.span;
+  let location = { row: 1, column: 1 };
+  if (span && Array.isArray(span) && typeof span[0] === 'number') {
+    const content = fileContents.get(filename);
+    if (content !== undefined) {
+      location = offsetToRowCol(content, span[0]);
+    }
+  }
+
+  return {
+    code: diag.category,
+    message: diag.description || '(no description)',
+    filename,
+    location,
+  };
+}
+
+/**
+ * Run `biome check` on files, returning violations and files needing formatting.
+ *
+ * Unlike ruff (separate `check` and `format --check`), a single `biome check`
+ * reports both: lint rules as `lint/<group>/<rule>` categories, and formatting
+ * as a `format` category with a null span.
+ *
+ * Uses execFileSync (args array, no shell) to prevent command injection.
+ *
+ * @param biomePath - Absolute path to the biome binary
+ * @param filePaths - Absolute paths to JS/TS files to check
+ * @returns Violations plus the files that need formatting
+ */
+export function runBiomeCheck(
+  biomePath: string,
+  filePaths: string[]
+): { violations: LintViolation[]; formatIssueFiles: string[] } {
+  let stdout = '';
+  try {
+    execFileSync(biomePath, ['check', '--reporter=json', ...filePaths], {
+      timeout: LINTER_TIMEOUT_MS,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    // Exit code 0 = clean
+    return { violations: [], formatIssueFiles: [] };
+  } catch (err: unknown) {
+    const execError = err as { stdout?: string; stderr?: string; status?: number };
+    // Exit code 1 = diagnostics found, JSON on stdout
+    if (execError.status === 1 && execError.stdout) {
+      stdout = execError.stdout;
+    } else {
+      logWarn(HOOK_NAME, `biome execution error: ${String(err)}`);
+      return { violations: [], formatIssueFiles: [] };
+    }
+  }
+
+  let diagnostics: BiomeDiagnostic[];
+  try {
+    const parsed = JSON.parse(stdout) as { diagnostics?: BiomeDiagnostic[] };
+    diagnostics = Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
+  } catch {
+    logWarn(HOOK_NAME, 'Failed to parse biome JSON output, skipping');
+    return { violations: [], formatIssueFiles: [] };
+  }
+
+  // Read each file once for span -> row/col conversion
+  const fileContents = new Map<string, string>();
+  for (const diag of diagnostics) {
+    const f = diag.location?.path?.file;
+    if (f && !fileContents.has(f)) {
+      try {
+        fileContents.set(f, fs.readFileSync(f, 'utf8'));
+      } catch {
+        // unreadable -- normalizeBiomeDiagnostic falls back to 1:1
+      }
+    }
+  }
+
+  const violations: LintViolation[] = [];
+  const formatIssueFiles = new Set<string>();
+
+  for (const diag of diagnostics) {
+    if (diag.category === BIOME_FORMAT_CATEGORY) {
+      const f = diag.location?.path?.file;
+      if (f) formatIssueFiles.add(f);
+      continue;
+    }
+    const normalized = normalizeBiomeDiagnostic(diag, fileContents);
+    if (normalized) violations.push(normalized);
+  }
+
+  return { violations, formatIssueFiles: Array.from(formatIssueFiles) };
+}
+
+// =============================================================================
 // CLASSIFICATION
 // =============================================================================
 
 /**
- * Partition violations into security (bandit S-prefix) and general.
+ * Partition violations into security and general.
  *
- * @param violations - Array of ruff violations
+ * Security is ruff's bandit `S`-prefix (S101, S608, ...) or biome's
+ * `lint/security/*` category. Both linters normalize into LintViolation,
+ * so one classifier serves both.
+ *
+ * @param violations - Array of violations from either linter
  * @returns Classified violations with counts
  */
-export function classifyViolations(violations: RuffViolation[]): ClassifiedViolations {
-  const security: RuffViolation[] = [];
-  const general: RuffViolation[] = [];
+export function classifyViolations(violations: LintViolation[]): ClassifiedViolations {
+  const security: LintViolation[] = [];
+  const general: LintViolation[] = [];
 
   for (const v of violations) {
-    if (v.code.startsWith('S')) {
+    if (v.code.startsWith('S') || v.code.startsWith(BIOME_SECURITY_PREFIX)) {
       security.push(v);
     } else {
       general.push(v);
@@ -290,7 +553,7 @@ export function classifyViolations(violations: RuffViolation[]): ClassifiedViola
 /**
  * Format a single violation line.
  */
-function formatViolationLine(v: RuffViolation): string {
+function formatViolationLine(v: LintViolation): string {
   const loc = `${path.basename(v.filename)}:${v.location.row}:${v.location.column}`;
   let fixHint = 'no auto-fix';
   if (v.fix) {
@@ -306,7 +569,7 @@ function plural(n: number, singular: string): string {
 /**
  * Format the security violations section.
  */
-function formatSecuritySection(security: RuffViolation[]): string {
+function formatSecuritySection(security: LintViolation[]): string {
   const shown = security.slice(0, 10);
   const lines = shown.map(formatViolationLine);
   let section = `Security lint violations (${security.length}) -- fix immediately:\n${lines.join('\n')}`;
@@ -319,7 +582,7 @@ function formatSecuritySection(security: RuffViolation[]): string {
 /**
  * Format the general violations section.
  */
-function formatGeneralSection(general: RuffViolation[], securityCount: number): string {
+function formatGeneralSection(general: LintViolation[], securityCount: number): string {
   const maxGeneral = Math.max(MAX_VIOLATIONS_SHOWN - securityCount, 0);
   const shown = general.slice(0, maxGeneral);
   const lines = shown.map(formatViolationLine);
@@ -332,11 +595,13 @@ function formatGeneralSection(general: RuffViolation[], securityCount: number): 
 
 /**
  * Format the formatting issues section.
+ *
+ * The fix hint must name the formatter that actually owns the file --
+ * telling a TypeScript author to run `ruff format` is worse than useless.
  */
-function formatFormatSection(files: string[]): string {
-  const fileLines = files.map(
-    (f) => `  ${path.basename(f)} needs formatting (run \`ruff format\`)`
-  );
+function formatFormatSection(files: string[], formatter: 'ruff' | 'biome' = 'ruff'): string {
+  const cmd = formatter === 'biome' ? 'biome format --write' : 'ruff format';
+  const fileLines = files.map((f) => `  ${path.basename(f)} needs formatting (run \`${cmd}\`)`);
   return `Format issues (${plural(files.length, 'file')}):\n${fileLines.join('\n')}`;
 }
 
@@ -368,7 +633,7 @@ function formatSummaryLine(
  * @returns Formatted message string, empty if nothing to report
  */
 export function formatMessage(results: LintResults, fileCount: number): string {
-  const { violations, formatIssueFiles } = results;
+  const { violations, formatIssueFiles, formatter } = results;
   const { security, general, totalCount } = violations;
 
   if (totalCount === 0 && formatIssueFiles.length === 0) {
@@ -384,7 +649,7 @@ export function formatMessage(results: LintResults, fileCount: number): string {
     sections.push(formatGeneralSection(general, security.length));
   }
   if (formatIssueFiles.length > 0) {
-    sections.push(formatFormatSection(formatIssueFiles));
+    sections.push(formatFormatSection(formatIssueFiles, formatter));
   }
   sections.push(formatSummaryLine(violations, formatIssueFiles, fileCount));
 
@@ -426,13 +691,16 @@ function getMultiEditPaths(input: HookInput): string[] {
 // =============================================================================
 
 /**
- * Collect Python file paths from hook input based on tool type.
+ * Collect lintable file paths from hook input, partitioned by linter.
  *
  * @param input - Hook input
  * @param toolName - The tool name (Write, Edit, MultiEdit)
- * @returns Array of Python file paths, empty if none found
+ * @returns Python and JS/TS file paths (either may be empty)
  */
-function collectPythonFiles(input: HookInput, toolName: string): string[] {
+function collectLintableFiles(
+  input: HookInput,
+  toolName: string
+): { python: string[]; js: string[] } {
   let filePaths: string[];
   if (toolName === 'MultiEdit') {
     filePaths = getMultiEditPaths(input);
@@ -441,22 +709,42 @@ function collectPythonFiles(input: HookInput, toolName: string): string[] {
     filePaths = fp ? [fp] : [];
   }
 
-  return filePaths.filter((fp) => {
+  const python: string[] = [];
+  const js: string[] = [];
+  for (const fp of filePaths) {
     const ext = path.extname(fp).toLowerCase();
-    return PYTHON_EXTENSIONS.has(ext);
-  });
+    if (PYTHON_EXTENSIONS.has(ext)) {
+      python.push(fp);
+    } else if (JS_EXTENSIONS.has(ext)) {
+      js.push(fp);
+    }
+  }
+  return { python, js };
 }
 
 // =============================================================================
 // MAIN HOOK
 // =============================================================================
 
+/** Keep only paths that exist on disk. */
+function filterExisting(filePaths: string[]): string[] {
+  return filePaths.filter((fp) => {
+    if (!fs.existsSync(fp)) {
+      logDebug(HOOK_NAME, `File not found: ${fp}`);
+      return false;
+    }
+    return true;
+  });
+}
+
 /**
  * Lint checker PostToolUse hook.
  *
- * After Write/Edit/MultiEdit on a Python file, runs ruff check and
- * ruff format --check, then reports issues as a system message.
- * Security (bandit) violations are highlighted for security awareness.
+ * After Write/Edit/MultiEdit, lints the touched files with the linter that
+ * owns them: ruff for Python (check + format --check), biome for JS/TS
+ * (a single `check` covers both). Security violations -- ruff's bandit
+ * `S`-prefix or biome's `lint/security/*` -- are highlighted.
+ *
  * Always continues (never blocks) -- lint feedback is advisory so
  * Claude can self-correct.
  *
@@ -468,55 +756,80 @@ export async function lintChecker(input: HookInput): Promise<HookResult> {
   if (skipped) return skipped;
 
   const toolName = getToolName(input);
-
-  const pythonFiles = collectPythonFiles(input, toolName);
-  if (pythonFiles.length === 0) {
+  const { python, js } = collectLintableFiles(input, toolName);
+  if (python.length === 0 && js.length === 0) {
     return outputSilentSuccess();
   }
 
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
-  const linterPath = findLinter(projectDir);
-  if (!linterPath) {
-    logDebug(HOOK_NAME, 'No linter available, skipping');
-    return outputSilentSuccess();
-  }
 
-  // Filter to files that exist on disk
-  const existingFiles = pythonFiles.filter((fp) => {
-    if (!fs.existsSync(fp)) {
-      logDebug(HOOK_NAME, `File not found: ${fp}`);
-      return false;
+  const violations: LintViolation[] = [];
+  const formatIssueFiles: string[] = [];
+  let checkedCount = 0;
+  // Which formatter to name in the fix hint. Mixed batches are rare; JS wins
+  // only when it is the sole contributor of format issues.
+  let formatter: 'ruff' | 'biome' = 'ruff';
+
+  // --- Python via ruff ---
+  const existingPython = filterExisting(python);
+  if (existingPython.length > 0) {
+    const ruffPath = findLinter(projectDir);
+    if (ruffPath) {
+      violations.push(...runRuffCheck(ruffPath, existingPython));
+      formatIssueFiles.push(...runRuffFormat(ruffPath, existingPython));
+      checkedCount += existingPython.length;
+    } else {
+      logDebug(HOOK_NAME, 'ruff not available, skipping Python files');
     }
-    return true;
-  });
-
-  if (existingFiles.length === 0) {
-    return outputSilentSuccess();
   }
 
-  // Run ruff check and format in batch
-  const violations = runRuffCheck(linterPath, existingFiles);
-  const formatIssueFiles = runRuffFormat(linterPath, existingFiles);
+  // --- JS/TS via biome ---
+  const existingJs = filterExisting(js);
+  if (existingJs.length > 0) {
+    const biomePath = findBiome(projectDir);
+    if (biomePath) {
+      const biomeResults = runBiomeCheck(biomePath, existingJs);
+      violations.push(...biomeResults.violations);
+      if (formatIssueFiles.length === 0 && biomeResults.formatIssueFiles.length > 0) {
+        formatter = 'biome';
+      }
+      formatIssueFiles.push(...biomeResults.formatIssueFiles);
+      checkedCount += existingJs.length;
+    } else {
+      logDebug(HOOK_NAME, 'biome not available, skipping JS/TS files');
+    }
+  }
+
+  if (checkedCount === 0) {
+    return outputSilentSuccess();
+  }
 
   const classified = classifyViolations(violations);
-  const results: LintResults = { violations: classified, formatIssueFiles };
+  const results: LintResults = { violations: classified, formatIssueFiles, formatter };
 
-  const message = formatMessage(results, existingFiles.length);
+  const message = formatMessage(results, checkedCount);
   if (!message) {
-    logDebug(HOOK_NAME, `Lint clean: ${existingFiles.join(', ')}`);
+    logDebug(HOOK_NAME, `Lint clean: ${[...existingPython, ...existingJs].join(', ')}`);
     return outputSilentSuccess();
   }
 
-  logInfo(
-    HOOK_NAME,
-    `Found ${classified.totalCount} lint issues in ${existingFiles.length} file(s)`
-  );
+  logInfo(HOOK_NAME, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
 
   // Dual-channel: brief summary for user terminal, full details for Claude via additionalContext
   const { totalCount } = classified;
   const secNote = classified.security.length > 0 ? ` (${classified.security.length} security)` : '';
   const fmtNote = formatIssueFiles.length > 0 ? `, ${formatIssueFiles.length} formatting` : '';
-  const userSummary = `ruff: ${totalCount} lint issue${totalCount !== 1 ? 's' : ''}${secNote}${fmtNote} in ${existingFiles.length} file${existingFiles.length !== 1 ? 's' : ''} -- fix before continuing`;
+  // Label by which linter actually ran, NOT by `formatter` -- a TS file with
+  // lint errors but clean formatting leaves `formatter` at its 'ruff' default.
+  let linterLabel: string;
+  if (existingPython.length > 0 && existingJs.length > 0) {
+    linterLabel = 'lint';
+  } else if (existingPython.length > 0) {
+    linterLabel = 'ruff';
+  } else {
+    linterLabel = 'biome';
+  }
+  const userSummary = `${linterLabel}: ${totalCount} lint issue${totalCount !== 1 ? 's' : ''}${secNote}${fmtNote} in ${checkedCount} file${checkedCount !== 1 ? 's' : ''} -- fix before continuing`;
   const claudeDetails = `Lint issues found -- please fix before continuing:\n\`\`\`\n${message}\n\`\`\``;
 
   return outputWithNotification(userSummary, claudeDetails);

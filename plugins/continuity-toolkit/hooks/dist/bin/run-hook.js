@@ -4287,6 +4287,9 @@ async function failureLogger(input) {
 }
 var HOOK_NAME23 = "lint-checker";
 var PYTHON_EXTENSIONS = /* @__PURE__ */ new Set([".py", ".pyi"]);
+var JS_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
+var BIOME_SECURITY_PREFIX = "lint/security/";
+var BIOME_FORMAT_CATEGORY = "format";
 var MAX_VIOLATIONS_SHOWN = 20;
 var MAX_MESSAGE_LENGTH = 3e3;
 var LINTER_TIMEOUT_MS = 5e3;
@@ -4371,11 +4374,115 @@ function runRuffFormat(linterPath, filePaths) {
     return [];
   }
 }
+var cachedBiomePath = null;
+function findBiome(projectDir) {
+  if (cachedBiomePath !== null) {
+    return cachedBiomePath ?? void 0;
+  }
+  const localBiome = path2.join(projectDir, "node_modules", ".bin", "biome");
+  if (fs6.existsSync(localBiome)) {
+    cachedBiomePath = localBiome;
+    logDebug(HOOK_NAME23, `Found biome in node_modules: ${localBiome}`);
+    return localBiome;
+  }
+  try {
+    const whichResult = execSync("which biome 2>/dev/null", {
+      timeout: 2e3,
+      encoding: "utf8"
+    }).trim();
+    if (whichResult) {
+      cachedBiomePath = whichResult;
+      logDebug(HOOK_NAME23, `Found biome in PATH: ${whichResult}`);
+      return whichResult;
+    }
+  } catch {
+  }
+  cachedBiomePath = void 0;
+  logDebug(HOOK_NAME23, "biome not found");
+  return void 0;
+}
+function offsetToRowCol(content, byteOffset) {
+  const buf = Buffer.from(content, "utf8");
+  const clamped = Math.max(0, Math.min(byteOffset, buf.length));
+  const before = buf.subarray(0, clamped).toString("utf8");
+  const lines = before.split("\n");
+  return {
+    row: lines.length,
+    column: (lines[lines.length - 1]?.length ?? 0) + 1
+  };
+}
+function normalizeBiomeDiagnostic(diag, fileContents) {
+  const filename = diag.location?.path?.file;
+  if (!filename) return null;
+  const span = diag.location?.span;
+  let location = { row: 1, column: 1 };
+  if (span && Array.isArray(span) && typeof span[0] === "number") {
+    const content = fileContents.get(filename);
+    if (content !== void 0) {
+      location = offsetToRowCol(content, span[0]);
+    }
+  }
+  return {
+    code: diag.category,
+    message: diag.description || "(no description)",
+    filename,
+    location
+  };
+}
+function runBiomeCheck(biomePath, filePaths) {
+  let stdout = "";
+  try {
+    execFileSync(biomePath, ["check", "--reporter=json", ...filePaths], {
+      timeout: LINTER_TIMEOUT_MS,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    return { violations: [], formatIssueFiles: [] };
+  } catch (err) {
+    const execError = err;
+    if (execError.status === 1 && execError.stdout) {
+      stdout = execError.stdout;
+    } else {
+      logWarn(HOOK_NAME23, `biome execution error: ${String(err)}`);
+      return { violations: [], formatIssueFiles: [] };
+    }
+  }
+  let diagnostics;
+  try {
+    const parsed = JSON.parse(stdout);
+    diagnostics = Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
+  } catch {
+    logWarn(HOOK_NAME23, "Failed to parse biome JSON output, skipping");
+    return { violations: [], formatIssueFiles: [] };
+  }
+  const fileContents = /* @__PURE__ */ new Map();
+  for (const diag of diagnostics) {
+    const f = diag.location?.path?.file;
+    if (f && !fileContents.has(f)) {
+      try {
+        fileContents.set(f, fs6.readFileSync(f, "utf8"));
+      } catch {
+      }
+    }
+  }
+  const violations = [];
+  const formatIssueFiles = /* @__PURE__ */ new Set();
+  for (const diag of diagnostics) {
+    if (diag.category === BIOME_FORMAT_CATEGORY) {
+      const f = diag.location?.path?.file;
+      if (f) formatIssueFiles.add(f);
+      continue;
+    }
+    const normalized = normalizeBiomeDiagnostic(diag, fileContents);
+    if (normalized) violations.push(normalized);
+  }
+  return { violations, formatIssueFiles: Array.from(formatIssueFiles) };
+}
 function classifyViolations(violations) {
   const security = [];
   const general = [];
   for (const v of violations) {
-    if (v.code.startsWith("S")) {
+    if (v.code.startsWith("S") || v.code.startsWith(BIOME_SECURITY_PREFIX)) {
       security.push(v);
     } else {
       general.push(v);
@@ -4417,10 +4524,9 @@ ${lines.join("\n")}`;
   }
   return section;
 }
-function formatFormatSection(files) {
-  const fileLines = files.map(
-    (f) => `  ${path2.basename(f)} needs formatting (run \`ruff format\`)`
-  );
+function formatFormatSection(files, formatter = "ruff") {
+  const cmd = formatter === "biome" ? "biome format --write" : "ruff format";
+  const fileLines = files.map((f) => `  ${path2.basename(f)} needs formatting (run \`${cmd}\`)`);
   return `Format issues (${plural(files.length, "file")}):
 ${fileLines.join("\n")}`;
 }
@@ -4436,7 +4542,7 @@ function formatSummaryLine(classified, formatIssueFiles, fileCount) {
   return `Total: ${parts.join(", ")} in ${plural(fileCount, "file")}.`;
 }
 function formatMessage(results, fileCount) {
-  const { violations, formatIssueFiles } = results;
+  const { violations, formatIssueFiles, formatter } = results;
   const { security, general, totalCount } = violations;
   if (totalCount === 0 && formatIssueFiles.length === 0) {
     return "";
@@ -4449,7 +4555,7 @@ function formatMessage(results, fileCount) {
     sections.push(formatGeneralSection(general, security.length));
   }
   if (formatIssueFiles.length > 0) {
-    sections.push(formatFormatSection(formatIssueFiles));
+    sections.push(formatFormatSection(formatIssueFiles, formatter));
   }
   sections.push(formatSummaryLine(violations, formatIssueFiles, fileCount));
   let message = sections.join("\n\n");
@@ -4472,7 +4578,7 @@ function getMultiEditPaths(input) {
   }
   return Array.from(paths);
 }
-function collectPythonFiles(input, toolName) {
+function collectLintableFiles(input, toolName) {
   let filePaths;
   if (toolName === "MultiEdit") {
     filePaths = getMultiEditPaths(input);
@@ -4480,52 +4586,89 @@ function collectPythonFiles(input, toolName) {
     const fp = getFilePath(input);
     filePaths = fp ? [fp] : [];
   }
-  return filePaths.filter((fp) => {
+  const python = [];
+  const js = [];
+  for (const fp of filePaths) {
     const ext = path2.extname(fp).toLowerCase();
-    return PYTHON_EXTENSIONS.has(ext);
-  });
+    if (PYTHON_EXTENSIONS.has(ext)) {
+      python.push(fp);
+    } else if (JS_EXTENSIONS.has(ext)) {
+      js.push(fp);
+    }
+  }
+  return { python, js };
 }
-async function lintChecker(input) {
-  const skipped = runGuards(input, guardWriteEdit);
-  if (skipped) return skipped;
-  const toolName = getToolName(input);
-  const pythonFiles = collectPythonFiles(input, toolName);
-  if (pythonFiles.length === 0) {
-    return outputSilentSuccess();
-  }
-  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const linterPath = findLinter(projectDir);
-  if (!linterPath) {
-    logDebug(HOOK_NAME23, "No linter available, skipping");
-    return outputSilentSuccess();
-  }
-  const existingFiles = pythonFiles.filter((fp) => {
+function filterExisting(filePaths) {
+  return filePaths.filter((fp) => {
     if (!fs6.existsSync(fp)) {
       logDebug(HOOK_NAME23, `File not found: ${fp}`);
       return false;
     }
     return true;
   });
-  if (existingFiles.length === 0) {
+}
+async function lintChecker(input) {
+  const skipped = runGuards(input, guardWriteEdit);
+  if (skipped) return skipped;
+  const toolName = getToolName(input);
+  const { python, js } = collectLintableFiles(input, toolName);
+  if (python.length === 0 && js.length === 0) {
     return outputSilentSuccess();
   }
-  const violations = runRuffCheck(linterPath, existingFiles);
-  const formatIssueFiles = runRuffFormat(linterPath, existingFiles);
+  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
+  const violations = [];
+  const formatIssueFiles = [];
+  let checkedCount = 0;
+  let formatter = "ruff";
+  const existingPython = filterExisting(python);
+  if (existingPython.length > 0) {
+    const ruffPath = findLinter(projectDir);
+    if (ruffPath) {
+      violations.push(...runRuffCheck(ruffPath, existingPython));
+      formatIssueFiles.push(...runRuffFormat(ruffPath, existingPython));
+      checkedCount += existingPython.length;
+    } else {
+      logDebug(HOOK_NAME23, "ruff not available, skipping Python files");
+    }
+  }
+  const existingJs = filterExisting(js);
+  if (existingJs.length > 0) {
+    const biomePath = findBiome(projectDir);
+    if (biomePath) {
+      const biomeResults = runBiomeCheck(biomePath, existingJs);
+      violations.push(...biomeResults.violations);
+      if (formatIssueFiles.length === 0 && biomeResults.formatIssueFiles.length > 0) {
+        formatter = "biome";
+      }
+      formatIssueFiles.push(...biomeResults.formatIssueFiles);
+      checkedCount += existingJs.length;
+    } else {
+      logDebug(HOOK_NAME23, "biome not available, skipping JS/TS files");
+    }
+  }
+  if (checkedCount === 0) {
+    return outputSilentSuccess();
+  }
   const classified = classifyViolations(violations);
-  const results = { violations: classified, formatIssueFiles };
-  const message = formatMessage(results, existingFiles.length);
+  const results = { violations: classified, formatIssueFiles, formatter };
+  const message = formatMessage(results, checkedCount);
   if (!message) {
-    logDebug(HOOK_NAME23, `Lint clean: ${existingFiles.join(", ")}`);
+    logDebug(HOOK_NAME23, `Lint clean: ${[...existingPython, ...existingJs].join(", ")}`);
     return outputSilentSuccess();
   }
-  logInfo(
-    HOOK_NAME23,
-    `Found ${classified.totalCount} lint issues in ${existingFiles.length} file(s)`
-  );
+  logInfo(HOOK_NAME23, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
   const { totalCount } = classified;
   const secNote = classified.security.length > 0 ? ` (${classified.security.length} security)` : "";
   const fmtNote = formatIssueFiles.length > 0 ? `, ${formatIssueFiles.length} formatting` : "";
-  const userSummary = `ruff: ${totalCount} lint issue${totalCount !== 1 ? "s" : ""}${secNote}${fmtNote} in ${existingFiles.length} file${existingFiles.length !== 1 ? "s" : ""} -- fix before continuing`;
+  let linterLabel;
+  if (existingPython.length > 0 && existingJs.length > 0) {
+    linterLabel = "lint";
+  } else if (existingPython.length > 0) {
+    linterLabel = "ruff";
+  } else {
+    linterLabel = "biome";
+  }
+  const userSummary = `${linterLabel}: ${totalCount} lint issue${totalCount !== 1 ? "s" : ""}${secNote}${fmtNote} in ${checkedCount} file${checkedCount !== 1 ? "s" : ""} -- fix before continuing`;
   const claudeDetails = `Lint issues found -- please fix before continuing:
 \`\`\`
 ${message}
