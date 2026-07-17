@@ -143,4 +143,5 @@ And the invariant that predates all of it: **routines are user-initiated only** 
 the `/schedule`; no loop bootstraps a paid background routine on its own (`unattended-mode.md` rail 3,
 the no-paid-background-LLM rule). `investigate-sentry` and any credentialed routine additionally
 inherit whatever secret the skill needs (1Password for Sentry) — a routine must not widen that
-secret's blast radius, which is another reason the governance-defaults work gates them.
+secret's blast radius, which is why a cloud routine minimizes its connector scope
+(see [`unattended-governance.md`](unattended-governance.md)).
