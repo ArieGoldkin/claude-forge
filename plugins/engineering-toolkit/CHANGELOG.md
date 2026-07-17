@@ -2,6 +2,19 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.14.0] - 2026-07-17 — unattended-run governance: two execution contexts, corrected settings-inheritance premise
+
+The 2.13.0 routine docs pointed to a "pending governance-defaults effort" and implied the `.claude/settings.json` model/permission floor would govern routines. Grounding against Claude Code's routines + model-configuration docs proved that premise **false**: `/schedule` **cloud** routines run on Anthropic-managed VMs and do **not** read local `.claude/settings.json` — only server-managed settings reach them, and they run with no permission-mode picker or approval prompts. A governance doc written on the old premise would have shipped guardrails that never load.
+
+### Added
+
+- **`auto-research/references/unattended-governance.md`** — a two-context governance map. **In-session unattended** (`/loop`, `--unattended`, `CronCreate`) honors `.claude/settings.json`, so the `hard_deny` baseline + `enforceAvailableModels` apply (but `soft_deny` is "prompt before" → near-useless with no human). **Cloud routine** (`/schedule`) reads only server-managed settings and is governed by its creation-form scopes: per-routine model selector (cost pin), network access, connector minimization, "unrestricted branch pushes" OFF (→ `claude/` branches), and a propose-only prompt (no approval prompts exist). Includes a rung→control mapping per context and an explicit **"unverified — test before relying"** box for the CC behaviors the docs don't confirm (`autoMode.*` effect on routines, `soft_deny`-with-no-human, `enforceAvailableModels` on routines beyond the selector).
+
+### Fixed
+
+- **`routine-recipes.md` § Governance** — point 2 (shipped in 2.13.0) implied the settings.json floor becomes "the enforced default set for routines." Corrected to the two-context reality and repointed to `unattended-governance.md`.
+- **root `CLAUDE.md` § Model & MCP governance** — added a note that those keys govern *local* sessions; cloud routines need **server-managed** settings + creation-form scopes.
+
 ## [2.13.0] - 2026-07-17 — routine recipes: skill→routine-safety classifier + BUY-NOT-BUILD scheduling
 
 The autonomy docs mapped the ~6 auto-research *routes* to rungs, but never answered "can I run **this** skill as a scheduled routine, and how?" — the question an installer with ~85 skills actually asks. This adds that layer without adding machinery: routines ride Claude Code's native `/schedule` (persistent cloud routines) and inherit the existing rungs and rails unchanged.

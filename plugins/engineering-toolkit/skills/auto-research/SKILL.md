@@ -512,6 +512,9 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
 - **Routine Recipes**: `${CLAUDE_SKILL_DIR}/references/routine-recipes.md` — Which of our skills are
   routine-safe (the report/propose classifier) and how to `/schedule` one as a persistent routine;
   the nightly `/etk:audit-skill` flagship
+- **Unattended Governance**: `${CLAUDE_SKILL_DIR}/references/unattended-governance.md` — What actually
+  enforces on an unattended run: in-session (`.claude/settings.json` applies) vs cloud routine
+  (server-managed + creation-form scopes only); rung→control mapping; what's unverified
 - **Worked Examples**: `${CLAUDE_SKILL_DIR}/references/worked-examples.md` — Full end-to-end
   examples for each route (optimize, fix, cover, design, build, review, verify)
 - **Self-Improvement**: `${CLAUDE_SKILL_DIR}/references/self-improvement.md` — Skill
