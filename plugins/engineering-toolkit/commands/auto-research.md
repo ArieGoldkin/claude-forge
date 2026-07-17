@@ -1,5 +1,5 @@
 ---
-description: Autonomous goal-driven research — takes a natural language goal and orchestrates the right skill (/experiment, /fix-bug, /cover, /brainstorming, /develop, /review-mr, /verify, /ctk:web-research)
+description: Autonomous goal-driven orchestrator — takes a natural language goal and routes it to the right skill. Use when you know the goal but not the method.
 ---
 
 # Auto-Research: $ARGUMENTS

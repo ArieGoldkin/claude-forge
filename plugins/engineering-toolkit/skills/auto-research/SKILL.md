@@ -1,6 +1,6 @@
 ---
 name: auto-research
-description: "Autonomous goal-driven research orchestrator. Classifies natural language goals, selects the right skill, confirms plan, and executes. Routes to /fix-bug, /experiment, /cover, /brainstorming, /develop, /review-mr, /verify, or /ctk:web-research. Use when: user describes a goal not a method, the right skill is unclear, or you want the agent to pick the approach. Triggers on: auto-research, figure out, fix the, improve the, get coverage, design a, build the, make sure, optimize the, why isn't"
+description: "Autonomous goal-driven orchestrator. Classifies a natural-language goal, routes it to the right etk/ctk skill, confirms the plan, and executes. Use when: user describes a goal not a method, the right skill is unclear, or you want the agent to pick the approach. Triggers on: auto-research, figure out, fix the, improve the, get coverage, design a, build the, make sure, optimize the, why isn't"
 effort: xhigh
 context: fork
 ---
@@ -85,7 +85,7 @@ Apply the **Intent Classification table** (Phase 1 → §Classify) top-down: rou
 Parse the user's natural language goal into a structured intent.
 
 1. Read the user's goal (the `$ARGUMENTS` string)
-2. Classify into one of 10 intent categories (see Intent Classification below)
+2. Classify into an intent category (see the Intent Classification table below — it is the single source; do not restate its size or contents here)
 3. Extract key parameters: target files, metric, threshold, scope
 4. If ambiguous, ask ONE clarifying question before proceeding
 
@@ -101,11 +101,36 @@ Parse the user's natural language goal into a structured intent.
 | `review` | review, MR, PR, merge request, pull request, !{number} | `/review-mr` |
 | `verify` | verify, check, validate, ensure, passes, green | `/verify` |
 | `diagnose` | why, why not, why isn't, why does, why can't, investigate | `/fix-bug` (investigation-first) |
+| `triage` | sentry, sentry issue, sentry triage, production error + issue id | `/investigate-sentry` |
 | `improve-skill` | optimize prompt, improve skill, SKILL.md, better instructions | `/experiment` on SKILL.md |
+| `audit-skill` | skill quality, audit skill, prune skill, sediment, no-op, lint skill | `/audit-skill` (read-only) |
+| `ship` | ship it, ready for review, open a PR, open an MR, PR description, create pull request | `/prepare-pr` |
+| `compliance` | HIPAA, PHI, compliant, protected health information, BAA, data privacy | `/hipaa-compliance-checker` |
 | `research` | research, landscape, survey, compare options, state of, find out about, look into | `/ctk:web-research` |
 
 When multiple categories match, prefer the more specific one. `"fix the slow query"` is `fix`
 (not `optimize`) because the user said "fix." `"make the API faster"` is `optimize`.
+
+**Row order is not a tiebreak — four pairs collide, and in three of them the
+earlier row would win on a bare keyword match.** Apply these before falling back
+to "first match" (full rules in `${CLAUDE_SKILL_DIR}/references/routing-rules.md`
+§Disambiguation, rules 10–13):
+
+- **`ship` vs `review`** — `review` sits **6 rows earlier** and owns "PR / pull request / review",
+  which appear inside nearly every `ship` signal. **Opening** an MR/PR → `ship` (`/prepare-pr`).
+  **Reviewing one that already exists** → `review`. `"create a pull request"` is `ship`, even though
+  `review` matches "pull request" first.
+- **`triage` vs `fix` / `diagnose`** — `fix` is the **first row** and owns "error", which sits inside
+  `triage`'s own "production error". A **Sentry issue ID or URL is present** → `triage`, overriding
+  both. No ID → `fix` (explicit "fix" verb) or `diagnose` (a "why" question).
+- **`compliance` vs `verify`** — `verify` owns "check" and sits earlier. A **HIPAA/PHI/BAA term is
+  present** → `compliance`, even though `"check if we're compliant"` matches `verify` first.
+- **`audit-skill` vs `improve-skill`** — both target a `SKILL.md`. *Judging* quality → `audit-skill`
+  (read-only, never edits); *changing* the skill to improve it → `improve-skill`.
+
+`ship` is the only added route that **writes** (it commits, pushes, and opens the MR/PR). It gates
+itself — `prepare-pr` requires human approval of the drafted body before creating anything — so the
+router must **not** pass `--no-confirm` through to it. Let the skill's own gate fire.
 
 ### Phase 2: Plan
 
@@ -184,8 +209,15 @@ Hand off to the target skill and provide progress visibility.
 | `/develop` | At pipeline phase boundaries | `phase: design/plan/build/verify \| task N/M` |
 | `/brainstorming` | At agent launches | `phase: agents launched/synthesis/complete` |
 | `/ctk:web-research` | At source milestones | `phase: searching/fetching/synthesizing \| sources: N` |
+| `/investigate-sentry` | At investigation phase boundaries | `phase: fetch/correlate/assess \| issue: {id}` |
 | `/review-mr` | None (fast, single-pass) | — |
 | `/verify` | None (fast, single-pass) | — |
+| `/prepare-pr` | None (single-pass; it has its own approval gate) | — |
+| `/hipaa-compliance-checker` | None (single-pass) | — |
+| `/audit-skill` | None (single-pass, read-only) | — |
+
+> **Any route not listed above: no heartbeat, single-pass.** Add a row only when a
+> route is iterative or long enough that silence would look like a hang.
 
 **Example heartbeat for /experiment:**
 ```
@@ -224,8 +256,15 @@ STATUS:   {DONE | DONE_WITH_CONCERNS | BLOCKED}   # canonical machine-parseable 
 | `/develop` | Features Built, Tests Added, Remaining Tasks |
 | `/brainstorming` | Link to design output, Next Steps (offer to build) |
 | `/ctk:web-research` | Sources consulted, key findings, confidence/caveats (delegate to web-research's own format) |
+| `/investigate-sentry` | Issue summary, root-cause assessment, proposed fix (it proposes; it does not apply) |
 | `/review-mr` | Summary of findings (delegate to review-mr's own format) |
 | `/verify` | Pass/fail summary (delegate to verify's own format) |
+| `/prepare-pr` | MR/PR link + title; note that the body was human-approved at its own gate |
+| `/hipaa-compliance-checker` | Findings by severity — process/behavior only, never PHI |
+| `/audit-skill` | Candidate flags for human review (it never edits) |
+
+> **Any route not listed above:** delegate to the routed skill's own output format
+> and summarize in one line. Do not invent sections for it.
 
 **For iterative skills** (/experiment, /cover), include the iteration log:
 ```

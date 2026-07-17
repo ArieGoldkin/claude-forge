@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.10, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.8, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.10, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.10.0, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.12.0, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -54,7 +54,7 @@ claude-forge/
 | ctk (formerly continuity-toolkit) | 11 | 1 | 12 | 35 (32 **shared** + 3 ctk-specific) | Session persistence, context monitoring, web research, shared hook owner |
 | dtk (formerly devops-toolkit) | 15 | 2 | 12 | 2 (repo-access-guard, continuity-recommendation) | Infrastructure, AWS, Terraform, CI/CD, Salesforce, Husky pre-commit |
 | atk (formerly ai-toolkit) | 16 | 1 | 25 | 1 (continuity-recommendation) | RAG, embeddings, LangGraph, LLM patterns, conversational AI, NotebookLM |
-| ftk (formerly frontend-toolkit) | 16 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
+| ftk (formerly frontend-toolkit) | 17 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
 | etk (formerly engineering-toolkit) | 26 | 4 | 20 | 2 (review-logger, continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode |
 
 > **Important**: ctk (formerly continuity-toolkit) is the **canonical owner of all shared hooks** (security, permissions, lifecycle, post-tool, HIPAA context injection). Install it alongside other plugins for full hook coverage. Other plugins have been stripped of shared hooks to prevent duplication when multiple plugins are installed simultaneously.
@@ -197,10 +197,13 @@ cd plugins/{name}/hooks
 npm install          # Install dependencies
 npm run build        # Build with tsup (esbuild)
 npm run typecheck    # TypeScript check
-npm run test:run     # Run tests once (continuity)
-npm test -- --run    # Run tests once (devops/ai/frontend/engineering — different script name)
+npm test             # Run tests once — `vitest run` in all 5 plugins and shared/
 npm run lint         # Biome lint
 ```
+
+> **Test-env gotcha**: run hook tests as
+> `env -u CLAUDE_SESSION_ID -u CLAUDE_CODE_SESSION_ID npm test`. A live Claude Code
+> session's id leaks into the logging/input tests and produces ~6 false failures.
 
 ### Hot-reload during development
 ```bash
