@@ -2,6 +2,17 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.14.1] - 2026-07-17 — fix: /review-mr silently returned nothing (forked return contract)
+
+`/etk:review-mr` runs `context: fork`, so the fork's **final message is the only thing the caller sees**. But the pipeline emitted the synthesized Phase-6 report mid-run and then ended on a terse Phase-7c hand-off block ("✓ Wrote findings… This skill is exiting now") — so the review was buried, not returned. In the common **zero-findings** case (a clean, low-risk PR) there were no artifacts to write and nothing to hand off, so the fork improvised its final message: sometimes the review (worked), sometimes an empty "Skill execution completed" — the review silently lost. This shipped as a real "the review skill returns nothing" failure (observed on PR #32 this session; noted in the 2026-07-17 handoff as a recurring loose thread).
+
+### Fixed
+
+- **Explicit forked return contract** (`review-mr/SKILL.md` § Output): the fork's final message **MUST** be the Phase-6 synthesized report; artifacts (when there are findings) are written *before* the report; the terse hand-off is never the last thing; a bare "completed" is a skill failure.
+- **Zero-findings path** now returns the full report directly (empty Concerns + SHIP/APPROVE) and skips artifact-writing — reconciled across `SKILL.md` (§ Output + phase-table row 7), `references/phase-6-synthesis.md` § 6d, and `references/phase-7-artifacts.md` (intro, § 7c, hard-exit). Independent review verified all four spots agree and no "write artifacts → exit" residue remains.
+
+> Docs/prompt-contract fix only — no code, no `dist`. Behavioral confirmation lands the next time `/etk:review-mr` runs on an installed build carrying this change.
+
 ## [2.14.0] - 2026-07-17 — unattended-run governance: two execution contexts, corrected settings-inheritance premise
 
 The 2.13.0 routine docs pointed to a "pending governance-defaults effort" and implied the `.claude/settings.json` model/permission floor would govern routines. Grounding against Claude Code's routines + model-configuration docs proved that premise **false**: `/schedule` **cloud** routines run on Anthropic-managed VMs and do **not** read local `.claude/settings.json` — only server-managed settings reach them, and they run with no permission-mode picker or approval prompts. A governance doc written on the old premise would have shipped guardrails that never load.

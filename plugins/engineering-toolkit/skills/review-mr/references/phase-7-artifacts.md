@@ -1,6 +1,6 @@
 # Phase 7: Generate Findings Artifacts (do NOT post)
 
-After Phase 6 synthesis, write two paired artifacts to `.claude/reviews/` and exit. **Do NOT post anything to the MR from this skill.** Posting is the job of the companion skill `/etk:post-mr-comments`, which is always invoked as a deliberate second action by the user after they have reviewed and edited the artifacts.
+After Phase 6 synthesis, write two paired artifacts to `.claude/reviews/` **when there are findings**, then emit the Phase-6 report as your **final message** (§ 7c) — the report, not the artifact write, is the fork's return value; never end on the artifact write or a bare "completed". With **zero findings**, skip artifact-writing and return the report directly. **Do NOT post anything to the MR from this skill.** Posting is the job of the companion skill `/etk:post-mr-comments`, which is always invoked as a deliberate second action by the user after they have reviewed and edited the artifacts.
 
 Why two skills, not one: posting 12 inline comments is a careful CLI operation (see the glab gotchas in `skills/code-review-playbook/references/glab-inline-comments-recipe.md`). Bundling synthesis + post in one skill means the reviewer never gets to inspect the findings before they hit the MR. Splitting them makes review evidence first-class — the YAML is the source of truth, the Markdown is what humans read, posting is opt-in.
 
@@ -142,8 +142,12 @@ Notes:
 
 ## 7c. Hand off (do NOT post)
 
-Print exactly this to the user, then exit (interactive / non-CI path only — when `CI_MODE=true`,
-7c-CI has already emitted the JSON summary and exited):
+**Only when Phase 7 wrote artifacts** (i.e. there were findings). Print this hand-off, **then emit the
+Phase-6 synthesized report as your final message** — under `context: fork` the caller sees only your
+last message, so the report, not this hand-off, must be last (SKILL.md § Output → Return contract).
+With **zero findings** there are no artifacts and nothing to hand off: skip this block entirely and
+return the Phase-6 report directly. (Interactive / non-CI path only — when `CI_MODE=true`, 7c-CI has
+already emitted the JSON summary and exited.)
 
 ```
 ✓ Wrote findings to .claude/reviews/mr-${MR_NUMBER}-findings.yaml + .md
@@ -160,11 +164,12 @@ When ready, post inline-anchored comments via:
   /etk:post-mr-comments ${MR_NUMBER} --severity blocking,issue
   /etk:post-mr-comments ${MR_NUMBER} --dry-run         # preview only
 
-This skill is exiting now. Do not post anything from /review-mr — posting
-is always a deliberate second action.
+Do not post anything from /review-mr — posting is always a deliberate second action.
 ```
 
-**Hard exit** — do not call `$VCS_MR_APPROVE`, `$VCS_MR_NOTE`, or any other VCS write command from this phase. The synthesized report from Phase 6 may be printed inline for the user's immediate visibility, but the canonical artifact is the YAML+MD pair on disk.
+(Then emit the Phase-6 synthesized report as your final message — see § 7c intro.)
+
+**Hard exit** — do not call `$VCS_MR_APPROVE`, `$VCS_MR_NOTE`, or any other VCS write command from this phase. The synthesized Phase-6 report is emitted as your **final message** after this hand-off (SKILL.md § Output → Return contract): the caller sees only your last message, so it must be the report — not this hand-off, and never a bare "completed". The YAML+MD pair on disk is the canonical *persisted* artifact; the report is the *returned* output.
 
 ## 7d. `.claude/reviews/` setup
 
