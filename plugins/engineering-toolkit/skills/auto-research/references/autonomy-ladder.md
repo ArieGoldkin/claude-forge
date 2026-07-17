@@ -40,6 +40,8 @@ allowlists, correctness gates, a hard budget, and stuck detection — gated by a
 | `pr-review-watch` | **L1 → L2** | starts as a report, graduates to drafting review comments |
 | `coverage-90`, `perf-p95-200ms`, `flake-hunt` | **L3** | confirmed write-loop with a streak/goal gate + experiment guardrails |
 
+This table maps the auto-research *routes*. For **which of our ~85 skills** can run as a scheduled routine at all — a report/propose classifier over the whole catalog — see [`routine-recipes.md`](routine-recipes.md).
+
 ## Promotion gates
 
 Promote only when the evidence clears the gate — never on a calendar.

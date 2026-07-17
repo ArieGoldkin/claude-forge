@@ -311,10 +311,11 @@ to a findings ledger. The one invariant that makes background autonomy safe:
 
 **Self-scheduling** uses `ScheduleWakeup` — the `/loop` dynamic self-pacing primitive
 (session-bound, the default, picks its own next interval) — or `CronCreate` for a fixed
-cron cadence (`durable: false` session-bound, `durable: true` across sessions; the
-`/schedule` path). No daemon, no polling: the loop sleeps between checks and is re-invoked
-by the harness. **Cadence** (the `ScheduleWakeup` flavor): ~270s for active external state
-(stays in the prompt-cache window), 1200–1800s for idle drift; don't pick 300s.
+cron cadence (session-bound only; `durable` is a no-op, recurring jobs expire after 7 days).
+For a watch that must **survive the session**, `/schedule` it as a persistent cloud routine
+(`references/routine-recipes.md`). No daemon, no polling: the loop sleeps between checks and is
+re-invoked by the harness. **Cadence** (the `ScheduleWakeup` flavor): ~270s for active external
+state (stays in the prompt-cache window), 1200–1800s for idle drift; don't pick 300s.
 
 Confirmation moves from per-change to once-at-setup: the `--unattended` invocation **is** the
 confirmation, so it implies `--no-confirm` for the iterations — but never permission to apply.
@@ -508,6 +509,9 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
 - **Autonomy Ladder**: `${CLAUDE_SKILL_DIR}/references/autonomy-ladder.md` — The L1 (report-only)
   → L2 (propose-don't-apply) → L3 (confirmed write-loop) rungs, route→rung mapping, and the
   evidence-based promotion gates between them
+- **Routine Recipes**: `${CLAUDE_SKILL_DIR}/references/routine-recipes.md` — Which of our skills are
+  routine-safe (the report/propose classifier) and how to `/schedule` one as a persistent routine;
+  the nightly `/etk:audit-skill` flagship
 - **Worked Examples**: `${CLAUDE_SKILL_DIR}/references/worked-examples.md` — Full end-to-end
   examples for each route (optimize, fix, cover, design, build, review, verify)
 - **Self-Improvement**: `${CLAUDE_SKILL_DIR}/references/self-improvement.md` — Skill
