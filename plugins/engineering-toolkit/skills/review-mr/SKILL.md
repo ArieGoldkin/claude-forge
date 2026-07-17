@@ -70,7 +70,7 @@ The review runs as a 7-phase pipeline. Each phase has a dedicated reference file
 | **4** | Mode dispatch (Quick = inline review; Standard/Deep = agent fan-out) | inline below | yes |
 | **5** | Per-agent prompts + structured-finding contract | [`references/phase-5-agent-prompts.md`](references/phase-5-agent-prompts.md) | Standard/Deep only |
 | **6** | Aggregation, evidence gate, composite score, in-session report | [`references/phase-6-synthesis.md`](references/phase-6-synthesis.md) + [`references/final-report-template.md`](references/final-report-template.md) | yes |
-| **7** | Write `.claude/reviews/mr-${N}-findings.{yaml,md}` and exit (no MR post) | [`references/phase-7-artifacts.md`](references/phase-7-artifacts.md) | yes |
+| **7** | Write `.claude/reviews/mr-${N}-findings.{yaml,md}` **when there are findings**, then emit the Phase-6 report as the fork's final message (no MR post; artifact-writing is skipped on zero findings) | [`references/phase-7-artifacts.md`](references/phase-7-artifacts.md) | yes (report always; artifacts only if findings) |
 
 ## Phase 2: Auto-Fix Formatting (Pre-Review)
 
@@ -137,8 +137,10 @@ These are guardrails, not absolutes. If a specific MR genuinely warrants breakin
 
 ## Output
 
-- **In-session**: synthesized report from Phase 6 (printed for human visibility, not posted).
-- **Persisted artifacts** (Phase 7) at `.claude/reviews/mr-${N}-findings.{yaml,md}`:
+> **Return contract — this skill runs `context: fork`.** The fork's **final message is the only thing the caller sees.** That final message MUST be the Phase-6 synthesized report (Title · Risk · Quality-Checks table · Strengths · Concerns · Recommendation). Emit the Phase-7 artifacts and the post hand-off **before** the report, or fold the one-line hand-off into the report footer — **never end on the bare Phase-7c hand-off block, and never end with only "completed" or a tool result.** If any phase early-exits (no diff, auth failure, **zero findings**), the final message is *still* a report stating the outcome and why. A terse completion is a **skill failure**: it silently returns nothing to the caller, which is indistinguishable from the skill being dead (this exact regression shipped twice — see the review-mr return-contract note in `phase-6-synthesis.md` § 6d). **Zero findings is a valid, common result** (a clean low-risk PR): return the full report with an empty Concerns section and a SHIP/APPROVE recommendation, and skip artifact-writing since there is nothing to post.
+
+- **In-session**: the synthesized Phase-6 report **is the skill's return value** (see the return contract above) — printed for the caller, never posted to the MR.
+- **Persisted artifacts** (Phase 7) at `.claude/reviews/mr-${N}-findings.{yaml,md}`, **when there are findings to post**:
   - YAML = canonical source of truth, parseable by `/etk:post-mr-comments`
   - Markdown = human-readable, table of contents, severity-grouped, posted-status badges
 - **No auto-post.** Posting is delegated to `/etk:post-mr-comments` as a deliberate second action.
