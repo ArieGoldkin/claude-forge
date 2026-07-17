@@ -27,8 +27,8 @@ outlive your session:
 An in-session loop is for cadence *while you work* (watch this CI run, drift-check coverage this
 afternoon). A **routine** is the persistent one: `/schedule` it once and it fires unattended on its
 own cron until you delete it. Both are CC-native — building our own would be substrate, not
-capability (root `CLAUDE.md` → adoption lens; the `unattended-mode.md` § *Relationship to ci-sentinel*
-records why we decline the daemon).
+capability: `unattended-mode.md` § *Relationship to OrchestKit's ci-sentinel* records why we adopt
+the scheduling *capability* and decline the daemon *substrate*.
 
 > **Honest trigger surface.** The verifiable triggers are **cron** and **on-demand `run`**. Treat
 > `/schedule` itself as the authority on any richer trigger surface — don't assume triggers this repo
