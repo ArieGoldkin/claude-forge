@@ -8,23 +8,33 @@
  * @module tests/statusline/context-percentage
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ANSI,
   buildProgressBar,
   extractCost,
+  extractEffort,
   extractModelName,
+  extractPr,
   extractRateLimits,
+  extractTokenUsage,
   extractWorkspaceName,
   extractWorktreePath,
   formatCost,
   formatDuration,
+  formatEffortBadge,
   formatLine1,
   formatLine2,
   formatLine3,
+  formatLine4,
+  formatPrSegment,
+  formatResetIn,
   formatStatusLine,
+  formatTokenCount,
   getBarColor,
   getContextEmoji,
+  getGitBranch,
 } from '../../src/statusline/context-percentage.js';
 
 // =============================================================================
@@ -268,19 +278,39 @@ describe('extractRateLimits', () => {
         seven_day: { used_percentage: 41.2, resets_at: 1738857600 },
       },
     };
-    expect(extractRateLimits(data)).toEqual({ fiveHourPct: 24, sevenDayPct: 41 });
+    expect(extractRateLimits(data)).toEqual({
+      fiveHourPct: 24,
+      sevenDayPct: 41,
+      fiveHourResetsAt: 1738425600,
+      sevenDayResetsAt: 1738857600,
+    });
   });
 
   it('should return nulls when rate_limits is absent (API/Bedrock users)', () => {
-    expect(extractRateLimits({})).toEqual({ fiveHourPct: null, sevenDayPct: null });
+    expect(extractRateLimits({})).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 
   it('should handle each window being independently absent', () => {
     const onlyFive = { rate_limits: { five_hour: { used_percentage: 50 } } };
-    expect(extractRateLimits(onlyFive)).toEqual({ fiveHourPct: 50, sevenDayPct: null });
+    expect(extractRateLimits(onlyFive)).toEqual({
+      fiveHourPct: 50,
+      sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
 
     const onlySeven = { rate_limits: { seven_day: { used_percentage: 80 } } };
-    expect(extractRateLimits(onlySeven)).toEqual({ fiveHourPct: null, sevenDayPct: 80 });
+    expect(extractRateLimits(onlySeven)).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: 80,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 
   it('should default non-number / NaN used_percentage to null', () => {
@@ -293,12 +323,36 @@ describe('extractRateLimits', () => {
     expect(extractRateLimits(data as Record<string, unknown>)).toEqual({
       fiveHourPct: null,
       sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
     });
   });
 
-  it('should return null for a window object with no used_percentage', () => {
+  it('should read resets_at independently of used_percentage', () => {
+    // A window may carry a reset timestamp with no usage figure; the reset is
+    // still valid data and must survive the missing percentage.
     const data = { rate_limits: { five_hour: { resets_at: 1738425600 } } };
-    expect(extractRateLimits(data)).toEqual({ fiveHourPct: null, sevenDayPct: null });
+    expect(extractRateLimits(data)).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+      fiveHourResetsAt: 1738425600,
+      sevenDayResetsAt: null,
+    });
+  });
+
+  it('should reject non-positive / non-numeric resets_at', () => {
+    const data = {
+      rate_limits: {
+        five_hour: { used_percentage: 10, resets_at: 0 },
+        seven_day: { used_percentage: 20, resets_at: 'soon' },
+      },
+    };
+    expect(extractRateLimits(data as Record<string, unknown>)).toEqual({
+      fiveHourPct: 10,
+      sevenDayPct: 20,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 });
 
@@ -537,5 +591,240 @@ describe('formatLine1 with worktree', () => {
   it('should omit worktree indicator when not provided', () => {
     const line = formatLine1('Opus', 'my-project', 'main');
     expect(line).not.toContain('wt:');
+  });
+});
+
+// =============================================================================
+// Effort / mode badge, resets, tokens, PR (CC 2.1.176+ payload fields)
+//
+// Field presence below is grounded in a real captured statusline payload
+// (CC 2.1.214): effort.level="xhigh", fast_mode=false, thinking.enabled=true,
+// rate_limits.*.resets_at in Unix SECONDS, context_window.current_usage.*,
+// context_window_size=1000000. `pr` was absent from that capture (no open PR
+// for the branch) — it is documented but unobserved, hence the defensive tests.
+// =============================================================================
+
+describe('extractEffort', () => {
+  it('should extract level and flags from a real-shaped payload', () => {
+    const data = { effort: { level: 'xhigh' }, fast_mode: false, thinking: { enabled: true } };
+    expect(extractEffort(data)).toEqual({ level: 'xhigh', fastMode: false, thinking: true });
+  });
+
+  it('should return nulls/false when the fields are absent (unsupported model)', () => {
+    expect(extractEffort({})).toEqual({ level: null, fastMode: false, thinking: false });
+  });
+
+  it('should not treat a truthy non-boolean fast_mode as enabled', () => {
+    expect(extractEffort({ fast_mode: 'yes' }).fastMode).toBe(false);
+  });
+});
+
+describe('formatEffortBadge', () => {
+  it('should show fast mode in preference to effort level', () => {
+    expect(formatEffortBadge('xhigh', true, true)).toBe('⚡ fast');
+  });
+
+  it('should show effort with a thinking marker', () => {
+    expect(formatEffortBadge('xhigh', false, true)).toBe('◐ xhigh');
+  });
+
+  it('should show bare effort when thinking is off', () => {
+    expect(formatEffortBadge('high', false, false)).toBe('high');
+  });
+
+  it('should return empty when there is no level and no fast mode', () => {
+    expect(formatEffortBadge(null, false, true)).toBe('');
+  });
+});
+
+describe('formatResetIn', () => {
+  const now = 1_784_400_000_000; // fixed clock (ms)
+
+  it('should format hours and minutes', () => {
+    expect(formatResetIn(1_784_425_200, now)).toBe('resets in 7h 0m');
+  });
+
+  it('should format days and hours past 24h', () => {
+    expect(formatResetIn(1_784_757_600, now)).toBe('resets in 4d 3h');
+  });
+
+  it('should format minutes only under an hour', () => {
+    expect(formatResetIn(now / 1000 + 1500, now)).toBe('resets in 25m');
+  });
+
+  it('should return empty for an absent timestamp', () => {
+    expect(formatResetIn(null, now)).toBe('');
+  });
+
+  it('should return empty for a reset already in the past', () => {
+    expect(formatResetIn(now / 1000 - 60, now)).toBe('');
+  });
+});
+
+describe('formatTokenCount', () => {
+  it.each([
+    [826, '826'],
+    [215_762, '215.8k'],
+    [1_000_000, '1.0M'],
+    [1_500_000, '1.5M'],
+    [0, '0'],
+  ])('should abbreviate %i as %s', (input, expected) => {
+    expect(formatTokenCount(input)).toBe(expected);
+  });
+});
+
+describe('extractTokenUsage', () => {
+  it('should pull totals and cache reads from a real-shaped payload', () => {
+    const data = {
+      context_window: {
+        total_input_tokens: 217_362,
+        total_output_tokens: 826,
+        context_window_size: 1_000_000,
+        current_usage: { cache_read_input_tokens: 215_762 },
+      },
+    };
+    expect(extractTokenUsage(data)).toEqual({
+      totalInput: 217_362,
+      totalOutput: 826,
+      cacheRead: 215_762,
+      windowSize: 1_000_000,
+    });
+  });
+
+  it('should return null when the context window block is absent', () => {
+    expect(extractTokenUsage({})).toBeNull();
+  });
+
+  it('should default missing numeric fields to 0 rather than NaN', () => {
+    expect(extractTokenUsage({ context_window: {} })).toEqual({
+      totalInput: 0,
+      totalOutput: 0,
+      cacheRead: 0,
+      windowSize: 0,
+    });
+  });
+});
+
+describe('formatLine4', () => {
+  it('should render in/out/cached', () => {
+    const line = formatLine4({ totalInput: 217_362, totalOutput: 826, cacheRead: 215_762 });
+    expect(line).toContain('215.8k cached');
+    expect(line).toContain('217.4k in');
+    expect(line).toContain('826 out');
+  });
+
+  it('should omit the cached segment when there are no cache reads', () => {
+    const line = formatLine4({ totalInput: 100, totalOutput: 20, cacheRead: 0 });
+    expect(line).not.toContain('cached');
+  });
+
+  it('should return empty for absent usage', () => {
+    expect(formatLine4(null)).toBe('');
+  });
+});
+
+describe('extractPr / formatPrSegment (documented, unobserved live)', () => {
+  it('should extract number and review state', () => {
+    const data = { pr: { number: 35, url: 'https://x/pull/35', review_state: 'pending' } };
+    expect(extractPr(data)).toEqual({ number: 35, reviewState: 'pending' });
+    expect(formatPrSegment(extractPr(data))).toBe('PR #35 pending');
+  });
+
+  it('should tolerate a missing review_state', () => {
+    expect(formatPrSegment(extractPr({ pr: { number: 7 } }))).toBe('PR #7');
+  });
+
+  it('should return null when pr is absent (the normal case)', () => {
+    expect(extractPr({})).toBeNull();
+    expect(formatPrSegment(null)).toBe('');
+  });
+
+  it('should reject a pr object with no numeric number rather than rendering NaN', () => {
+    expect(extractPr({ pr: { url: 'https://x' } })).toBeNull();
+    expect(extractPr({ pr: { number: 'twelve' } } as Record<string, unknown>)).toBeNull();
+  });
+});
+
+describe('formatStatusLine with extras', () => {
+  const now = 1_784_400_000_000;
+
+  it('should stay byte-identical to the classic output when no extras are passed', () => {
+    const classic = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51);
+    const withEmptyExtras = formatStatusLine(
+      22,
+      'Opus',
+      'proj',
+      'main',
+      1.5,
+      60_000,
+      '',
+      11,
+      51,
+      {}
+    );
+    expect(withEmptyExtras).toBe(classic);
+  });
+
+  it('should render four lines with all extras present', () => {
+    const out = formatStatusLine(22, 'Opus 4.8', 'proj', 'main', 51.48, 61_472_869, '', 11, 51, {
+      effortBadge: '◐ xhigh',
+      prSegment: 'PR #35 pending',
+      fiveHourResetsAt: 1_784_425_200,
+      sevenDayResetsAt: 1_784_757_600,
+      tokens: { totalInput: 217_362, totalOutput: 826, cacheRead: 215_762 },
+      nowMs: now,
+    });
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toContain('[Opus 4.8 ◐ xhigh]');
+    expect(lines[0]).toContain('PR #35 pending');
+    expect(lines[2]).toContain('resets in 7h 0m');
+    expect(lines[3]).toContain('215.8k cached');
+  });
+
+  it('should collapse to two lines in compact mode', () => {
+    const out = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51, {
+      effortBadge: '◐ xhigh',
+      tokens: { totalInput: 100, totalOutput: 20, cacheRead: 5 },
+      compact: true,
+      nowMs: now,
+    });
+    expect(out.split('\n')).toHaveLength(2);
+    expect(out).toContain('◐ xhigh');
+  });
+
+  it('should omit the usage line but keep tokens for an API user with no rate limits', () => {
+    const out = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', null, null, {
+      tokens: { totalInput: 100, totalOutput: 20, cacheRead: 0 },
+      nowMs: now,
+    });
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(3);
+    expect(lines[2]).toContain('tokens:');
+  });
+});
+
+// =============================================================================
+// getGitBranch portability
+//
+// `git branch --show-current` requires git >= 2.22; on older git it exits
+// non-zero and the branch segment silently vanished from line 1 (reproduced on
+// git 2.15.0). The implementation uses `rev-parse --abbrev-ref HEAD` instead.
+// =============================================================================
+
+describe('getGitBranch portability', () => {
+  it('should not depend on the git >= 2.22 --show-current flag', () => {
+    const src = readFileSync(
+      new URL('../../src/statusline/context-percentage.ts', import.meta.url),
+      'utf8'
+    );
+    // Assert on the invocation, not any mention — the flag is named in a
+    // comment explaining why it was replaced.
+    expect(src).not.toContain("execSync('git branch --show-current'");
+    expect(src).toContain("execSync('git rev-parse --abbrev-ref HEAD'");
+  });
+
+  it('should return a string without throwing in this repo', () => {
+    expect(typeof getGitBranch()).toBe('string');
   });
 });

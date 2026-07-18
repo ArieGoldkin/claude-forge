@@ -37,6 +37,8 @@ export const ANSI = {
   GREEN: '\x1b[32m',
   YELLOW: '\x1b[33m',
   RED: '\x1b[31m',
+  MAGENTA: '\x1b[35m',
+  DIM: '\x1b[2m',
 } as const;
 
 // =============================================================================
@@ -162,9 +164,17 @@ export function extractCost(data: Record<string, unknown>): {
 export function extractRateLimits(data: Record<string, unknown>): {
   fiveHourPct: number | null;
   sevenDayPct: number | null;
+  fiveHourResetsAt: number | null;
+  sevenDayResetsAt: number | null;
 } {
+  const empty = {
+    fiveHourPct: null,
+    sevenDayPct: null,
+    fiveHourResetsAt: null,
+    sevenDayResetsAt: null,
+  };
   const rateLimits = data['rate_limits'] as Record<string, unknown> | undefined;
-  if (!rateLimits) return { fiveHourPct: null, sevenDayPct: null };
+  if (!rateLimits) return empty;
 
   const readWindow = (key: string): number | null => {
     const win = rateLimits[key] as Record<string, unknown> | undefined;
@@ -174,10 +184,97 @@ export function extractRateLimits(data: Record<string, unknown>): {
     return Math.round(used);
   };
 
+  // `resets_at` is a Unix timestamp in SECONDS (verified live: 1784425200).
+  // Read independently of used_percentage — either may be absent alone.
+  const readReset = (key: string): number | null => {
+    const win = rateLimits[key] as Record<string, unknown> | undefined;
+    if (!win) return null;
+    const at = win['resets_at'];
+    if (typeof at !== 'number' || Number.isNaN(at) || at <= 0) return null;
+    return at;
+  };
+
   return {
     fiveHourPct: readWindow('five_hour'),
     sevenDayPct: readWindow('seven_day'),
+    fiveHourResetsAt: readReset('five_hour'),
+    sevenDayResetsAt: readReset('seven_day'),
   };
+}
+
+/**
+ * Extract the reasoning-effort level and the two mode flags that sit
+ * alongside it in the payload.
+ *
+ * `effort` is documented as present only when the active model supports the
+ * reasoning-effort parameter, so `level` is null on models that don't. Both
+ * flags default to false when their objects are absent.
+ * Verified against a live payload: `effort.level = "xhigh"`, `fast_mode =
+ * false`, `thinking.enabled = true` (CC 2.1.214).
+ */
+export function extractEffort(data: Record<string, unknown>): {
+  level: string | null;
+  fastMode: boolean;
+  thinking: boolean;
+} {
+  const effort = data['effort'] as Record<string, unknown> | undefined;
+  const level = effort && typeof effort['level'] === 'string' ? (effort['level'] as string) : null;
+
+  const thinkingObj = data['thinking'] as Record<string, unknown> | undefined;
+  const thinking = thinkingObj?.['enabled'] === true;
+
+  return { level, fastMode: data['fast_mode'] === true, thinking };
+}
+
+/**
+ * Extract token usage from the context window block.
+ *
+ * `current_usage` describes the most recent request; the `total_*` fields are
+ * cumulative for the session. Window size matters because 1M-context sessions
+ * are live (`context_window_size = 1000000` observed), which is why counts are
+ * abbreviated rather than printed raw.
+ */
+export function extractTokenUsage(data: Record<string, unknown>): {
+  totalInput: number;
+  totalOutput: number;
+  cacheRead: number;
+  windowSize: number;
+} | null {
+  const cw = data['context_window'] as Record<string, unknown> | undefined;
+  if (!cw) return null;
+
+  const num = (v: unknown): number => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
+  const usage = cw['current_usage'] as Record<string, unknown> | undefined;
+
+  return {
+    totalInput: num(cw['total_input_tokens']),
+    totalOutput: num(cw['total_output_tokens']),
+    cacheRead: num(usage?.['cache_read_input_tokens']),
+    windowSize: num(cw['context_window_size']),
+  };
+}
+
+/**
+ * Extract open-PR info for the current branch.
+ *
+ * NOTE: documented in the official statusline schema but NOT observed in a
+ * live capture — the payload omits `pr` entirely unless an open PR exists for
+ * the checked-out branch. Treated as best-effort: rendered only when both the
+ * object and a numeric `number` are present, so an absent or differently
+ * shaped field degrades to no segment rather than a broken statusline.
+ */
+export function extractPr(data: Record<string, unknown>): {
+  number: number;
+  reviewState: string | null;
+} | null {
+  const pr = data['pr'] as Record<string, unknown> | undefined;
+  if (!pr) return null;
+
+  const num = pr['number'];
+  if (typeof num !== 'number' || Number.isNaN(num)) return null;
+
+  const state = pr['review_state'];
+  return { number: num, reviewState: typeof state === 'string' && state ? state : null };
 }
 
 /**
@@ -198,6 +295,69 @@ export function extractModelName(data: Record<string, unknown>): string {
 }
 
 /**
+ * Format the effort/mode badge that rides inside the model bracket.
+ *
+ * Fast mode wins the slot when active — it changes latency behaviour and is
+ * the more surprising state to be in unknowingly. Otherwise the effort level
+ * shows, with a thinking marker appended. Returns '' when there is nothing
+ * worth showing, so the bracket collapses to plain `[Model]` unchanged.
+ */
+export function formatEffortBadge(
+  level: string | null,
+  fastMode: boolean,
+  thinking: boolean
+): string {
+  if (fastMode) return '⚡ fast'; // ⚡
+  if (!level) return '';
+  return thinking ? `◐ ${level}` : level; // ◐
+}
+
+/**
+ * Format a rate-limit reset as a compact countdown, e.g. "resets in 4h 31m".
+ *
+ * Days are used past 24h so the weekly window stays readable. Returns '' for
+ * an absent timestamp or one already in the past — a stale reset time is
+ * noise, not information.
+ */
+export function formatResetIn(resetsAtSec: number | null, nowMs: number = Date.now()): string {
+  if (resetsAtSec === null) return '';
+  const remainingMs = resetsAtSec * 1000 - nowMs;
+  if (remainingMs <= 0) return '';
+
+  const totalMinutes = Math.floor(remainingMs / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  if (days > 0) {
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    return `resets in ${days}d ${hours}h`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `resets in ${hours}h ${minutes}m`;
+  return `resets in ${minutes}m`;
+}
+
+/**
+ * Abbreviate a token count: 826 → "826", 215762 → "215.8k", 1500000 → "1.5M".
+ * Raw counts are unreadable at statusline size once 1M-context sessions are in
+ * play (`context_window_size = 1000000` is live).
+ */
+export function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(Math.round(n));
+}
+
+/**
+ * Format the PR segment: "PR #35" plus review state when known.
+ * Returns '' when no open PR was reported for the branch.
+ */
+export function formatPrSegment(pr: { number: number; reviewState: string | null } | null): string {
+  if (!pr) return '';
+  const base = `PR #${pr.number}`;
+  return pr.reviewState ? `${base} ${pr.reviewState}` : base;
+}
+
+/**
  * Format line 1: [Model] 📁 workspace | 🌿 branch [🌳 worktree]
  * Omits branch/worktree segments if empty.
  */
@@ -205,12 +365,18 @@ export function formatLine1(
   modelName: string,
   workspaceName: string,
   gitBranch: string,
-  worktreePath = ''
+  worktreePath = '',
+  effortBadge = '',
+  prSegment = ''
 ): string {
-  const model = `${ANSI.CYAN}[${modelName}]${ANSI.RESET}`;
+  const label = effortBadge ? `${modelName} ${effortBadge}` : modelName;
+  const model = `${ANSI.CYAN}[${label}]${ANSI.RESET}`;
   let line = `${model} \uD83D\uDCC1 ${workspaceName}`;
   if (gitBranch) {
     line += ` | \uD83C\uDF3F ${gitBranch}`;
+  }
+  if (prSegment) {
+    line += ` | ${ANSI.MAGENTA}${prSegment}${ANSI.RESET}`;
   }
   if (worktreePath) {
     line += ` | \uD83C\uDF33 wt:${basename(worktreePath)}`;
@@ -238,19 +404,49 @@ export function formatLine2(pct: number, costUsd: number, durationMs: number): s
  * when both windows are absent so the caller omits the line entirely \u2014 this
  * is the normal case for API/Bedrock users and before the first API response.
  */
-export function formatLine3(fiveHourPct: number | null, sevenDayPct: number | null): string {
+export function formatLine3(
+  fiveHourPct: number | null,
+  sevenDayPct: number | null,
+  fiveHourResetsAt: number | null = null,
+  sevenDayResetsAt: number | null = null,
+  nowMs: number = Date.now()
+): string {
   const segments: string[] = [];
+  const withReset = (label: string, pct: number, resetsAt: number | null): string => {
+    const bar = `${getBarColor(pct)}${buildProgressBar(pct)}${ANSI.RESET}`;
+    const reset = formatResetIn(resetsAt, nowMs);
+    const suffix = reset ? ` ${ANSI.DIM}(${reset})${ANSI.RESET}` : '';
+    return `${label}: ${bar} ${pct}%${suffix}`;
+  };
+
   if (fiveHourPct !== null) {
-    segments.push(
-      `session: ${getBarColor(fiveHourPct)}${buildProgressBar(fiveHourPct)}${ANSI.RESET} ${fiveHourPct}%`
-    );
+    segments.push(withReset('session', fiveHourPct, fiveHourResetsAt));
   }
   if (sevenDayPct !== null) {
-    segments.push(
-      `weekly: ${getBarColor(sevenDayPct)}${buildProgressBar(sevenDayPct)}${ANSI.RESET} ${sevenDayPct}%`
-    );
+    segments.push(withReset('weekly', sevenDayPct, sevenDayResetsAt));
   }
   return segments.join(' \u00B7 ');
+}
+
+/**
+ * Format line 4 (token accounting): tokens: 217.4k in \u00B7 826 out \u00B7 215.8k cached
+ *
+ * Cache reads are shown because on a long session they dominate input volume
+ * and explain why cost stays flat while token counts climb. Returns '' when
+ * the context window block is absent so the line is omitted entirely.
+ */
+export function formatLine4(
+  usage: { totalInput: number; totalOutput: number; cacheRead: number } | null
+): string {
+  if (!usage) return '';
+  const parts = [
+    `${formatTokenCount(usage.totalInput)} in`,
+    `${formatTokenCount(usage.totalOutput)} out`,
+  ];
+  if (usage.cacheRead > 0) {
+    parts.push(`${formatTokenCount(usage.cacheRead)} cached`);
+  }
+  return `${ANSI.DIM}tokens: ${parts.join(' \u00B7 ')}${ANSI.RESET}`;
 }
 
 /**
@@ -259,6 +455,22 @@ export function formatLine3(fiveHourPct: number | null, sevenDayPct: number | nu
  * fiveHourPct/sevenDayPct default to null, keeping the two-line output and
  * existing call sites byte-identical.
  */
+export interface StatusLineExtras {
+  /** Effort/mode badge rendered inside the model bracket. */
+  effortBadge?: string;
+  /** Open-PR segment for the current branch. */
+  prSegment?: string;
+  /** Unix-seconds reset timestamps for the two rate-limit windows. */
+  fiveHourResetsAt?: number | null;
+  sevenDayResetsAt?: number | null;
+  /** Session token accounting; omitted line when absent. */
+  tokens?: { totalInput: number; totalOutput: number; cacheRead: number } | null;
+  /** Collapse to the classic two-line output (CONTINUITY_STATUSLINE_COMPACT=1). */
+  compact?: boolean;
+  /** Injected clock, for deterministic tests. */
+  nowMs?: number;
+}
+
 export function formatStatusLine(
   pct: number,
   modelName: string,
@@ -268,12 +480,33 @@ export function formatStatusLine(
   durationMs: number,
   worktreePath = '',
   fiveHourPct: number | null = null,
-  sevenDayPct: number | null = null
+  sevenDayPct: number | null = null,
+  extras: StatusLineExtras = {}
 ): string {
-  const line1 = formatLine1(modelName, workspaceName, gitBranch, worktreePath);
+  const line1 = formatLine1(
+    modelName,
+    workspaceName,
+    gitBranch,
+    worktreePath,
+    extras.effortBadge ?? '',
+    extras.prSegment ?? ''
+  );
   const line2 = formatLine2(pct, costUsd, durationMs);
-  const line3 = formatLine3(fiveHourPct, sevenDayPct);
-  return line3 ? `${line1}\n${line2}\n${line3}` : `${line1}\n${line2}`;
+
+  // Compact mode keeps the always-on identity + context lines and drops the
+  // optional accounting lines, for users who want the statusline to stay short.
+  if (extras.compact) return `${line1}\n${line2}`;
+
+  const line3 = formatLine3(
+    fiveHourPct,
+    sevenDayPct,
+    extras.fiveHourResetsAt ?? null,
+    extras.sevenDayResetsAt ?? null,
+    extras.nowMs ?? Date.now()
+  );
+  const line4 = formatLine4(extras.tokens ?? null);
+
+  return [line1, line2, line3, line4].filter(Boolean).join('\n');
 }
 
 // =============================================================================
@@ -314,10 +547,17 @@ export function getGitBranch(): string {
     // Cache miss - continue to git command
   }
 
-  // Run git command
+  // Run git command.
+  //
+  // `git branch --show-current` needs git >= 2.22. On older git it exits
+  // non-zero with "unknown option", which the catch below turned into a silent
+  // empty branch — the segment simply never rendered (reproduced on git 2.15).
+  // `rev-parse --abbrev-ref HEAD` has been available for far longer and returns
+  // the same name, so it is the portable primary; it yields "HEAD" on a detached
+  // checkout, which we normalise back to empty.
   let branch = '';
   try {
-    branch = execSync('git branch --show-current', {
+    branch = execSync('git rev-parse --abbrev-ref HEAD', {
       timeout: 2000,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -325,6 +565,7 @@ export function getGitBranch(): string {
   } catch {
     return '';
   }
+  if (branch === 'HEAD') return '';
 
   // Write cache atomically
   try {
@@ -405,9 +646,18 @@ function main(): void {
   const modelName = extractModelName(data);
   const workspaceName = extractWorkspaceName(data);
   const { costUsd, durationMs } = extractCost(data);
-  const { fiveHourPct, sevenDayPct } = extractRateLimits(data);
+  const { fiveHourPct, sevenDayPct, fiveHourResetsAt, sevenDayResetsAt } = extractRateLimits(data);
   const gitBranch = getGitBranch();
   const worktreePath = extractWorktreePath(data);
+  const { level, fastMode, thinking } = extractEffort(data);
+  const extras: StatusLineExtras = {
+    effortBadge: formatEffortBadge(level, fastMode, thinking),
+    prSegment: formatPrSegment(extractPr(data)),
+    fiveHourResetsAt,
+    sevenDayResetsAt,
+    tokens: extractTokenUsage(data),
+    compact: process.env['CONTINUITY_STATUSLINE_COMPACT'] === '1',
+  };
 
   // Get session ID for temp file naming
   const sessionId = process.env['CLAUDE_SESSION_ID'] || 'default';
@@ -427,7 +677,7 @@ function main(): void {
   // Output rich status string to stdout (third usage line appears only when
   // rate_limits is present in the payload — Pro/Max, post-first-response).
   process.stdout.write(
-    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct)}\n`
+    `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct, extras)}\n`
   );
 }
 

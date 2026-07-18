@@ -64,10 +64,39 @@ Flag if duplicate shared hooks detected across multiple plugins.
 
 ```
 Ledger:          .claude/continuity/ledgers/CONTINUITY_*.md exists?
-Context monitor: ~/.config/claude/continuity-statusline.sh exists?
+Context monitor: see Step 4a — file existence alone is NOT the check
 Shared context:  .claude/context/shared-context.json exists?
 Last session:    was_cleanly_ended field value
 ```
+
+### Step 4a: Verify the Context-Warning Pipeline Is Actually Wired
+
+**The launcher existing does not mean context warnings work.** ctk's statusline script is the
+only writer of the context-percentage temp file that the `context-monitor` hook reads to inject
+the 70/80/90% warnings. If `statusLine` points at any *other* program — claude-hud, a custom
+script, a different plugin — the launcher file still sits on disk untouched while the warnings
+silently stop firing. Checking for the file alone reports a false healthy.
+
+Read the configured command and compare it to ctk's launcher:
+
+```bash
+# The value that actually decides whether warnings fire
+python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude/settings.json')));print(json.dumps(d.get('statusLine','(unset)')))"
+```
+
+Classify the result:
+
+| `statusLine.command` | Context warnings | Report |
+|---|---|---|
+| Contains `continuity-statusline.sh` | Firing | OK |
+| Unset / no `statusLine` key | **Dead** | NOT CONFIGURED — run `/ctk:setup-context-monitor` |
+| Points at any other program | **Dead** | CONFLICT — name the program; see the resolution below |
+
+On CONFLICT, state the consequence plainly rather than just flagging a mismatch: *"`statusLine`
+runs <program>, so ctk's 70/80/90% context warnings are not firing."* Then offer the two
+resolutions — switch back with `/ctk:setup-context-monitor`, or keep the other statusline and
+accept that the warnings are off. Do not silently "fix" the user's `statusLine`; it is their
+configuration and they may have chosen it deliberately.
 
 ### Step 5: Check Environment
 
@@ -112,7 +141,7 @@ Present structured dashboard with:
 | Check | Status |
 |-------|--------|
 | Continuity setup | OK |
-| Context monitor | OK / NOT CONFIGURED |
+| Context monitor | OK / NOT CONFIGURED / CONFLICT (statusLine runs <program>) |
 | Last session | Clean / Stale |
 | Node.js | vXX.x |
 | VCS CLI | glab / gh / none |

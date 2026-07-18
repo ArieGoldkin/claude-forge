@@ -2,6 +2,27 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.0] - 2026-07-19 — statusline surfaces the payload fields it was discarding
+
+Claude Code hands the statusline a rich JSON payload on stdin; ctk parsed six fields and dropped the rest. Evaluated [claude-hud](https://github.com/jarrodwatts/claude-hud) (MIT) as a reference and adopted only what needs no new data source — the transcript-parsing features stay claude-hud's, cited rather than rebuilt. Field presence was **verified against a real captured payload** (CC 2.1.214), not assumed from docs. **`dist` rebuilt.**
+
+### Added
+
+- **Effort / mode badge** in the model bracket — `[Opus 4.8 ◐ xhigh]`, or `⚡ fast` in fast mode. From `effort.level`, `fast_mode`, `thinking.enabled` (verified live: `effort.level = "xhigh"`).
+- **Rate-limit reset countdowns** — `session: ███ 11% (resets in 4h 31m)`. From `rate_limits.*.resets_at`, a Unix timestamp in **seconds** (verified live). Read independently of `used_percentage`, since either may be absent alone.
+- **Token accounting line** — `tokens: 217.4k in · 826 out · 215.8k cached`. Counts are abbreviated because 1M-context sessions are live (`context_window_size = 1000000` observed), where raw figures are unreadable at statusline size. The cached segment is omitted when there are no cache reads.
+- **Open-PR segment** — `PR #35 pending`, from `pr.{number,review_state}`. **Documented in the official schema but absent from the live capture** (the payload omits `pr` unless an open PR exists for the branch), so it is deliberately defensive: rendered only when the object and a numeric `number` are both present.
+- **`CONTINUITY_STATUSLINE_COMPACT=1`** collapses output to the classic two lines.
+- 32 tests covering the new extractors and formatters, including that no-extras output stays byte-identical to the previous two/three-line rendering.
+
+### Fixed
+
+- **`/ctk:doctor` reported a false healthy for context warnings.** Step 4 checked only whether `~/.config/claude/continuity-statusline.sh` *exists* — but that file survives untouched when `statusLine` is repointed at another program, so a user whose context warnings were dead got an "OK". Doctor now reads the configured `statusLine.command` and reports OK / NOT CONFIGURED / **CONFLICT**, naming the program and stating the consequence. Same false-healthy class as the `check-maintenance` `*.md` glob fixed in 2.7.1.
+
+### Changed
+
+- **`/ctk:setup-context-monitor` no longer overwrites an existing `statusLine` silently.** It now checks first (Step 0) and stops to ask when another program is configured. It also documents the genuine either/or: Claude Code runs one statusline, and ctk's script is the sole writer of the file the `context-monitor` hook reads — so choosing another statusline turns the 70/80/90% warnings off. claude-hud is cited as the option for transcript-derived tool/agent/todo tracking, which ctk does not duplicate.
+
 ## [2.7.4] - 2026-07-18 — stop blocking CC's own scratchpad directory
 
 `security-blocker` (and the shared `isProtectedPath()` in `path-utils`) blocked **every** reference to `/private/tmp/` — including CC's harness-managed scratchpad at `/private/tmp/claude-<uid>/<project>/<session>/scratchpad`, which the CC system prompt instructs every session and subagent to use for temporary files. **`dist` rebuilt** (shared hook source changed).
