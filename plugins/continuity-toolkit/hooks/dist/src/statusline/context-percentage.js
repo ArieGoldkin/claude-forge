@@ -10,6 +10,7 @@ var FILLED_CHAR = "\u2588";
 var EMPTY_CHAR = "\u2591";
 var DEFAULT_BAR_WIDTH = 10;
 var GIT_CACHE_STALE_MS = 5e3;
+var MAX_PLAUSIBLE_RESET_MS = 8 * 24 * 60 * 60 * 1e3;
 var FALLBACK_STATUS = "[?] \u{1F4C1} unknown\n\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591 --% | $0.00 | \u23F1\uFE0F 0m";
 var ANSI = {
   RESET: "\x1B[0m",
@@ -151,6 +152,7 @@ function formatResetIn(resetsAtSec, nowMs = Date.now()) {
   if (resetsAtSec === null) return "";
   const remainingMs = resetsAtSec * 1e3 - nowMs;
   if (remainingMs <= 0) return "";
+  if (remainingMs > MAX_PLAUSIBLE_RESET_MS) return "";
   const totalMinutes = Math.floor(remainingMs / 6e4);
   const days = Math.floor(totalMinutes / 1440);
   if (days > 0) {
@@ -213,6 +215,7 @@ function formatLine3(fiveHourPct, sevenDayPct, fiveHourResetsAt = null, sevenDay
 }
 function formatLine4(usage) {
   if (!usage) return "";
+  if (usage.totalInput === 0 && usage.totalOutput === 0 && usage.cacheRead === 0) return "";
   const parts = [
     `${formatTokenCount(usage.totalInput)} in`,
     `${formatTokenCount(usage.totalOutput)} out`

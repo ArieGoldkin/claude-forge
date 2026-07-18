@@ -28,6 +28,8 @@ const FILLED_CHAR = '\u2588'; // █
 const EMPTY_CHAR = '\u2591'; // ░
 const DEFAULT_BAR_WIDTH = 10;
 const GIT_CACHE_STALE_MS = 5000;
+/** Eight days — one past the longest documented rate-limit window. */
+const MAX_PLAUSIBLE_RESET_MS = 8 * 24 * 60 * 60 * 1000;
 const FALLBACK_STATUS =
   '[?] \uD83D\uDCC1 unknown\n\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591\u2591 --% | $0.00 | \u23F1\uFE0F 0m';
 
@@ -323,6 +325,10 @@ export function formatResetIn(resetsAtSec: number | null, nowMs: number = Date.n
   if (resetsAtSec === null) return '';
   const remainingMs = resetsAtSec * 1000 - nowMs;
   if (remainingMs <= 0) return '';
+  // The longest documented window is seven days, so a countdown beyond eight is
+  // not a real reset — it is a malformed or wrong-unit timestamp (a value in
+  // milliseconds arrives as "resets in 1136754d"). Omit rather than render it.
+  if (remainingMs > MAX_PLAUSIBLE_RESET_MS) return '';
 
   const totalMinutes = Math.floor(remainingMs / 60000);
   const days = Math.floor(totalMinutes / 1440);
@@ -439,6 +445,10 @@ export function formatLine4(
   usage: { totalInput: number; totalOutput: number; cacheRead: number } | null
 ): string {
   if (!usage) return '';
+  // A context_window block with no token fields yields all zeros. Rendering
+  // "tokens: 0 in · 0 out" adds a line that carries no information, so the
+  // line is omitted until there is something to report.
+  if (usage.totalInput === 0 && usage.totalOutput === 0 && usage.cacheRead === 0) return '';
   const parts = [
     `${formatTokenCount(usage.totalInput)} in`,
     `${formatTokenCount(usage.totalOutput)} out`,

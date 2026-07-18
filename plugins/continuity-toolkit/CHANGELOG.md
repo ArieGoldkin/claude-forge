@@ -13,6 +13,7 @@ Claude Code hands the statusline a rich JSON payload on stdin; ctk parsed six fi
 - **Token accounting line** — `tokens: 217.4k in · 826 out · 215.8k cached`. Counts are abbreviated because 1M-context sessions are live (`context_window_size = 1000000` observed), where raw figures are unreadable at statusline size. The cached segment is omitted when there are no cache reads.
 - **Open-PR segment** — `PR #35 pending`, from `pr.{number,review_state}`. **Documented in the official schema but absent from the live capture** (the payload omits `pr` unless an open PR exists for the branch), so it is deliberately defensive: rendered only when the object and a numeric `number` are both present.
 - **`CONTINUITY_STATUSLINE_COMPACT=1`** collapses output to the classic two lines.
+- **Two guards added after diffing the built output against 2.7.4** (neither was caught by unit tests): the token line is suppressed when every count is zero — a `context_window` with no token fields was rendering the pure-noise line `tokens: 0 in · 0 out` — and a reset countdown beyond eight days is treated as a malformed timestamp and omitted, since a `resets_at` supplied in milliseconds rendered `resets in 1136754d 12h`.
 - 32 tests covering the new extractors and formatters, including that no-extras output stays byte-identical to the previous two/three-line rendering.
 
 ### Fixed

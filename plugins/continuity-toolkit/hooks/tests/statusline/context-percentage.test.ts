@@ -828,3 +828,33 @@ describe('getGitBranch portability', () => {
     expect(typeof getGitBranch()).toBe('string');
   });
 });
+
+// =============================================================================
+// Hardening found by diffing built output against the previous release
+// =============================================================================
+
+describe('formatLine4 zero-data suppression', () => {
+  it('should omit the line entirely when every count is zero', () => {
+    // A context_window block with no token fields yields all zeros; rendering
+    // "tokens: 0 in · 0 out" was a pure noise line in the previous build.
+    expect(formatLine4({ totalInput: 0, totalOutput: 0, cacheRead: 0 })).toBe('');
+  });
+
+  it('should still render when only cache reads are non-zero', () => {
+    expect(formatLine4({ totalInput: 0, totalOutput: 0, cacheRead: 5 })).toContain('5 cached');
+  });
+});
+
+describe('formatResetIn implausible-value guard', () => {
+  const now = 1_784_400_000_000;
+
+  it('should omit a countdown beyond the longest real window', () => {
+    // A resets_at mistakenly supplied in milliseconds previously rendered
+    // "resets in 1136754d 12h".
+    expect(formatResetIn(99_999_999_999, now)).toBe('');
+  });
+
+  it('should still render a genuine seven-day window', () => {
+    expect(formatResetIn(now / 1000 + 7 * 86_400 - 60, now)).toContain('resets in 6d');
+  });
+});
