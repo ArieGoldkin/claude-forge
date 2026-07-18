@@ -2088,6 +2088,25 @@ describe('securityBlocker - CC harness scratchpad carve-out (/private/tmp/claude
     const result = await securityBlocker(createBashInput('cat /private/tmp/claude-x/file.txt'));
     expect(result.continue).toBe(false);
   });
+
+  it('should block a `..` traversal spelled from inside the scratchpad prefix', async () => {
+    const result = await securityBlocker(
+      createBashInput('rm -rf /private/tmp/claude-501/../victim')
+    );
+    expect(result.continue).toBe(false);
+  });
+
+  it('should block a traversal into a sibling session scratchpad', async () => {
+    const result = await securityBlocker(
+      createBashInput('cat /private/tmp/claude-501/./../claude-999/secrets.txt')
+    );
+    expect(result.continue).toBe(false);
+  });
+
+  it('should block a trailing `..` with no slash after it', async () => {
+    const result = await securityBlocker(createBashInput('ls /private/tmp/claude-501/a/..'));
+    expect(result.continue).toBe(false);
+  });
 });
 
 describe('securityBlocker - auto-allow defense-in-depth (CC v2.1.116)', () => {

@@ -2349,6 +2349,11 @@ var BASH_SENSITIVE_PATTERNS = [
   // slash, e.g. `rm -rf /private/tmp/claude-501`) and all other /private/tmp
   // references stay blocked.
   /\/private\/tmp\/(?!claude-\d+\/)/,
+  // Companion guard for the carve-out: bash patterns match RAW command text
+  // (no `..` normalization), so without this a traversal spelled from inside
+  // the allowed prefix (/private/tmp/claude-501/../victim) would slip past
+  // the lookahead. Blocks any `..` segment after the scratchpad prefix.
+  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
   /\/private\/home\//
 ];
 var PATTERN_CHECKS2 = [
