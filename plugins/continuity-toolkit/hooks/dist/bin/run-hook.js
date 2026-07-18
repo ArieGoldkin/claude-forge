@@ -1113,7 +1113,10 @@ var SYSTEM_DIR_PATTERNS = [
   // macOS specific — CC v2.1.113 expanded dangerous-removal targets
   /^\/private\/etc\//,
   /^\/private\/var\//,
-  /^\/private\/tmp\//,
+  // Carve-out mirrors security-blocker BASH_SENSITIVE_PATTERNS: CC's
+  // harness-managed scratchpad (/private/tmp/claude-<uid>/…) must stay
+  // writable or forked skills/subagents die on their first scratchpad write.
+  /^\/private\/tmp\/(?!claude-\d+\/)/,
   /^\/private\/home\//
 ];
 [
@@ -2338,8 +2341,14 @@ var BASH_SENSITIVE_PATTERNS = [
   /\.ssh\/id_/,
   /\.ssh\/.*\.pem/,
   /\/root\//,
-  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets
-  /\/private\/tmp\//,
+  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets.
+  // Carve-out: CC's harness-managed scratchpad lives at /private/tmp/claude-<uid>/…
+  // and every session/subagent is instructed to use it — blocking it kills forked
+  // skills mid-run (a PreToolUse deny terminates a fork with no final message).
+  // Deeper scratchpad paths are allowed; the bare claude-<uid> root (no trailing
+  // slash, e.g. `rm -rf /private/tmp/claude-501`) and all other /private/tmp
+  // references stay blocked.
+  /\/private\/tmp\/(?!claude-\d+\/)/,
   /\/private\/home\//
 ];
 var PATTERN_CHECKS2 = [

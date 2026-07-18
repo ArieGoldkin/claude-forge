@@ -2,6 +2,19 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.7.4] - 2026-07-18 — stop blocking CC's own scratchpad directory
+
+`security-blocker` (and the shared `isProtectedPath()` in `path-utils`) blocked **every** reference to `/private/tmp/` — including CC's harness-managed scratchpad at `/private/tmp/claude-<uid>/<project>/<session>/scratchpad`, which the CC system prompt instructs every session and subagent to use for temporary files. **`dist` rebuilt** (shared hook source changed).
+
+### Fixed
+
+- **The hook was killing forked skills mid-run.** Observed live: `/etk:review-mr` (a `context: fork` skill) ran `gh pr diff N > <scratchpad>/prN.diff` in Phase 3, the security-blocker denied it, and the fork terminated on the spot with no final message — the caller received the placeholder "Skill execution completed" (the same empty-return symptom etk 2.14.1's return-contract fix targeted; some past incidents were likely *this* bug). A PreToolUse deny inside a fork is terminal, so any subagent or forked skill following CC's scratchpad guidance died on its first scratchpad write.
+- **Carve-out is deliberately narrow.** `/\/private\/tmp\/(?!claude-\d+\/)/` in `BASH_SENSITIVE_PATTERNS` and the mirrored `SYSTEM_DIR_PATTERNS` entry allow only paths *under* `/private/tmp/claude-<uid>/`. Still blocked: all other `/private/tmp/` paths, non-numeric suffixes (`claude-x/`), and the bare `claude-<uid>` root with no trailing slash (so `rm -rf /private/tmp/claude-501` remains denied).
+
+### Added
+
+- 5 security-blocker tests (scratchpad bash redirect + Write allowed; outside-scratchpad, bare-root `rm -rf`, and non-uid suffix still blocked) and 2 `isProtectedPath()` tests pinning the carve-out in both layers.
+
 ## [2.7.3] - 2026-07-17 — revive two hooks that shipped dead (TypeScript lint + error rules)
 
 Two PostToolUse hooks fired on every matching edit and did nothing. Both were **silent** no-ops, which is why they survived: a hook that reports nothing is indistinguishable from a hook that finds nothing. Found by a Software Factory audit of our own guardrails. **`dist` rebuilt** (shared hook source changed).

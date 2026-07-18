@@ -98,7 +98,10 @@ const SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   // macOS specific — CC v2.1.113 expanded dangerous-removal targets
   /^\/private\/etc\//,
   /^\/private\/var\//,
-  /^\/private\/tmp\//,
+  // Carve-out mirrors security-blocker BASH_SENSITIVE_PATTERNS: CC's
+  // harness-managed scratchpad (/private/tmp/claude-<uid>/…) must stay
+  // writable or forked skills/subagents die on their first scratchpad write.
+  /^\/private\/tmp\/(?!claude-\d+\/)/,
   /^\/private\/home\//,
 ] as const;
 
