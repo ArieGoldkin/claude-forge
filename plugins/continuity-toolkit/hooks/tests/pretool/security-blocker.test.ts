@@ -2052,6 +2052,63 @@ describe('securityBlocker - extended macOS dangerous paths (CC v2.1.113)', () =>
   });
 });
 
+describe('securityBlocker - CC harness scratchpad carve-out (/private/tmp/claude-<uid>/)', () => {
+  // CC instructs every session and subagent to use its harness-managed
+  // scratchpad at /private/tmp/claude-<uid>/<project>/<session>/scratchpad.
+  // Blocking it terminates forked skills mid-run with an empty return value
+  // (observed live: /etk:review-mr died on `gh pr diff N > <scratchpad>/x.diff`).
+
+  it('should allow bash redirect into the claude scratchpad', async () => {
+    const result = await securityBlocker(
+      createBashInput(
+        'gh pr diff 33 > /private/tmp/claude-501/-Users-me-proj/abc-123/scratchpad/pr33.diff'
+      )
+    );
+    expect(result.continue).toBe(true);
+  });
+
+  it('should allow Write into the claude scratchpad', async () => {
+    const result = await securityBlocker(
+      createFileInput('Write', '/private/tmp/claude-501/-Users-me-proj/abc-123/scratchpad/notes.md')
+    );
+    expect(result.continue).toBe(true);
+  });
+
+  it('should still block /private/tmp paths outside the claude scratchpad', async () => {
+    const result = await securityBlocker(createBashInput('cat /private/tmp/other/secrets.txt'));
+    expect(result.continue).toBe(false);
+  });
+
+  it('should still block rm -rf of the bare claude-<uid> root (no trailing slash)', async () => {
+    const result = await securityBlocker(createBashInput('rm -rf /private/tmp/claude-501'));
+    expect(result.continue).toBe(false);
+  });
+
+  it('should still block a non-numeric claude-suffixed dir (claude-x is not a uid)', async () => {
+    const result = await securityBlocker(createBashInput('cat /private/tmp/claude-x/file.txt'));
+    expect(result.continue).toBe(false);
+  });
+
+  it('should block a `..` traversal spelled from inside the scratchpad prefix', async () => {
+    const result = await securityBlocker(
+      createBashInput('rm -rf /private/tmp/claude-501/../victim')
+    );
+    expect(result.continue).toBe(false);
+  });
+
+  it('should block a traversal into a sibling session scratchpad', async () => {
+    const result = await securityBlocker(
+      createBashInput('cat /private/tmp/claude-501/./../claude-999/secrets.txt')
+    );
+    expect(result.continue).toBe(false);
+  });
+
+  it('should block a trailing `..` with no slash after it', async () => {
+    const result = await securityBlocker(createBashInput('ls /private/tmp/claude-501/a/..'));
+    expect(result.continue).toBe(false);
+  });
+});
+
 describe('securityBlocker - auto-allow defense-in-depth (CC v2.1.116)', () => {
   // CC v2.1.116 fixed a sandbox bug where auto-allow could bypass the
   // dangerous-path check for rm/rmdir. Our security-blocker runs BEFORE

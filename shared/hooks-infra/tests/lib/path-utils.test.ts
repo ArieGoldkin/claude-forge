@@ -429,6 +429,18 @@ describe('isProtectedPath', () => {
     it('should detect /root paths', () => {
       expect(isProtectedPath('/root/.bashrc').isProtected).toBe(true);
     });
+
+    it('should detect /private/tmp paths outside the claude scratchpad', () => {
+      expect(isProtectedPath('/private/tmp/other/file.txt').isProtected).toBe(true);
+      expect(isProtectedPath('/private/tmp/claude-x/file.txt').isProtected).toBe(true);
+    });
+
+    it('should allow the CC harness scratchpad under /private/tmp/claude-<uid>/', () => {
+      expect(
+        isProtectedPath('/private/tmp/claude-501/-Users-me-proj/abc-123/scratchpad/out.md')
+          .isProtected
+      ).toBe(false);
+    });
   });
 
   describe('safe paths', () => {

@@ -153,8 +153,19 @@ export const BASH_SENSITIVE_PATTERNS: readonly RegExp[] = [
   /\.ssh\/id_/,
   /\.ssh\/.*\.pem/,
   /\/root\//,
-  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets
-  /\/private\/tmp\//,
+  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets.
+  // Carve-out: CC's harness-managed scratchpad lives at /private/tmp/claude-<uid>/…
+  // and every session/subagent is instructed to use it — blocking it kills forked
+  // skills mid-run (a PreToolUse deny terminates a fork with no final message).
+  // Deeper scratchpad paths are allowed; the bare claude-<uid> root (no trailing
+  // slash, e.g. `rm -rf /private/tmp/claude-501`) and all other /private/tmp
+  // references stay blocked.
+  /\/private\/tmp\/(?!claude-\d+\/)/,
+  // Companion guard for the carve-out: bash patterns match RAW command text
+  // (no `..` normalization), so without this a traversal spelled from inside
+  // the allowed prefix (/private/tmp/claude-501/../victim) would slip past
+  // the lookahead. Blocks any `..` segment after the scratchpad prefix.
+  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
   /\/private\/home\//,
 ] as const;
 
