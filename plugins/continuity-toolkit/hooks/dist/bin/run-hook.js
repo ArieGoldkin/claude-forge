@@ -2383,8 +2383,9 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   /\/proc\//,
   /\/boot\//
 ];
-var SAFE_READ_COMMAND = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|uniq|cut|nl|column|jq|find)\b/;
+var SAFE_READ_COMMAND = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|cut|nl|column|jq|find)\b/;
 var FIND_MUTATING_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/;
+var READER_WRITE_FLAG = /\s(?:-o|--output(?:=|\s)|--output-file)/;
 var VERSION_PROBE = /^\s*(?:sudo\s+)?\S+\s+--(?:version|help)\s*$/;
 var WRITE_REDIRECT_TARGET = /(?:&|\d+)?>{1,2}\|?\s*("[^"]*"|'[^']*'|[^\s;&|<>]+)/g;
 var SEGMENT_SPLIT = /(?<!>)\|{1,2}(?!\s*\/)|[;&]{1,2}|\n/;
@@ -2411,7 +2412,7 @@ function matchesSystemDirMutation(command) {
     const hit = referencesSystemDir(segment);
     if (!hit) continue;
     const isFind = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?find\b/.test(segment);
-    const safeRead = SAFE_READ_COMMAND.test(segment) && !(isFind && FIND_MUTATING_ACTION.test(segment)) || VERSION_PROBE.test(segment);
+    const safeRead = SAFE_READ_COMMAND.test(segment) && !(isFind && FIND_MUTATING_ACTION.test(segment)) && !READER_WRITE_FLAG.test(segment) || VERSION_PROBE.test(segment);
     if (!safeRead) return { matched: true, pattern: hit };
   }
   return { matched: false };

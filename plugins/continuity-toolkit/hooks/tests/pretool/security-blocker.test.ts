@@ -2150,6 +2150,12 @@ describe('securityBlocker - bypasses found by adversarial review', () => {
     // Laundered env-file read
     ['env file named to defeat the lookbehind', 'cat build-process.env'],
     ['env file path named to defeat the lookbehind', 'cat /home/u/preprocess.env'],
+    // Readers on the allowlist that can nonetheless WRITE — found by auditing
+    // the allowlist itself rather than by review. A safe-reader list is only
+    // safe if every entry is read-ONLY in every mode.
+    ['sort writing via -o', 'sort -o /etc/hosts input.txt'],
+    ['sort writing via --output', 'sort --output=/etc/hosts input.txt'],
+    ['uniq writing to its second operand', 'uniq input.txt /etc/hosts'],
   ])('should block %s', async (_label, command) => {
     const result = await securityBlocker(createBashInput(command));
     expect(result.continue).toBe(false);

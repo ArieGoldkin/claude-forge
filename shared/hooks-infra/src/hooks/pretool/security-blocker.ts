@@ -237,10 +237,17 @@ export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
  * `sed` is deliberately absent: `sed -i` writes in place.
  */
 const SAFE_READ_COMMAND =
-  /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|uniq|cut|nl|column|jq|find)\b/;
+  /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|cut|nl|column|jq|find)\b/;
 
-/** `find` actions turn a read into a write. */
+/**
+ * Flags that turn a listed reader into a writer. `find` has explicit actions,
+ * and `sort -o FILE` writes its output to a path — both would otherwise ride
+ * in on the allowlist. `uniq` is deliberately absent from the allowlist for the
+ * same reason: its optional SECOND OPERAND is an output file, which is a write
+ * with no flag to key on at all.
+ */
 const FIND_MUTATING_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/;
+const READER_WRITE_FLAG = /\s(?:-o|--output(?:=|\s)|--output-file)/;
 
 /** A `--version` / `--help` probe is read-only whatever the binary is. */
 const VERSION_PROBE = /^\s*(?:sudo\s+)?\S+\s+--(?:version|help)\s*$/;
@@ -307,7 +314,9 @@ export function matchesSystemDirMutation(command: string): {
     // potential write, because text alone cannot prove otherwise.
     const isFind = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?find\b/.test(segment);
     const safeRead =
-      (SAFE_READ_COMMAND.test(segment) && !(isFind && FIND_MUTATING_ACTION.test(segment))) ||
+      (SAFE_READ_COMMAND.test(segment) &&
+        !(isFind && FIND_MUTATING_ACTION.test(segment)) &&
+        !READER_WRITE_FLAG.test(segment)) ||
       VERSION_PROBE.test(segment);
 
     if (!safeRead) return { matched: true, pattern: hit };
