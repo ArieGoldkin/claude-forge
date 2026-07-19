@@ -94,7 +94,8 @@ export function formatCost(costUsd: number): string {
 }
 
 /**
- * Format duration in milliseconds as "Xm Ys" string.
+ * Format duration in milliseconds as "Xh Ym" or "Ym". Seconds are floored away
+ * and never rendered.
  */
 export function formatDuration(durationMs: number): string {
   const totalMinutes = Math.floor(durationMs / 60000);
@@ -148,9 +149,11 @@ export function extractCost(data: Record<string, unknown>): {
   const totalCost = cost['total_cost_usd'];
   const totalDuration = cost['total_duration_ms'];
 
-  const costUsd = typeof totalCost === 'number' && !Number.isNaN(totalCost) ? totalCost : 0;
-  const durationMs =
-    typeof totalDuration === 'number' && !Number.isNaN(totalDuration) ? totalDuration : 0;
+  // Number.isFinite, not !Number.isNaN — Infinity passes a NaN check and then
+  // renders as "Infinityh NaNm" / "$∞". It is reachable from valid JSON:
+  // `{"cost":{"total_duration_ms":1e999}}` parses to Infinity.
+  const costUsd = Number.isFinite(totalCost) ? (totalCost as number) : 0;
+  const durationMs = Number.isFinite(totalDuration) ? (totalDuration as number) : 0;
 
   return { costUsd, durationMs };
 }
@@ -182,8 +185,8 @@ export function extractRateLimits(data: Record<string, unknown>): {
     const win = rateLimits[key] as Record<string, unknown> | undefined;
     if (!win) return null;
     const used = win['used_percentage'];
-    if (typeof used !== 'number' || Number.isNaN(used)) return null;
-    return Math.round(used);
+    if (!Number.isFinite(used)) return null;
+    return Math.round(used as number);
   };
 
   // `resets_at` is a Unix timestamp in SECONDS (verified live: 1784425200).
@@ -296,8 +299,33 @@ export function extractPr(data: Record<string, unknown>): {
  */
 export function extractSessionId(data: Record<string, unknown>): string {
   const id = data['session_id'];
-  if (typeof id === 'string' && id.length > 0) return id;
-  return process.env['CLAUDE_SESSION_ID'] || 'default';
+  if (isSafeSessionId(id)) return id;
+  const fromEnv = process.env['CLAUDE_SESSION_ID'];
+  if (isSafeSessionId(fromEnv)) return fromEnv;
+  return 'default';
+}
+
+/**
+ * Session ids are interpolated into a temp-file path, so anything containing
+ * path separators or traversal segments must be rejected rather than joined.
+ * `join(tmpdir(), 'claude-context-pct-' + '../../etc/x' + '.txt')` escapes the
+ * temp directory entirely, and the file is then written and renamed over.
+ *
+ * Claude Code supplies a UUID, so this is not reachable in a stock install —
+ * but it becomes reachable in the composed-launcher setup this plugin now
+ * documents, where a third-party wrapper re-emits the payload into ctk's stdin.
+ *
+ * MUST stay identical to the guard in the context-monitor hook: the two form a
+ * writer/reader pair, and a validator applied to only one side desynchronises
+ * the filename exactly like the precedence mismatch this replaced.
+ */
+export function isSafeSessionId(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  // Reject `..` outright as well as separators: the charset alone permits it,
+  // and a traversal segment has no business in a session id even where the
+  // surrounding prefix/suffix would defuse it.
+  if (value.includes('..')) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
 }
 
 /**
@@ -360,7 +388,9 @@ export function formatResetIn(resetsAtSec: number | null, nowMs: number = Date.n
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours > 0) return `resets in ${hours}h ${minutes}m`;
-  return `resets in ${minutes}m`;
+  // Under a minute still reads as imminent, not as already reset — "0m" is
+  // exactly wrong at the moment the countdown matters most.
+  return `resets in ${Math.max(1, minutes)}m`;
 }
 
 /**
@@ -369,8 +399,15 @@ export function formatResetIn(resetsAtSec: number | null, nowMs: number = Date.n
  * play (`context_window_size = 1000000` is live).
  */
 export function formatTokenCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  if (!Number.isFinite(n)) return '0';
+  // Round BEFORE comparing against the next boundary: toFixed(1) turns 999_999
+  // into "1000.0k" because 999.999 rounds up after the unit was already chosen.
+  const scaled = (value: number, unit: string): string | null => {
+    const rounded = Number((n / value).toFixed(1));
+    return rounded >= 1000 ? null : `${rounded.toFixed(1)}${unit}`;
+  };
+  if (n >= 1_000_000) return scaled(1_000_000, 'M') ?? `${(n / 1_000_000).toFixed(0)}M`;
+  if (n >= 1_000) return scaled(1_000, 'k') ?? formatTokenCount(1_000_000);
   return String(Math.round(n));
 }
 
@@ -586,17 +623,32 @@ export function getGitBranch(): string {
   // `rev-parse --abbrev-ref HEAD` has been available for far longer and returns
   // the same name, so it is the portable primary; it yields "HEAD" on a detached
   // checkout, which we normalise back to empty.
-  let branch = '';
-  try {
-    branch = execSync('git rev-parse --abbrev-ref HEAD', {
-      timeout: 2000,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return '';
+  // Neither command covers every case alone, so try both:
+  //   rev-parse --abbrev-ref HEAD — works on every git we support, but exits
+  //     128 on an UNBORN head (fresh `git init`, before the first commit).
+  //   branch --show-current      — reads the HEAD symref directly, so it
+  //     handles the unborn case, but needs git >= 2.22.
+  // Running the portable one first and falling back keeps old git working
+  // (the 2.15 bug this replaced) without regressing a fresh repo on new git.
+  const tryGit = (cmd: string): string | null => {
+    try {
+      return execSync(cmd, {
+        timeout: 2000,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      return null;
+    }
+  };
+
+  let branch = tryGit('git rev-parse --abbrev-ref HEAD');
+  if (branch === null || branch === 'HEAD') {
+    // null → unborn head or not a repo; 'HEAD' → detached.
+    branch = tryGit('git branch --show-current') ?? '';
   }
-  if (branch === 'HEAD') return '';
+  if (branch === 'HEAD') branch = '';
+  if (!branch) return '';
 
   // Write cache atomically
   try {

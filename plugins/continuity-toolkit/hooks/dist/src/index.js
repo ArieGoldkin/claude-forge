@@ -4247,11 +4247,20 @@ function writeLastTier(sessionId, tier) {
   } catch {
   }
 }
+function isSafeSessionId(value) {
+  if (typeof value !== "string") return false;
+  if (value.includes("..")) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
+}
 function getSessionId2(input) {
-  if (typeof input.session_id === "string" && input.session_id) {
+  if (isSafeSessionId(input.session_id)) {
     return input.session_id;
   }
-  return process.env["CLAUDE_SESSION_ID"] || "default";
+  const fromEnv = process.env["CLAUDE_SESSION_ID"];
+  if (isSafeSessionId(fromEnv)) {
+    return fromEnv;
+  }
+  return "default";
 }
 async function contextMonitor(input) {
   const sessionId = getSessionId2(input);

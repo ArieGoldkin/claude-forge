@@ -169,13 +169,32 @@ function writeLastTier(sessionId: string, tier: Tier): void {
 // =============================================================================
 
 /**
+ * Session ids are interpolated into the temp-file paths below, so values
+ * carrying path separators or traversal segments are rejected rather than
+ * joined. MUST stay identical to `isSafeSessionId()` in the statusline script
+ * (`plugins/continuity-toolkit/hooks/src/statusline/context-percentage.ts`):
+ * that script writes the file this hook reads, so a validator applied to only
+ * one side desynchronises the filename — the same class of writer/reader
+ * mismatch that silently disabled these warnings before ctk 2.8.0.
+ */
+function isSafeSessionId(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.includes('..')) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
+}
+
+/**
  * Extract session ID from hook input or environment.
  */
 function getSessionId(input: HookInput): string {
-  if (typeof input.session_id === 'string' && input.session_id) {
+  if (isSafeSessionId(input.session_id)) {
     return input.session_id;
   }
-  return process.env['CLAUDE_SESSION_ID'] || 'default';
+  const fromEnv = process.env['CLAUDE_SESSION_ID'];
+  if (isSafeSessionId(fromEnv)) {
+    return fromEnv;
+  }
+  return 'default';
 }
 
 // =============================================================================

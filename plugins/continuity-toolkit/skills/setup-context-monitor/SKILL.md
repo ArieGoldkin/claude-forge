@@ -58,7 +58,9 @@ tokens: 217.4k in · 826 out · 215.8k cached
 | 4 | Session token accounting (in / out / cache reads) | Whenever the payload reports non-zero tokens — omitted rather than printing a row of zeros. The cached segment appears only when there are cache reads |
 
 The effort badge shows `⚡ fast` in fast mode, otherwise the effort level with `◐` when extended
-thinking is on. Set `CONTINUITY_STATUSLINE_COMPACT=1` to collapse to the classic two lines.
+thinking is on. Set `CONTINUITY_STATUSLINE_COMPACT=1` to collapse to the classic two lines, or
+`CONTINUITY_STATUSLINE_SILENT=1` to print nothing at all — the "Always" column above describes
+normal operation, and silent mode suppresses every line while still writing the percentage file.
 
 ## The Conflict Worth Knowing About
 

@@ -16,7 +16,7 @@ One-time setup to enable proactive context window usage warnings. Creates a stab
 ## Prerequisites
 
 - Continuity toolkit plugin installed and hooks compiled (`cd hooks && npm run build`)
-- Claude Code v4.1+ (StatusLine support required)
+- Claude Code v2.1.97+ (StatusLine `refreshInterval` and `workspace.git_worktree`)
 
 ## What This Command Does
 
@@ -35,7 +35,20 @@ Create the directory and launcher script at `~/.config/claude/continuity-statusl
 mkdir -p ~/.config/claude
 ```
 
-**Always overwrite** the launcher (do not skip if it already exists). A pre-existing launcher from an older install may hardcode the legacy `continuity-toolkit` cache path only and silently fail to `[?] unknown` once the plugin is renamed or its old cache is cleaned. Re-running this command must self-heal those installs.
+### Step 0: Check for an Existing StatusLine
+
+Run this **before writing anything**:
+
+```bash
+python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude/settings.json')));print(json.dumps(d.get('statusLine','(unset)')))"
+```
+
+| Existing value | Action |
+|---|---|
+| Unset, or already `continuity-statusline.sh` | Proceed |
+| Any other program | **Stop and ask.** Name what is configured and offer Step 1a (compose) or replacement |
+
+**Always overwrite the *launcher file*** once the user has chosen ctk (do not skip if it already exists). A pre-existing launcher from an older install may hardcode the legacy `continuity-toolkit` cache path only and silently fail to `[?] unknown` once the plugin is renamed or its old cache is cleaned. Re-running this command must self-heal those installs. This is about the launcher script's *contents* — it is not licence to repoint a `statusLine` the user deliberately set, which is what Step 0 guards.
 
 Write the following content to `~/.config/claude/continuity-statusline.sh`:
 
@@ -128,14 +141,19 @@ After configuring:
 2. After restart, send a message and wait for a response
 3. Check if the temp file was created:
 
+The script writes to Node's `os.tmpdir()`, **not** `/tmp` — on macOS that is a per-user
+`/var/folders/…/T` directory, so a hard-coded `/tmp` check reports failure on every macOS
+install even when the pipeline is healthy. Resolve the directory instead of assuming it:
+
 ```bash
-ls -la /tmp/claude-context-pct-*.txt
+node -e "const os=require('os'),fs=require('fs');console.log(fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))"
 ```
 
-4. If the file exists, read its content to see the current percentage:
+4. If a file exists, read its content to see the current percentage. It is keyed by session id,
+   so match the session you are actually in:
 
 ```bash
-cat /tmp/claude-context-pct-*.txt
+node -e "const os=require('os'),fs=require('fs'),p=require('path');for(const f of fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))console.log(f,'=',fs.readFileSync(p.join(os.tmpdir(),f),'utf8').trim())"
 ```
 
 5. The context-monitor hook will automatically inject warnings when the percentage crosses thresholds (70%, 80%, 90%).
@@ -151,9 +169,10 @@ cat /tmp/claude-context-pct-*.txt
        |
        | node executes the script
        v
-Reads stdin JSON --> writes /tmp/claude-context-pct-*.txt --> outputs two-line status:
-       |                                                         Line 1: [Opus] my-app | feature/auth
-       |                                                         Line 2: ████░░░░░░ 42% | $0.08 | 7m 3s
+Reads stdin JSON --> writes <os.tmpdir()>/claude-context-pct-<session>.txt
+       |            --> outputs two to four lines (two in compact mode, none when silent):
+       |                Line 1: [Opus ◐ xhigh] 📁 my-app | 🌿 feature/auth
+       |                Line 2: ████░░░░░░ 42% 👍 | $0.08 | ⏱️ 7m
        |
        v
 UserPromptSubmit hook reads temp file --> injects tiered warnings

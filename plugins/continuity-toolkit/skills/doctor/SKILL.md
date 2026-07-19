@@ -90,7 +90,12 @@ Classify the result:
 |---|---|---|
 | Contains `continuity-statusline.sh` | Necessary, not sufficient — go to the end-to-end check | see below |
 | Unset / no `statusLine` key | **Dead** | NOT CONFIGURED — run `/ctk:setup-context-monitor` |
+| Runs ctk with `CONTINUITY_STATUSLINE_SILENT=1` alongside another program | **Healthy** — this is the composed launcher | OK (composed) |
 | Points at any other program | **Dead** | CONFLICT — name the program; see the resolution below |
+
+A composed launcher is *not* a conflict: if the command pipes the payload through ctk with
+`CONTINUITY_STATUSLINE_SILENT=1`, the side effect still runs and the warnings still fire even
+though another program owns the display. Read the launcher's contents before classifying.
 
 **The config string alone does not prove the warnings fire.** The statusline writes the
 percentage file and the hook reads it, keyed by session id on both sides; if those keys ever
@@ -108,14 +113,20 @@ node -e "const os=require('os'),fs=require('fs');console.log(fs.readdirSync(os.t
 | Files found | Meaning |
 |---|---|
 | One matching the current session id | Pipeline verified end-to-end — report OK |
-| Only `claude-context-pct-default.txt` | The pre-2.8.0 keying bug — the installed ctk is stale; recommend updating |
+| Only `claude-context-pct-default.txt` | *May* indicate the pre-2.8.0 keying bug — but `default` is also the legitimate fallback when the payload carries no `session_id` and `CLAUDE_SESSION_ID` is unset. Confirm the installed ctk version before recommending an update |
 | None | The statusline has not run yet this session; re-check after a turn or two before reporting a fault |
 
 On CONFLICT, state the consequence plainly rather than just flagging a mismatch: *"`statusLine`
-runs <program>, so ctk's 70/80/90% context warnings are not firing."* Then offer the two
-resolutions — switch back with `/ctk:setup-context-monitor`, or keep the other statusline and
-accept that the warnings are off. Do not silently "fix" the user's `statusLine`; it is their
-configuration and they may have chosen it deliberately.
+runs <program>, so ctk's 70/80/90% context warnings are not firing."* Then offer three
+resolutions, composition first:
+
+1. **Keep both** — rebuild the launcher to run ctk with `CONTINUITY_STATUSLINE_SILENT=1` and
+   `<program>` for the display (`/ctk:setup-context-monitor` Step 1a). Usually the right answer.
+2. Switch back to ctk alone with `/ctk:setup-context-monitor`.
+3. Keep `<program>` alone and accept that the warnings are off.
+
+Do not silently "fix" the user's `statusLine`; it is their configuration and they may have chosen
+it deliberately.
 
 ### Step 5: Check Environment
 

@@ -9,7 +9,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,7 @@ import {
   formatTokenCount,
   getBarColor,
   getContextEmoji,
+  isSafeSessionId,
 } from '../../src/statusline/context-percentage.js';
 
 // =============================================================================
@@ -815,26 +816,22 @@ describe('formatStatusLine with extras', () => {
 // =============================================================================
 
 describe('getGitBranch portability', () => {
-  it('should not depend on the git >= 2.22 --show-current flag', () => {
-    const src = readFileSync(
-      new URL('../../src/statusline/context-percentage.ts', import.meta.url),
-      'utf8'
-    );
-    // Assert on the invocation, not any mention — the flag is named in a
-    // comment explaining why it was replaced.
-    expect(src).not.toContain("execSync('git branch --show-current'");
-    expect(src).toContain("execSync('git rev-parse --abbrev-ref HEAD'");
-  });
-
-  it('should also pin the compiled bundle, which is what actually ships', () => {
-    // The source grep alone cannot catch a stale dist still carrying the old
-    // flag; dist/ is tracked and is what users execute.
+  // These previously grepped the source for a literal `execSync('git …')`
+  // string. That shape was flagged in review as brittle, and it then broke on
+  // a legitimate refactor (the calls moved behind a `tryGit(cmd)` helper) while
+  // the behaviour was entirely correct. The invariant worth pinning is which
+  // commands actually get invoked, which the mocked tests below assert — plus
+  // one check on the shipped bundle, since dist/ is tracked and is what runs.
+  it('should ship a bundle that tries the portable command first', () => {
     const dist = readFileSync(
       new URL('../../dist/src/statusline/context-percentage.js', import.meta.url),
       'utf8'
     );
-    expect(dist).toContain('git rev-parse --abbrev-ref HEAD');
-    expect(dist).not.toContain("execSync('git branch --show-current'");
+    const revParse = dist.indexOf('git rev-parse --abbrev-ref HEAD');
+    const showCurrent = dist.indexOf('git branch --show-current');
+    expect(revParse).toBeGreaterThan(-1);
+    // --show-current may appear only as the unborn-head fallback, after it.
+    expect(showCurrent).toBeGreaterThan(revParse);
   });
 });
 
@@ -1043,10 +1040,134 @@ describe('CONTINUITY_STATUSLINE_SILENT', () => {
     expect(runScript(payload('loud-probe'), false)).toContain('42%');
   });
 
+  it('should reject a path-traversal session_id rather than writing outside tmpdir', () => {
+    // Unsanitised, join(tmpdir(), 'claude-context-pct-' + '../../..' + '.txt')
+    // escapes the temp directory and the percentage is written+renamed there.
+    const evil = '../../../../../../tmp/pwned';
+    runScript(JSON.stringify({ session_id: evil, context_window: { used_percentage: 7 } }), true);
+    expect(existsSync(join(tmpdir(), `claude-context-pct-${evil}.txt`))).toBe(false);
+    // Falls back to the default key instead.
+    expect(readFileSync(pctFile('default'), 'utf8').trim()).toBe('7');
+  });
+
   it('should suppress the fallback string too, so it cannot corrupt the other program', () => {
     // Malformed input takes the FALLBACK_STATUS path; in silent mode that must
     // print nothing, or it would inject "[?] unknown" into the other program's
     // output. This is the leak the `emit` wrapper exists to prevent.
     expect(runScript('{ not json', true)).toBe('');
+  });
+});
+
+// =============================================================================
+// Hardening from independent code review of this PR
+// =============================================================================
+
+describe('isSafeSessionId', () => {
+  it('should accept the UUID shape Claude Code actually supplies', () => {
+    expect(isSafeSessionId('99753a0e-6a54-4673-b873-3448edd238c5')).toBe(true);
+    expect(isSafeSessionId('default')).toBe(true);
+  });
+
+  it('should reject path separators and traversal', () => {
+    expect(isSafeSessionId('../../../../tmp/pwned')).toBe(false);
+    expect(isSafeSessionId('a/b')).toBe(false);
+    expect(isSafeSessionId('..')).toBe(false);
+  });
+
+  it('should reject empty, over-long, and non-string values', () => {
+    expect(isSafeSessionId('')).toBe(false);
+    expect(isSafeSessionId('x'.repeat(129))).toBe(false);
+    expect(isSafeSessionId(12345)).toBe(false);
+    expect(isSafeSessionId(null)).toBe(false);
+  });
+
+  it('should fall back to "default" for an unsafe payload id', () => {
+    expect(extractSessionId({ session_id: '../escape' })).toBe('default');
+  });
+});
+
+describe('non-finite payload values', () => {
+  // Infinity satisfies `typeof v === 'number' && !Number.isNaN(v)`, and
+  // {"total_duration_ms":1e999} is valid JSON that parses to Infinity.
+  // Parsed from JSON text rather than written as a numeric literal: 1e999 in
+  // source trips noPrecisionLoss, and parsing is the real arrival path anyway.
+  const overflowed = (json: string): Record<string, unknown> =>
+    JSON.parse(json) as Record<string, unknown>;
+
+  it('should not let Infinity through extractCost', () => {
+    const data = overflowed('{"cost":{"total_cost_usd":1e999,"total_duration_ms":1e999}}');
+    expect(data['cost']).toHaveProperty('total_cost_usd', Number.POSITIVE_INFINITY);
+    expect(extractCost(data)).toEqual({ costUsd: 0, durationMs: 0 });
+  });
+
+  it('should not render "Infinityh NaNm" or "$∞"', () => {
+    const { costUsd, durationMs } = extractCost(
+      overflowed('{"cost":{"total_cost_usd":1e999,"total_duration_ms":1e999}}')
+    );
+    const line = formatLine2(22, costUsd, durationMs);
+    expect(line).not.toContain('Infinity');
+    expect(line).not.toContain('NaN');
+    expect(line).not.toContain('∞');
+  });
+
+  it('should treat a non-finite rate-limit percentage as absent', () => {
+    const data = overflowed('{"rate_limits":{"five_hour":{"used_percentage":1e999}}}');
+    expect(extractRateLimits(data).fiveHourPct).toBeNull();
+  });
+});
+
+describe('formatTokenCount unit boundaries', () => {
+  it('should not round past its own unit (999_999 is not "1000.0k")', () => {
+    expect(formatTokenCount(999_999)).toBe('1.0M');
+    expect(formatTokenCount(999_999_999)).toBe('1000M');
+  });
+
+  it('should keep ordinary values unchanged', () => {
+    expect(formatTokenCount(215_762)).toBe('215.8k');
+    expect(formatTokenCount(1_500_000)).toBe('1.5M');
+    expect(formatTokenCount(826)).toBe('826');
+  });
+
+  it('should not emit Infinity', () => {
+    expect(formatTokenCount(Number.POSITIVE_INFINITY)).toBe('0');
+  });
+});
+
+describe('formatResetIn sub-minute countdown', () => {
+  const now = 1_784_400_000_000;
+
+  it('should not read as already-reset when under a minute remains', () => {
+    // "resets in 0m" is exactly wrong at the moment it matters most.
+    expect(formatResetIn(now / 1000 + 30, now)).toBe('resets in 1m');
+  });
+});
+
+describe('getGitBranch unborn HEAD', () => {
+  it('should fall back to --show-current when rev-parse fails on an unborn head', async () => {
+    // Verified on this machine: `rev-parse --abbrev-ref HEAD` exits 128 in a
+    // fresh `git init` before the first commit, while `branch --show-current`
+    // (git >= 2.22) reads the HEAD symref and succeeds. Shipping only rev-parse
+    // regressed fresh repos on modern git.
+    const seen: string[] = [];
+    // resetModules BEFORE mocking: the module is already in cache from earlier
+    // suites, so without this the real execSync runs and `seen` stays empty.
+    vi.resetModules();
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return { ...actual, existsSync: () => false, writeFileSync: () => {}, renameSync: () => {} };
+    });
+    vi.doMock('node:child_process', () => ({
+      execSync: (cmd: string) => {
+        seen.push(cmd);
+        if (cmd.includes('rev-parse')) throw new Error("fatal: ambiguous argument 'HEAD'");
+        return 'main\n';
+      },
+    }));
+    const mod = await import('../../src/statusline/context-percentage.js');
+    expect(mod.getGitBranch()).toBe('main');
+    expect(seen).toEqual(['git rev-parse --abbrev-ref HEAD', 'git branch --show-current']);
+    vi.doUnmock('node:child_process');
+    vi.doUnmock('node:fs');
+    vi.resetModules();
   });
 });

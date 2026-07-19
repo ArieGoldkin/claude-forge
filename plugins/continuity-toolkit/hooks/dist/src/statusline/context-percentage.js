@@ -73,8 +73,8 @@ function extractCost(data) {
   if (!cost) return { costUsd: 0, durationMs: 0 };
   const totalCost = cost["total_cost_usd"];
   const totalDuration = cost["total_duration_ms"];
-  const costUsd = typeof totalCost === "number" && !Number.isNaN(totalCost) ? totalCost : 0;
-  const durationMs = typeof totalDuration === "number" && !Number.isNaN(totalDuration) ? totalDuration : 0;
+  const costUsd = Number.isFinite(totalCost) ? totalCost : 0;
+  const durationMs = Number.isFinite(totalDuration) ? totalDuration : 0;
   return { costUsd, durationMs };
 }
 function extractRateLimits(data) {
@@ -90,7 +90,7 @@ function extractRateLimits(data) {
     const win = rateLimits[key];
     if (!win) return null;
     const used = win["used_percentage"];
-    if (typeof used !== "number" || Number.isNaN(used)) return null;
+    if (!Number.isFinite(used)) return null;
     return Math.round(used);
   };
   const readReset = (key) => {
@@ -136,8 +136,15 @@ function extractPr(data) {
 }
 function extractSessionId(data) {
   const id = data["session_id"];
-  if (typeof id === "string" && id.length > 0) return id;
-  return process.env["CLAUDE_SESSION_ID"] || "default";
+  if (isSafeSessionId(id)) return id;
+  const fromEnv = process.env["CLAUDE_SESSION_ID"];
+  if (isSafeSessionId(fromEnv)) return fromEnv;
+  return "default";
+}
+function isSafeSessionId(value) {
+  if (typeof value !== "string") return false;
+  if (value.includes("..")) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
 }
 function extractModelName(data) {
   const model = data["model"];
@@ -167,11 +174,16 @@ function formatResetIn(resetsAtSec, nowMs = Date.now()) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours > 0) return `resets in ${hours}h ${minutes}m`;
-  return `resets in ${minutes}m`;
+  return `resets in ${Math.max(1, minutes)}m`;
 }
 function formatTokenCount(n) {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+  if (!Number.isFinite(n)) return "0";
+  const scaled = (value, unit) => {
+    const rounded = Number((n / value).toFixed(1));
+    return rounded >= 1e3 ? null : `${rounded.toFixed(1)}${unit}`;
+  };
+  if (n >= 1e6) return scaled(1e6, "M") ?? `${(n / 1e6).toFixed(0)}M`;
+  if (n >= 1e3) return scaled(1e3, "k") ?? formatTokenCount(1e6);
   return String(Math.round(n));
 }
 function formatPrSegment(pr) {
@@ -274,17 +286,23 @@ function getGitBranch() {
     }
   } catch {
   }
-  let branch = "";
-  try {
-    branch = execSync("git rev-parse --abbrev-ref HEAD", {
-      timeout: 2e3,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-  } catch {
-    return "";
+  const tryGit = (cmd) => {
+    try {
+      return execSync(cmd, {
+        timeout: 2e3,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+    } catch {
+      return null;
+    }
+  };
+  let branch = tryGit("git rev-parse --abbrev-ref HEAD");
+  if (branch === null || branch === "HEAD") {
+    branch = tryGit("git branch --show-current") ?? "";
   }
-  if (branch === "HEAD") return "";
+  if (branch === "HEAD") branch = "";
+  if (!branch) return "";
   try {
     const tmpFile = `${cacheFile}.tmp`;
     writeFileSync(tmpFile, JSON.stringify({ branch }), "utf8");
@@ -378,6 +396,6 @@ if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(proce
   main();
 }
 
-export { ANSI, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractSessionId, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch };
+export { ANSI, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractSessionId, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch, isSafeSessionId };
 //# sourceMappingURL=context-percentage.js.map
 //# sourceMappingURL=context-percentage.js.map
