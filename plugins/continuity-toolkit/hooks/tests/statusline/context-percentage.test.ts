@@ -9,7 +9,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANSI,
   buildProgressBar,
@@ -18,6 +18,7 @@ import {
   extractModelName,
   extractPr,
   extractRateLimits,
+  extractSessionId,
   extractTokenUsage,
   extractWorkspaceName,
   extractWorktreePath,
@@ -34,7 +35,6 @@ import {
   formatTokenCount,
   getBarColor,
   getContextEmoji,
-  getGitBranch,
 } from '../../src/statusline/context-percentage.js';
 
 // =============================================================================
@@ -822,8 +822,135 @@ describe('getGitBranch portability', () => {
     expect(src).toContain("execSync('git rev-parse --abbrev-ref HEAD'");
   });
 
-  it('should return a string without throwing in this repo', () => {
-    expect(typeof getGitBranch()).toBe('string');
+  it('should also pin the compiled bundle, which is what actually ships', () => {
+    // The source grep alone cannot catch a stale dist still carrying the old
+    // flag; dist/ is tracked and is what users execute.
+    const dist = readFileSync(
+      new URL('../../dist/src/statusline/context-percentage.js', import.meta.url),
+      'utf8'
+    );
+    expect(dist).toContain('git rev-parse --abbrev-ref HEAD');
+    expect(dist).not.toContain("execSync('git branch --show-current'");
+  });
+});
+
+describe('getGitBranch behaviour', () => {
+  // The previous test here asserted `typeof getGitBranch() === 'string'`, which
+  // the declared return type already guarantees — it passed against the very
+  // git-2.22 bug this block exists to prevent, because the broken version
+  // returned '' silently. These drive the three real branches instead.
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('node:child_process');
+    vi.doUnmock('node:fs');
+  });
+
+  async function loadWithGit(execImpl: (cmd: string) => string) {
+    // Force a cache miss so every case exercises the git path, not a leftover
+    // cache file from a previous run.
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return { ...actual, existsSync: () => false, writeFileSync: () => {}, renameSync: () => {} };
+    });
+    vi.doMock('node:child_process', () => ({
+      execSync: (cmd: string) => execImpl(cmd),
+    }));
+    return await import('../../src/statusline/context-percentage.js');
+  }
+
+  it('should return the branch name on success', async () => {
+    const mod = await loadWithGit(() => 'feature/my-branch\n');
+    expect(mod.getGitBranch()).toBe('feature/my-branch');
+  });
+
+  it('should normalise a detached HEAD to empty rather than printing "HEAD"', async () => {
+    const mod = await loadWithGit(() => 'HEAD\n');
+    expect(mod.getGitBranch()).toBe('');
+  });
+
+  it('should return empty when git throws (not a repo, git absent)', async () => {
+    const mod = await loadWithGit(() => {
+      throw new Error('fatal: not a git repository');
+    });
+    expect(mod.getGitBranch()).toBe('');
+  });
+
+  it('should invoke the portable command, not the git >= 2.22 flag', async () => {
+    const seen: string[] = [];
+    const mod = await loadWithGit((cmd) => {
+      seen.push(cmd);
+      return 'main\n';
+    });
+    mod.getGitBranch();
+    expect(seen).toEqual(['git rev-parse --abbrev-ref HEAD']);
+  });
+});
+
+// =============================================================================
+// Session-id keying — writer/reader pair
+//
+// The statusline WRITES the context-percentage file and the context-monitor
+// hook READS it. Their session-id precedence must match exactly or the file is
+// written under one name and looked for under another, silently disabling the
+// 70/80/90% warnings. That is precisely what shipped: the writer read only
+// CLAUDE_SESSION_ID, which CC does not export into the statusline child, so it
+// wrote "-default.txt" while the hook looked for "-<uuid>.txt".
+// =============================================================================
+
+describe('extractSessionId', () => {
+  const ENV_KEY = 'CLAUDE_SESSION_ID';
+  const original = process.env[ENV_KEY];
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[ENV_KEY];
+    else process.env[ENV_KEY] = original;
+  });
+
+  it('should prefer the payload session_id — the field CC actually supplies', () => {
+    process.env[ENV_KEY] = 'from-env';
+    expect(extractSessionId({ session_id: '99753a0e-6a54-4673-b873-3448edd238c5' })).toBe(
+      '99753a0e-6a54-4673-b873-3448edd238c5'
+    );
+  });
+
+  it('should fall back to the env var when the payload omits it', () => {
+    process.env[ENV_KEY] = 'from-env';
+    expect(extractSessionId({})).toBe('from-env');
+  });
+
+  it('should fall back to "default" when neither is present', () => {
+    delete process.env[ENV_KEY];
+    expect(extractSessionId({})).toBe('default');
+  });
+
+  it('should ignore a non-string or empty payload session_id', () => {
+    delete process.env[ENV_KEY];
+    expect(extractSessionId({ session_id: '' })).toBe('default');
+    expect(extractSessionId({ session_id: 12345 } as Record<string, unknown>)).toBe('default');
+  });
+
+  it('should match the context-monitor hook precedence exactly', () => {
+    // Mirrors getSessionId() in shared/hooks-infra/src/hooks/prompt/context-monitor.ts:
+    // input.session_id -> CLAUDE_SESSION_ID -> 'default'.
+    const hookGetSessionId = (input: { session_id?: unknown }): string => {
+      if (typeof input.session_id === 'string' && input.session_id) return input.session_id;
+      return process.env[ENV_KEY] || 'default';
+    };
+
+    for (const payload of [{ session_id: 'abc-123' }, { session_id: '' }, {}] as Record<
+      string,
+      unknown
+    >[]) {
+      process.env[ENV_KEY] = 'env-session';
+      expect(extractSessionId(payload)).toBe(hookGetSessionId(payload));
+      delete process.env[ENV_KEY];
+      expect(extractSessionId(payload)).toBe(hookGetSessionId(payload));
+    }
   });
 });
 

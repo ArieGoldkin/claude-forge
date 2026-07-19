@@ -88,9 +88,28 @@ Classify the result:
 
 | `statusLine.command` | Context warnings | Report |
 |---|---|---|
-| Contains `continuity-statusline.sh` | Firing | OK |
+| Contains `continuity-statusline.sh` | Necessary, not sufficient — go to the end-to-end check | see below |
 | Unset / no `statusLine` key | **Dead** | NOT CONFIGURED — run `/ctk:setup-context-monitor` |
 | Points at any other program | **Dead** | CONFLICT — name the program; see the resolution below |
+
+**The config string alone does not prove the warnings fire.** The statusline writes the
+percentage file and the hook reads it, keyed by session id on both sides; if those keys ever
+disagree the file is written under one name and sought under another, and the warnings stay
+silent with a perfectly correct `statusLine`. That exact defect shipped through ctk 2.7.4 — the
+writer keyed off `CLAUDE_SESSION_ID`, which Claude Code does not export into the statusline
+child process, so every file was written as `-default.txt` while the hook looked for the real
+session UUID. Verify the artifact, not the intent:
+
+```bash
+# Does a percentage file exist for THIS session? (needs the current session id)
+node -e "const os=require('os'),fs=require('fs');console.log(fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))"
+```
+
+| Files found | Meaning |
+|---|---|
+| One matching the current session id | Pipeline verified end-to-end — report OK |
+| Only `claude-context-pct-default.txt` | The pre-2.8.0 keying bug — the installed ctk is stale; recommend updating |
+| None | The statusline has not run yet this session; re-check after a turn or two before reporting a fault |
 
 On CONFLICT, state the consequence plainly rather than just flagging a mismatch: *"`statusLine`
 runs <program>, so ctk's 70/80/90% context warnings are not firing."* Then offer the two

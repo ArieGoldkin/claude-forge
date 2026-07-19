@@ -40,11 +40,12 @@ python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude/settin
 ## What the StatusLine Displays
 
 Every field below comes from the JSON Claude Code already sends the statusline on stdin — no
-transcript parsing, no polling, no extra processes.
+transcript parsing and no polling. The one exception is the branch, which shells out to
+`git rev-parse --abbrev-ref HEAD` and is cached for 5 seconds.
 
 ```
 [Opus 4.8 ◐ xhigh] 📁 my-project | 🌿 main | PR #35 pending
-███░░░░░░░ 22% ✨ | $51 | ⏱️ 17h 4m
+██░░░░░░░░ 22% ✨ | $51 | ⏱️ 17h 4m
 session: █░░░░░░░░░ 11% (resets in 4h 31m) · weekly: █████░░░░░ 51% (resets in 4d 3h)
 tokens: 217.4k in · 826 out · 215.8k cached
 ```

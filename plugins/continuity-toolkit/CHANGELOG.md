@@ -2,7 +2,19 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
-## [2.8.0] - 2026-07-19 — statusline surfaces the payload fields it was discarding
+## [2.8.0] - 2026-07-19 — context warnings never fired; statusline surfaces discarded payload fields
+
+### Fixed — the context-warning pipeline was dead for every user
+
+**ctk's flagship feature did not work.** The statusline writes the context-percentage file and the `context-monitor` hook reads it, keyed by session id on both sides — but the two used *different precedence*. The writer read `process.env.CLAUDE_SESSION_ID` only, and **Claude Code does not export that variable into the statusline child process**, so every file was written as `claude-context-pct-default.txt`. The hook receives `session_id` in its input and looked for `claude-context-pct-<uuid>.txt`, which never existed. `readPercentage()` returned null, `contextMonitor()` silent-succeeded, and the 70/80/90% warnings could not fire for anyone.
+
+The failure was invisible by construction: a missing file is a legitimate "statusline not configured" state, logged at **debug** level while the default log level is `warn`. Nothing errored; the feature simply never ran.
+
+Proven on a live machine before and after: with the old build, the only file present was `-default.txt` while the hook — queried with the real session id — returned bare `{"continue":true,"suppressOutput":true}`. With the fix, the statusline writes `claude-context-pct-<session>.txt` and the same hook returns the 85% warning. `extractSessionId()` now mirrors the hook's `getSessionId()` precedence exactly (payload → env → `default`), with a test that asserts the two agree across every input shape.
+
+This is the fourth hook in this repo found firing and doing nothing, after `lint-checker`, `error-warner` (both 2.7.3), and `/etk:review-mr`'s empty return (etk 2.14.1).
+
+### Statusline surfaces the payload fields it was discarding
 
 Claude Code hands the statusline a rich JSON payload on stdin; ctk parsed six fields and dropped the rest. Evaluated [claude-hud](https://github.com/jarrodwatts/claude-hud) (MIT) as a reference and adopted only what needs no new data source — the transcript-parsing features stay claude-hud's, cited rather than rebuilt. Field presence was **verified against a real captured payload** (CC 2.1.214), not assumed from docs. **`dist` rebuilt.**
 

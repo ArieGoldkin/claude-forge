@@ -134,6 +134,11 @@ function extractPr(data) {
   const state = pr["review_state"];
   return { number: num, reviewState: typeof state === "string" && state ? state : null };
 }
+function extractSessionId(data) {
+  const id = data["session_id"];
+  if (typeof id === "string" && id.length > 0) return id;
+  return process.env["CLAUDE_SESSION_ID"] || "default";
+}
 function extractModelName(data) {
   const model = data["model"];
   if (!model) return "?";
@@ -351,7 +356,7 @@ function main() {
     tokens: extractTokenUsage(data),
     compact: process.env["CONTINUITY_STATUSLINE_COMPACT"] === "1"
   };
-  const sessionId = process.env["CLAUDE_SESSION_ID"] || "default";
+  const sessionId = extractSessionId(data);
   const tmpDir = tmpdir();
   const targetFile = join(tmpDir, `${TEMP_PREFIX}${sessionId}.txt`);
   const tmpFile = `${targetFile}.tmp`;
@@ -369,6 +374,6 @@ if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(proce
   main();
 }
 
-export { ANSI, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch };
+export { ANSI, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractSessionId, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch };
 //# sourceMappingURL=context-percentage.js.map
 //# sourceMappingURL=context-percentage.js.map

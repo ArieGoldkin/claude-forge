@@ -280,6 +280,27 @@ export function extractPr(data: Record<string, unknown>): {
 }
 
 /**
+ * Resolve the session id used to key the context-percentage file.
+ *
+ * MUST mirror `getSessionId()` in the context-monitor hook exactly: payload
+ * session id first, then `CLAUDE_SESSION_ID`, then 'default'. The two are a
+ * writer/reader pair on the same filename, so any divergence in precedence
+ * silently breaks the context warnings.
+ *
+ * This previously read the env var only. Claude Code does not export
+ * `CLAUDE_SESSION_ID` into the statusline child process, so the writer keyed
+ * every file as 'default' while the hook — which receives `session_id` in its
+ * input — looked for the real UUID and never found it. The warnings could not
+ * fire for anyone; the failure was invisible because a missing file is a
+ * legitimate "not configured" state that silent-succeeds at debug log level.
+ */
+export function extractSessionId(data: Record<string, unknown>): string {
+  const id = data['session_id'];
+  if (typeof id === 'string' && id.length > 0) return id;
+  return process.env['CLAUDE_SESSION_ID'] || 'default';
+}
+
+/**
  * Extract model display name from StatusLine stdin data.
  * Tries model.display_name, then model.id, then falls back to "?".
  */
@@ -669,8 +690,8 @@ function main(): void {
     compact: process.env['CONTINUITY_STATUSLINE_COMPACT'] === '1',
   };
 
-  // Get session ID for temp file naming
-  const sessionId = process.env['CLAUDE_SESSION_ID'] || 'default';
+  // Get session ID for temp file naming — payload first; see extractSessionId.
+  const sessionId = extractSessionId(data);
 
   // Atomic write: write to .tmp then rename
   const tmpDir = tmpdir();
