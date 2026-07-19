@@ -102,6 +102,9 @@ describe('teammate-idle-saver', () => {
       expect(content.last_agent_idle.teammate_name).toBe('release-reviewer');
       expect(content.last_agent_idle.team_name).toBe('session-xyz789');
       expect(content.last_agent_idle.timestamp).toBeDefined();
+      // Guard against reverting to the fields CC never sends for this event.
+      expect(content.last_agent_idle).not.toHaveProperty('agent_id');
+      expect(content.last_agent_idle).not.toHaveProperty('agent_type');
     });
 
     it('should preserve other context fields', async () => {

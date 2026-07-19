@@ -39,8 +39,6 @@ export async function taskCreatedLogger(input: HookInput): Promise<HookResult> {
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
   const sessionId = input.session_id || process.env['CLAUDE_SESSION_ID'] || 'unknown';
   const taskId = input.task_id || 'unknown';
-  const teammateName = input.teammate_name || undefined;
-
   logDebug(HOOK_NAME, `Task created: task_id=${taskId}, session_id=${sessionId}`);
 
   const metricsDir = path.join(projectDir, METRICS_DIR);
@@ -58,7 +56,7 @@ export async function taskCreatedLogger(input: HookInput): Promise<HookResult> {
       session_id: sessionId,
       ...(input.task_subject && { task_subject: input.task_subject }),
       ...(input.task_description && { task_description: input.task_description }),
-      ...(teammateName && { teammate_name: teammateName }),
+      ...(input.teammate_name && { teammate_name: input.teammate_name }),
       ...(input.team_name && { team_name: input.team_name }),
     };
 

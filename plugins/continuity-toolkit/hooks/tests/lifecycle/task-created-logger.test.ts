@@ -76,6 +76,9 @@ describe('task-created-logger', () => {
       expect(entry.teammate_name).toBe('sec-reviewer');
       expect(entry.team_name).toBe('session-fc573d34');
       expect(entry.timestamp).toBeDefined();
+      // Guard against reverting to the fields CC never sends for this event.
+      expect(entry).not.toHaveProperty('agent_id');
+      expect(entry).not.toHaveProperty('tool_use_id');
     });
 
     it('should append multiple entries', async () => {
@@ -90,12 +93,21 @@ describe('task-created-logger', () => {
       expect(JSON.parse(lines[1]).task_id).toBe('task-2');
     });
 
-    it('should omit optional teammate fields when not present', async () => {
-      await taskCreatedLogger(createMockInput({ teammate_name: undefined, team_name: undefined }));
+    it('should omit optional task and teammate fields when not present', async () => {
+      await taskCreatedLogger(
+        createMockInput({
+          task_subject: undefined,
+          task_description: undefined,
+          teammate_name: undefined,
+          team_name: undefined,
+        })
+      );
 
       const metricsFile = path.join(tempDir, '.claude/continuity/metrics/tasks.jsonl');
       const entry = JSON.parse(fs.readFileSync(metricsFile, 'utf8').trim());
 
+      expect(entry).not.toHaveProperty('task_subject');
+      expect(entry).not.toHaveProperty('task_description');
       expect(entry).not.toHaveProperty('teammate_name');
       expect(entry).not.toHaveProperty('team_name');
     });

@@ -4977,7 +4977,6 @@ async function taskCompletedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
-  const teammateName = input.teammate_name || void 0;
   logDebug(HOOK_NAME26, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR);
   const metricsFile = path2.join(metricsDir, METRICS_FILE);
@@ -4992,7 +4991,7 @@ async function taskCompletedLogger(input) {
       session_id: sessionId,
       ...input.task_subject && { task_subject: input.task_subject },
       ...input.task_description && { task_description: input.task_description },
-      ...teammateName && { teammate_name: teammateName },
+      ...input.teammate_name && { teammate_name: input.teammate_name },
       ...input.team_name && { team_name: input.team_name }
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
@@ -5010,7 +5009,6 @@ async function taskCreatedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
-  const teammateName = input.teammate_name || void 0;
   logDebug(HOOK_NAME27, `Task created: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR2);
   const metricsFile = path2.join(metricsDir, METRICS_FILE2);
@@ -5025,7 +5023,7 @@ async function taskCreatedLogger(input) {
       session_id: sessionId,
       ...input.task_subject && { task_subject: input.task_subject },
       ...input.task_description && { task_description: input.task_description },
-      ...teammateName && { teammate_name: teammateName },
+      ...input.teammate_name && { teammate_name: input.teammate_name },
       ...input.team_name && { team_name: input.team_name }
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
