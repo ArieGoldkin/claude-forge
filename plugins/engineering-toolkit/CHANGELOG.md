@@ -2,6 +2,22 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.15.1] - 2026-07-19 — L3 promotion freeze, because a promotion gate that reads "correct on review" is unfalsifiable when reviews go missing
+
+Docs only — one reference file. No skill, agent, command or hook behaviour changed.
+
+### Added
+
+**An active freeze on L2 → L3 promotions**, recorded in `auto-research/references/autonomy-ladder.md` beside the promotion gates it modifies, rather than left as a verbal agreement.
+
+The trigger is measured, not precautionary. Dispatched reviewers reach `stop_reason: end_turn` carrying a complete report and that report **does not reach the caller** — observed at **1 of 4** in a single session and root-caused to a teammate delivery-path defect (naming an agent spawns `taskKind: in_process_teammate`, whose completion signal is *idle*, not a return value). A second and unrelated defect kills forked skills outright: a PreToolUse deny is terminal for a fork, so `/review-mr` can return empty having written nothing.
+
+Why this blocks promotion specifically: the **L2 → L3** gate reads *"the proposals have been correct on review."* A silent reviewer makes that gate **unfalsifiable** — it looks passed and was never run. An L1 dispatch intended to buy independence degrades to L0 while still reporting success, which is the worst failure mode a trust boundary can have.
+
+Scope is deliberately narrow. **L1 and L2 keep running**; L2 propose-don't-apply becomes the ceiling, and since a human reads every diff there, the broken reviewer costs coverage rather than safety. **Existing L3 routes are unaffected** — they were promoted on evidence predating the defect and are gated by non-agent checkers. That is also the standing exemption: *a gate enforced by something that cannot go silent* (tests, exit codes) is not affected by this freeze.
+
+The lift condition is written down with the freeze: dispatched reports demonstrably reaching the caller, either by fixing the delivery defect or by adding a detector that makes non-delivery **loud instead of invisible**. Until then the operating rule is that a missing review is a *failed* gate, not a clean one.
+
 ## [2.15.0] - 2026-07-18 — dispatch ladder: per-route agent-dispatch policy + adversarial-verifier agent
 
 The router (auto-research) knew *which skill* handles a goal, but each skill improvised *how many agents* to throw at it — only `review-mr` and `brainstorming --deep` had written dispatch rules, `develop --parallel` spawned "fresh subagents" with no specialist selection, and the adversarial refute-prompt that caught real defects in 4 consecutive PRs was re-typed by hand each time. Design vetted via a strategy-brief playground; decisions: phased A→D, read-only verifier agent, policy lives in agent-loops.

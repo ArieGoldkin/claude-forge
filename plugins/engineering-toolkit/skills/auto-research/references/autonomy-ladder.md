@@ -55,6 +55,32 @@ A loop that can't describe its stop-condition or its escalation path does not ge
 [failure-mode checklist](../../agent-loops/references/loop-failure-modes.md) for the per-rung
 pre-flight.
 
+### ⚠ ACTIVE FREEZE — no new L2 → L3 promotions (in force 2026-07-19)
+
+**Both gates above depend on a review you actually received. One of them currently cannot be trusted
+to deliver.** Dispatched reviewers reach `stop_reason: end_turn` with a complete report and the report
+does not reach the caller — measured at **1 of 4** in a single session, diagnosed as a teammate
+delivery-path defect, **unfixed**. A second, unrelated defect kills forked skills outright: a
+PreToolUse deny is terminal for a fork, so `/review-mr` can return empty having written nothing.
+
+Why that blocks promotion specifically: the **L2 → L3** gate reads *"proposals have been correct on
+review."* A silent reviewer makes that gate **unfalsifiable** — it looks passed and was never run.
+An L1 dispatch intended to buy independence silently degrades to L0 while still reporting success,
+which is the worst failure mode a trust boundary can have.
+
+- **Frozen:** any promotion to **L3 confirmed write-loop**.
+- **Not frozen:** L1 and L2 continue normally. L2 propose-don't-apply is the ceiling; a human still
+  reads every diff, so the broken reviewer costs coverage, not safety.
+- **Existing L3 routes** (`coverage-90`, `perf-p95-200ms`, `flake-hunt`) are unaffected — they were
+  promoted on evidence gathered before the defect and carry non-agent checkers (tests, exit codes).
+  A **non-agent checker is the exemption**: if the gate is enforced by something that cannot go
+  silent, the freeze does not apply.
+
+**Lift when** dispatched reports are demonstrably reaching the caller — the delivery defect fixed, or
+a detector in place that makes a non-delivery *loud* rather than invisible. Until then, treat a
+missing review as a **failed gate, not a clean one**: a review you did not receive is not a review
+you passed.
+
 ## Worked example — `pr-review-watch`
 
 1. **L1.** `/auto-research --unattended --recipe pr-review-watch` — each wake runs a fresh
