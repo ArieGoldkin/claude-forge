@@ -748,21 +748,19 @@ describe('extractPr / formatPrSegment (documented, unobserved live)', () => {
 describe('formatStatusLine with extras', () => {
   const now = 1_784_400_000_000;
 
-  it('should stay byte-identical to the classic output when no extras are passed', () => {
-    const classic = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51);
-    const withEmptyExtras = formatStatusLine(
-      22,
-      'Opus',
-      'proj',
-      'main',
-      1.5,
-      60_000,
-      '',
-      11,
-      51,
-      {}
-    );
-    expect(withEmptyExtras).toBe(classic);
+  it('should stay byte-identical to the 2.7.4 output when no extras are passed', () => {
+    // Pinned against bytes captured from the PREVIOUS release's built script
+    // (git show main:.../dist/.../context-percentage.js) for the equivalent
+    // payload. Comparing the new function against itself with `{}` would be
+    // circular — `{}` is the parameter's own default, so such a test passes
+    // regardless of whether the output drifted.
+    const expected = [
+      '\x1b[36m[Opus]\x1b[0m 📁 proj | 🌿 main',
+      '\x1b[32m██░░░░░░░░\x1b[0m 22% ✨ | \x1b[33m$1.50\x1b[0m | ⏱️ 1m',
+      'session: \x1b[32m█░░░░░░░░░\x1b[0m 11% · weekly: \x1b[32m█████░░░░░\x1b[0m 51%',
+    ].join('\n');
+
+    expect(formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51)).toBe(expected);
   });
 
   it('should render four lines with all extras present', () => {
