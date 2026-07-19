@@ -181,7 +181,11 @@ export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
   /\/etc\/(?:kubernetes|docker)\//,
   /\/var\/run\/secrets\//,
   /\/run\/secrets\//,
-  /\.(?:key|keytab|p12|pfx|jks)\b/,
+  // Require a NAME before the extension and reject a property-access or
+  // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
+  // `schema.key.ts` — a fresh instance of the very over-blocking this release
+  // exists to fix, and a deny inside a fork is terminal.
+  /[\w-]+\.(?:key|keytab|p12|pfx|jks)\b(?![\w(.])/,
   /\bkubeconfig\b/,
   // Credential-bearing files under /etc. The directory as a whole is only
   // mutation-gated (reading /etc/hosts is routine), but these specific entries
@@ -223,44 +227,24 @@ export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
 ] as const;
 
 /**
- * Commands that only ever READ their operands.
+ * System directories. Blocked on ANY reference, as before this release.
  *
- * The gate is deliberately an allowlist of safe readers rather than a blocklist
- * of mutations. An adversarial review of the blocklist shape found it trivially
- * escapable — `python3 -c "open('/etc/hosts','w')"`, `sed -i`, `find -delete`,
- * `tar -C`, `touch`, `mkdir` and every other writer outside the verb list wrote
- * freely — because deciding "is this path a write target?" requires a shell
- * parse, and no regex over unparsed text can answer it. The set of safe readers
- * is small and enumerable; the set of possible writers is not.
+ * Two attempts were made to allow read-only access here, and adversarial review
+ * demolished both. A blocklist of mutating verbs let every writer outside the
+ * list through (interpreter one-liners, `sed -i`, `find -delete`, `tar -C`).
+ * An allowlist of safe readers then leaked via a pipe-then-absolute-path
+ * segment split (`ls | /usr/bin/tee <syspath>`) and via command substitution
+ * (`cat "$(touch <syspath>)"`), because a position-0 regex was certifying a
+ * segment that can hold more than one command.
  *
- * `find` is accepted here but disqualified below when it carries an action flag.
- * `sed` is deliberately absent: `sed -i` writes in place.
+ * Both failures share a root cause: deciding "is this path the target of a
+ * write?" requires a shell parse, and no regex over unparsed text can answer
+ * it. The payoff was convenience; the failure mode was arbitrary writes to
+ * `/usr/local/bin` and `/etc/cron.d` — a PATH hijack needing no sudo. That
+ * trade is not worth taking, so system directories stay deny-by-default and
+ * this release keeps only the narrowly-safe fixes: the env-file idiom
+ * exemption, procfs, credential paths, and the absolute-path dump fix.
  */
-const SAFE_READ_COMMAND =
-  /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|cut|nl|column|jq|find)\b/;
-
-/**
- * Flags that turn a listed reader into a writer. `find` has explicit actions,
- * and `sort -o FILE` writes its output to a path — both would otherwise ride
- * in on the allowlist. `uniq` is deliberately absent from the allowlist for the
- * same reason: its optional SECOND OPERAND is an output file, which is a write
- * with no flag to key on at all.
- */
-const FIND_MUTATING_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/;
-const READER_WRITE_FLAG = /\s(?:-o|--output(?:=|\s)|--output-file)/;
-
-/** A `--version` / `--help` probe is read-only whatever the binary is. */
-const VERSION_PROBE = /^\s*(?:sudo\s+)?\S+\s+--(?:version|help)\s*$/;
-
-/**
- * Write redirects, including the forms a naive `>` match misses: fd-numbered
- * (`1>`, `2>>`), `&>`, and the noclobber override `>|`. Captures the target
- * token so it can be checked against the protected patterns.
- */
-const WRITE_REDIRECT_TARGET = /(?:&|\d+)?>{1,2}\|?\s*("[^"]*"|'[^']*'|[^\s;&|<>]+)/g;
-
-/** Segment separators. `>|` is NOT one — it is a redirect operator. */
-const SEGMENT_SPLIT = /(?<!>)\|{1,2}(?!\s*\/)|[;&]{1,2}|\n/;
 
 /**
  * Legacy union kept for callers that only need "does this touch anything
@@ -284,42 +268,10 @@ export function matchesSystemDirMutation(command: string): {
   matched: boolean;
   pattern?: string;
 } {
-  const referencesSystemDir = (text: string): string | null => {
-    for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
-      if (pattern.test(text)) return pattern.source;
+  for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
+    if (pattern.test(command)) {
+      return { matched: true, pattern: pattern.source };
     }
-    return null;
-  };
-
-  for (const segment of command.split(SEGMENT_SPLIT)) {
-    // A write redirect whose TARGET is protected is always a mutation, even
-    // from an otherwise read-only command (`cat /etc/hosts > /etc/crontab`).
-    // Scanning every redirect, not just the first, is required: the source path
-    // appears earlier and would otherwise satisfy an index comparison.
-    WRITE_REDIRECT_TARGET.lastIndex = 0;
-    let redirect = WRITE_REDIRECT_TARGET.exec(segment);
-    while (redirect !== null) {
-      const target = redirect[1]?.replace(/^['"]|['"]$/g, '') ?? '';
-      const hit = referencesSystemDir(target);
-      if (hit) return { matched: true, pattern: hit };
-      redirect = WRITE_REDIRECT_TARGET.exec(segment);
-    }
-
-    const hit = referencesSystemDir(segment);
-    if (!hit) continue;
-
-    // The segment touches a system directory: allow it only if the whole
-    // segment is a recognised read. Anything else — an unknown binary, an
-    // interpreter, a bare `cd`, a variable assignment — is treated as a
-    // potential write, because text alone cannot prove otherwise.
-    const isFind = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?find\b/.test(segment);
-    const safeRead =
-      (SAFE_READ_COMMAND.test(segment) &&
-        !(isFind && FIND_MUTATING_ACTION.test(segment)) &&
-        !READER_WRITE_FLAG.test(segment)) ||
-      VERSION_PROBE.test(segment);
-
-    if (!safeRead) return { matched: true, pattern: hit };
   }
   return { matched: false };
 }

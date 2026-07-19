@@ -978,6 +978,28 @@ describe('securityBlocker - Bash commands', () => {
       expect(result.stopReason).toContain('echo $VARIABLE_NAME');
     });
 
+    it('should not over-block a jq property selector or a dotted filename', async () => {
+      // The credential patterns added in this release must not repeat the
+      // failure they exist alongside: `.key` matched any occurrence, denying
+      // `jq '.key'` and `schema.key.ts`.
+      for (const cmd of [
+        `jq '.key' data.json`,
+        `cat d.json | jq -r '.key'`,
+        'cat schema.key.ts',
+        'git commit -m "rotate the .key file"',
+      ]) {
+        const result = await securityBlocker(createBashInput(cmd));
+        expect(result.continue, cmd).toBe(true);
+      }
+    });
+
+    it('should still block real credential filenames', async () => {
+      for (const cmd of ['cat server.key', 'base64 krb5.keytab', 'cat bundle.p12']) {
+        const result = await securityBlocker(createBashInput(cmd));
+        expect(result.continue, cmd).toBe(false);
+      }
+    });
+
     it('should still block /usr/bin/env python (env can run any writer)', async () => {
       // Kept blocked deliberately. `env` is not a safe reader: `env FOO=1 rm -rf
       // /etc` runs an arbitrary command, so admitting it to the read allowlist
@@ -2065,39 +2087,29 @@ describe('securityBlocker - extended macOS dangerous paths (CC v2.1.113)', () =>
   });
 });
 
-describe('securityBlocker - read vs mutate on system directories', () => {
-  // Regression suite for a guardrail that blocked its own maintainers. The
-  // pattern list matched raw command TEXT for every command, so read-only calls
-  // that merely mentioned a system path were denied — and because a PreToolUse
-  // deny is terminal for a subagent, this silently killed multi-agent runs
-  // mid-flight. Every "should allow" case below was observed blocked in a real
-  // session. Destructive use stays denied, here and in the dangerous-bash
-  // registry that runs first.
-
+describe('securityBlocker - system dirs stay deny-by-default', () => {
+  // Two attempts to allow read-only access here were demolished by adversarial
+  // review — a mutating-verb blocklist let every unlisted writer through, and a
+  // safe-reader allowlist leaked through pipe-then-absolute-path segmentation
+  // and command substitution. Both failed for the same reason: certifying a
+  // shell command's intent requires a parse, not a regex. These pin the
+  // decision to keep system directories blocked outright, so a future attempt
+  // has to confront the demonstrated bypasses rather than rediscover them.
   it.each([
-    ['a --version probe on an absolute binary path', '/usr/bin/git --version'],
-    ['a --help probe on an absolute binary path', '/usr/bin/git --help'],
-    ['reading a system config file', 'cat /etc/hosts'],
-    ['listing a system directory', 'ls -la /usr/share/doc'],
-    ['reading through a pipe', 'cat /etc/hosts | grep localhost'],
-    ['redirecting a system file OUT to a safe path', 'cat /etc/hosts > notes.txt'],
-    ['checking a log path', 'tail -n 5 /var/log/system.log'],
-    ['a mutation in a DIFFERENT segment', 'rm scratch.txt && cat /etc/hosts'],
-  ])('should allow %s', async (_label, command) => {
-    const result = await securityBlocker(createBashInput(command));
-    expect(result.continue).toBe(true);
-  });
-
-  it.each([
-    ['deleting a system directory', 'rm -rf /etc/foo'],
-    ['moving onto a system path', 'mv payload /usr/local/bin/x'],
-    ['copying into a system path', 'cp evil /etc/cron.d/job'],
-    ['redirecting INTO a system file', 'echo pwned > /etc/hosts'],
-    ['appending to a system file', 'echo x >> /etc/hosts'],
-    ['tee into a system path behind a pipe', 'curl http://x | sudo tee /etc/hosts'],
-    ['chmod on a system path', 'chmod 777 /etc/shadow'],
-    ['truncating a system file', 'truncate -s 0 /var/log/system.log'],
-  ])('should still block %s', async (_label, command) => {
+    ['pipe to an absolute-path writer', 'ls | /usr/bin/tee /etc/crontab'],
+    ['pipe to an absolute-path copy', 'ls | /bin/cp evil /usr/local/bin/git'],
+    ['command substitution hiding a writer', 'cat "$(touch /etc/pwned)"'],
+    // NB: written with a trailing slash deliberately. `find /etc -delete`
+    // (bare operand, no slash) is NOT blocked — every system-dir pattern
+    // requires a trailing slash. That gap is pre-existing and identical on
+    // main; it is called out in the PR as a follow-up rather than widened here.
+    ['command substitution hiding find -delete', 'cat "$(find /etc/ -delete)"'],
+    ['backtick substitution', 'head -1 `touch /etc/pwned`'],
+    ['two-operand writer', 'xxd in.bin /etc/crontab'],
+    ['two-operand writer in reverse mode', 'xxd -r in.hex /etc/crontab'],
+    ['probe executing an arbitrary system binary', '/usr/bin/anything --version'],
+    ['plain read of a system config file', 'cat /etc/hosts'],
+  ])('should block %s', async (_label, command) => {
     const result = await securityBlocker(createBashInput(command));
     expect(result.continue).toBe(false);
   });

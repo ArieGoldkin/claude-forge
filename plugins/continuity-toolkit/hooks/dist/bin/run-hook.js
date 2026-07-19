@@ -2356,7 +2356,11 @@ var BASH_SECRET_PATTERNS = [
   /\/etc\/(?:kubernetes|docker)\//,
   /\/var\/run\/secrets\//,
   /\/run\/secrets\//,
-  /\.(?:key|keytab|p12|pfx|jks)\b/,
+  // Require a NAME before the extension and reject a property-access or
+  // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
+  // `schema.key.ts` — a fresh instance of the very over-blocking this release
+  // exists to fix, and a deny inside a fork is terminal.
+  /[\w-]+\.(?:key|keytab|p12|pfx|jks)\b(?![\w(.])/,
   /\bkubeconfig\b/,
   // Credential-bearing files under /etc. The directory as a whole is only
   // mutation-gated (reading /etc/hosts is routine), but these specific entries
@@ -2383,37 +2387,15 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   /\/proc\//,
   /\/boot\//
 ];
-var SAFE_READ_COMMAND = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?(?:cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|stat|file|wc|ls|readlink|realpath|dirname|basename|diff|cmp|shasum|sha256sum|md5sum|od|xxd|strings|sort|cut|nl|column|jq|find)\b/;
-var FIND_MUTATING_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/;
-var READER_WRITE_FLAG = /\s(?:-o|--output(?:=|\s)|--output-file)/;
-var VERSION_PROBE = /^\s*(?:sudo\s+)?\S+\s+--(?:version|help)\s*$/;
-var WRITE_REDIRECT_TARGET = /(?:&|\d+)?>{1,2}\|?\s*("[^"]*"|'[^']*'|[^\s;&|<>]+)/g;
-var SEGMENT_SPLIT = /(?<!>)\|{1,2}(?!\s*\/)|[;&]{1,2}|\n/;
 [
   ...BASH_SECRET_PATTERNS,
   ...BASH_SYSTEM_DIR_PATTERNS
 ];
 function matchesSystemDirMutation(command) {
-  const referencesSystemDir = (text) => {
-    for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
-      if (pattern.test(text)) return pattern.source;
+  for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
+    if (pattern.test(command)) {
+      return { matched: true, pattern: pattern.source };
     }
-    return null;
-  };
-  for (const segment of command.split(SEGMENT_SPLIT)) {
-    WRITE_REDIRECT_TARGET.lastIndex = 0;
-    let redirect = WRITE_REDIRECT_TARGET.exec(segment);
-    while (redirect !== null) {
-      const target = redirect[1]?.replace(/^['"]|['"]$/g, "") ?? "";
-      const hit2 = referencesSystemDir(target);
-      if (hit2) return { matched: true, pattern: hit2 };
-      redirect = WRITE_REDIRECT_TARGET.exec(segment);
-    }
-    const hit = referencesSystemDir(segment);
-    if (!hit) continue;
-    const isFind = /^\s*(?:sudo\s+)?(?:\/(?:[\w.-]+\/)*)?find\b/.test(segment);
-    const safeRead = SAFE_READ_COMMAND.test(segment) && !(isFind && FIND_MUTATING_ACTION.test(segment)) && !READER_WRITE_FLAG.test(segment) || VERSION_PROBE.test(segment);
-    if (!safeRead) return { matched: true, pattern: hit };
   }
   return { matched: false };
 }

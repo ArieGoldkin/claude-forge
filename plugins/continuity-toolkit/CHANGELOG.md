@@ -2,32 +2,29 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
-## [2.8.1] - 2026-07-19 — security-blocker denied ordinary reads; fixed without widening writes
+## [2.8.1] - 2026-07-19 — narrow security-blocker fixes; the read carve-out was attempted twice and withdrawn
 
-`BASH_SENSITIVE_PATTERNS` matched the **raw text of a command** against a path list, for every command, regardless of what the command did. Mentioning a path was enough. A `--version` probe on an absolute binary path, `cat /etc/hosts`, listing a system directory, and any script or commit message containing `process.env` were all denied — and because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight. Four agents died this way while reviewing ctk 2.8.0, two of them mid-review, which is how it surfaced.
+`BASH_SENSITIVE_PATTERNS` matches the **raw text** of a command against a path list, for every command, regardless of what the command does. Mentioning a path is enough — so a `--version` probe on an absolute binary path, `cat /etc/hosts`, and any script or commit message containing `process.env` were all denied. Because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight; four agents died this way while reviewing ctk 2.8.0.
 
-### The shape of the fix matters more than the patterns
+**This release fixes only the part that can be fixed safely.** Two attempts to allow read-only access to system directories were built and both were demolished by adversarial review before merge:
 
-The first attempt gated system directories on a **blocklist of mutating verbs** — block when a path follows `rm`/`mv`/`cp`/`tee`/… in the same segment. Adversarial review demolished it, empirically, against the built hook: `python3 -c "open('/etc/hosts','w')"`, `sed -i`, `find -delete`, `tar -C`, `touch`, `mkdir`, `git checkout --`, `patch -d` all wrote freely; `echo pwned 1>/etc/hosts` slipped past a redirect regex that rejected the fd digit; `cat /etc/hosts > /etc/crontab` passed because only the *first* path occurrence was compared to the redirect position; and `cd /etc/ && rm -rf .`, `T=/etc/hosts; rm -rf "$T"`, `echo /etc/hosts | xargs rm -f` laundered the target into a different segment. Reading `/proc/self/environ` — the file-based equivalent of the `env` dump this hook already blocks — became readable with **no prompt at all**.
+1. A **blocklist of mutating verbs** let every writer outside the list through — `python3 -c "open(…,'w')"`, `sed -i`, `find -delete`, `tar -C`, `touch`, `mkdir`, `git checkout --`. It also missed fd-numbered redirects (`1>`), compared only the *first* path occurrence against the redirect position (so `cat <sysfile> > <sysfile>` passed), and let `cd <sysdir> && rm -rf .` launder the target into another segment.
+2. An **allowlist of safe readers** leaked through a pipe-then-absolute-path segment split (`ls | /usr/bin/tee <syspath>`), through command substitution (`cat "$(touch <syspath>)"`, which also readmitted `sed -i` and `find -delete`), and through two-operand writers that ride in on the allowlist — `sort -o`, `uniq IN OUT`, `xxd IN OUT`.
 
-The root cause was structural: it asked *"is this path the target of a write?"*, which requires a shell parse, and answered it with metachar splitting plus a verb allowlist. Individually patchable, endlessly leaky.
+Both share one root cause: deciding *"is this path the target of a write?"* requires a shell parse, and a position-0 regex over unparsed text was certifying a segment that can hold more than one command. The payoff was convenience; the demonstrated failure mode was arbitrary writes to `/usr/local/bin` and `/etc/cron.d` — a PATH hijack needing no sudo on a default Homebrew Mac. **System directories therefore stay deny-by-default.** The nine demonstrated bypasses ship as regression tests so a future attempt has to confront them rather than rediscover them.
 
-**The gate is now inverted.** System directories stay deny-by-default; a small, enumerable allowlist of read-only invocations (`cat`, `head`, `tail`, `grep`, `ls`, `stat`, `wc`, `diff`, `find` without an action flag, … plus `--version`/`--help` probes) is carved out. The set of safe readers is bounded; the set of possible writers is not. Redirect **targets** are scanned in full — every redirect form including `1>`, `2>>`, `&>`, `>|` — and a protected target is blocked regardless of how benign the reading command looks.
+### Fixed — the narrowly-safe half
 
-### Corrected claim
+- **The `process.env` / `import.meta.env` idioms no longer read as file access.** The exemption is anchored to the **exact token**, not to preceding bytes: a byte test (`(?<!process)`) would also suppress real filenames like `build-process.env` and could be laundered by creating one. This was the most frequent false positive by far — it blocked commits whose *message* described an environment variable.
+- **`/proc/<pid>/environ` is now always blocked.** `ENV_DUMP_PATTERNS` exists to stop env-var leakage via `env`/`printenv`; reading it out of procfs walked straight around that control.
+- **A bare `env`/`printenv` invoked by absolute path is now caught on its own merits.** It was previously blocked only as a side effect of the blanket system-binaries rule — as the old test's own comment admitted — so any relaxation of that rule would have opened a real dump bypass.
+- **Credential material under otherwise-readable trees** — private TLS keys, kube and docker config, mounted secrets, keytabs, `p12`/`pfx`/`jks`, kubeconfig. The filename pattern requires a **name before the extension** and rejects property access, after a first draft denied `jq '.key'`, `m.key(1)` and `schema.key.ts` — a fresh instance of the very over-blocking this release exists to fix.
 
-An earlier draft of this entry asserted that no destructive protection was removed because the dangerous-bash registry covers it. **That was false**, and the review proved it: `lib/dangerous-bash/filesystem.ts` covers whole-root/home `rm -rf`, `rmdir` on critical paths, `dd of=/dev/`, `mkfs`, fork bombs and device writes — it has **no concept of targeted system-path mutation**, which is precisely the surface the first attempt relaxed. The two layers did not overlap where the code comment claimed they did.
+### Known gaps, deliberately not addressed here
 
-### Also closed
-
-- **`/proc/<pid>/environ`** is now always blocked. `ENV_DUMP_PATTERNS` exists to stop env-var leakage via `env`/`printenv`; reading procfs walked straight around it.
-- **Credential material under otherwise-readable system trees** — `/etc/ssl/private/`, `/etc/kubernetes/`, `/etc/docker/`, `/var/run/secrets/`, `*.key`, `*.keytab`, `*.p12`, kubeconfig.
-- **A bare `env`/`printenv` invoked by absolute path** was never matched by the dump patterns — it was blocked only as a side effect of the blanket `/usr/` rule, as the old test's own comment admitted. Both dump patterns now accept an absolute-path prefix, so the dump is caught on its own merits.
-- **The env-file exemption is anchored to the exact token** (`process.env`, `import.meta.env`) rather than to preceding bytes. A byte test also suppressed real filenames like `build-process.env` and could be laundered by creating one.
-
-### Deliberately still blocked
-
-`env python`, `sudo env VAR=val cmd`, and compound loops that interpolate system paths remain denied — `env` runs arbitrary commands, so admitting it to the read allowlist would reopen the surface. These match the pre-change behaviour, so they are preserved restrictions, not new ones. 32 of the reviewer's exact bypass commands ship as regression tests.
+- System-directory patterns require a **trailing slash**, so a bare operand (`rm -r /etc`) misses. Pre-existing and identical on 2.8.0; tightening it would add blocks, which is the opposite of this release's purpose, so it is left for its own change.
+- Patterns are **case-sensitive**, so `/ETC/passwd` misses on a case-insensitive filesystem. Pre-existing, same on 2.8.0.
+- `globalThis.process.env` and `window.process.env` remain denied — the exemption is exact-token by design.
 
 ## [2.8.0] - 2026-07-19 — context warnings never fired; statusline surfaces discarded payload fields
 
