@@ -69,16 +69,24 @@ the context-percentage file that the `context-monitor` hook reads, so:
 > a custom script, another plugin — silently disables ctk's 70/80/90% context warnings. The launcher
 > file stays on disk and nothing errors; the warnings just stop.
 
-This is a genuine either/or, not a bug to route around. Choose deliberately:
+The display is exclusive; the side effect does not have to be. Three options:
 
 | You want | Configure | Trade-off |
 |---|---|---|
-| Context warnings + the fields above | ctk (this skill) | No live tool/agent/todo counts |
-| Live tool counts, subagent tracking, todo progress | claude-hud | ctk's context warnings stop firing |
+| Context warnings + the fields above | ctk alone (this skill) | No live tool/agent/todo counts |
+| Live tool counts, subagent tracking, todo progress | The other statusline alone | ctk's context warnings stop firing |
+| **Both** | Composed launcher — ctk silent + the other program (Step 1a) | Two processes per refresh instead of one |
+
+**Composition is usually the right answer.** `CONTINUITY_STATUSLINE_SILENT=1` makes ctk write the
+percentage file and print nothing, so another program can own every pixel while the context
+warnings keep firing. It also avoids the duplication a naive stack produces — model, context bar,
+cost, rate limits, and tokens are rendered by both ctk and claude-hud, so concatenating raw output
+repeats about half the fields.
 
 claude-hud (MIT) parses the session transcript to render per-tool call counts, running subagents,
-and todo progress — capability ctk deliberately does not duplicate. If you prefer it, install it and
-accept the trade-off knowingly; `/ctk:doctor` will report the conflict rather than a false healthy.
+and todo progress — capability ctk deliberately does not duplicate. Install it, then compose via
+Step 1a. `/ctk:doctor` reports a conflict only when the pipeline is genuinely broken, not merely
+because a second statusline is present.
 
 ## Related
 - `/ctk:doctor` — reports whether the context-warning pipeline is actually wired (Step 4a)

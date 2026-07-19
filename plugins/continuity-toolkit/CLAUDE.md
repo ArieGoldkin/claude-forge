@@ -134,6 +134,7 @@ The handoff workflow is one consumer of the monorepo's **Output Budgeting** rule
 | `CLAUDE_PLUGIN_ROOT` | - | Plugin installation path |
 | `CLAUDE_SESSION_ID` | - | Current session identifier |
 | `CLAUDE_AUTO_APPROVE_PUSH` | - | Set to `1` to bypass the approval-first gate for `git push` (security-blocker hook). Any other value keeps the gate active. Use in CI/CD jobs and automation flows where every push has been pre-authorized. |
+| `CONTINUITY_STATUSLINE_SILENT` | - | Set to `1` to write the context-percentage file but print nothing. Lets another statusline (claude-hud, a custom script) own the display while ctk's 70/80/90% context warnings keep firing — CC runs only one `statusLine`, and running ctk's script is what feeds the `context-monitor` hook. See `/ctk:setup-context-monitor` Step 1a for the composed launcher. |
 | `CONTINUITY_STATUSLINE_COMPACT` | - | Set to `1` to collapse the statusline to the classic two lines (identity + context bar), dropping the rate-limit and token-accounting lines. |
 | `CONTINUITY_TERMINAL_TITLE` | - | Set to `1` (exact match) to emit a terminal window title `<project> · <branch>` from `session-loader` via CC's `terminalSequence` field (v2.1.141+). Opt-in to avoid surprising users whose terminals are already managed. Skipped silently when CC < v2.1.141 (unknown field is ignored). |
 | `CLAUDE_CODE_NO_FLICKER` | - | Set to `1` for flicker-free alt-screen rendering (CC 2.1.88+). Superseded by `/tui fullscreen` (CC 2.1.110+). |

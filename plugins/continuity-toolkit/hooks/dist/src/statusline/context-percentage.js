@@ -314,9 +314,13 @@ function readStdinSync() {
   }
 }
 function main() {
+  const silent = process.env["CONTINUITY_STATUSLINE_SILENT"] === "1";
+  const emit = (text) => {
+    if (!silent) process.stdout.write(text);
+  };
   const raw = readStdinSync();
   if (!raw) {
-    process.stdout.write(`${FALLBACK_STATUS}
+    emit(`${FALLBACK_STATUS}
 `);
     return;
   }
@@ -324,19 +328,19 @@ function main() {
   try {
     data = JSON.parse(raw);
   } catch {
-    process.stdout.write(`${FALLBACK_STATUS}
+    emit(`${FALLBACK_STATUS}
 `);
     return;
   }
   const contextWindow = data["context_window"];
   if (!contextWindow) {
-    process.stdout.write(`${FALLBACK_STATUS}
+    emit(`${FALLBACK_STATUS}
 `);
     return;
   }
   const usedPercentage = contextWindow["used_percentage"];
   if (typeof usedPercentage !== "number" || Number.isNaN(usedPercentage)) {
-    process.stdout.write(`${FALLBACK_STATUS}
+    emit(`${FALLBACK_STATUS}
 `);
     return;
   }
@@ -365,7 +369,7 @@ function main() {
     renameSync(tmpFile, targetFile);
   } catch {
   }
-  process.stdout.write(
+  emit(
     `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct, extras)}
 `
   );

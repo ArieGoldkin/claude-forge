@@ -8,7 +8,11 @@
  * @module tests/statusline/context-percentage
  */
 
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANSI,
@@ -981,5 +985,68 @@ describe('formatResetIn implausible-value guard', () => {
 
   it('should still render a genuine seven-day window', () => {
     expect(formatResetIn(now / 1000 + 7 * 86_400 - 60, now)).toContain('resets in 6d');
+  });
+});
+
+// =============================================================================
+// Silent mode — composition with another statusline
+//
+// CC runs one statusLine program, but ctk's script is what writes the file the
+// context-monitor hook reads. Silent mode keeps the side effect while ceding
+// the display, so a user can run claude-hud (or anything else) AND keep the
+// 70/80/90% warnings. Exercised against the BUILT script, since the flag is
+// read in main(), which only runs when the file is executed directly.
+// =============================================================================
+
+describe('CONTINUITY_STATUSLINE_SILENT', () => {
+  const dist = fileURLToPath(
+    new URL('../../dist/src/statusline/context-percentage.js', import.meta.url)
+  );
+  const SILENT_FLAG = 'CONTINUITY_STATUSLINE_SILENT';
+
+  const payload = (sid: string): string =>
+    JSON.stringify({
+      session_id: sid,
+      context_window: { used_percentage: 42, total_input_tokens: 100, total_output_tokens: 10 },
+      model: { display_name: 'Opus' },
+    });
+
+  const runScript = (input: string, silent: boolean): string => {
+    const childEnv = { ...globalThis.process.env } as Record<string, string>;
+    if (silent) childEnv[SILENT_FLAG] = '1';
+    else delete childEnv[SILENT_FLAG];
+    return execFileSync('node', [dist], { input, encoding: 'utf8', env: childEnv });
+  };
+
+  const pctFile = (sid: string): string => join(tmpdir(), `claude-context-pct-${sid}.txt`);
+
+  afterEach(() => {
+    for (const sid of ['silent-probe', 'loud-probe']) {
+      try {
+        unlinkSync(pctFile(sid));
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+
+  it('should print nothing at all when silent', () => {
+    expect(runScript(payload('silent-probe'), true)).toBe('');
+  });
+
+  it('should STILL write the percentage file when silent — the whole point', () => {
+    runScript(payload('silent-probe'), true);
+    expect(readFileSync(pctFile('silent-probe'), 'utf8').trim()).toBe('42');
+  });
+
+  it('should print normally when the flag is unset', () => {
+    expect(runScript(payload('loud-probe'), false)).toContain('42%');
+  });
+
+  it('should suppress the fallback string too, so it cannot corrupt the other program', () => {
+    // Malformed input takes the FALLBACK_STATUS path; in silent mode that must
+    // print nothing, or it would inject "[?] unknown" into the other program's
+    // output. This is the leak the `emit` wrapper exists to prevent.
+    expect(runScript('{ not json', true)).toBe('');
   });
 });

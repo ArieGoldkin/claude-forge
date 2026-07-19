@@ -59,6 +59,44 @@ Make it executable:
 chmod +x ~/.config/claude/continuity-statusline.sh
 ```
 
+#### Step 1a: Composing with another statusline (claude-hud, a custom script)
+
+Only relevant when Step 0 found a **different** program already configured and the user wants to
+keep it. Claude Code runs exactly one `statusLine`, but running ctk's script is what writes the
+percentage file the `context-monitor` hook reads — so the naive fix (point `statusLine` at the
+other program) turns the 70/80/90% warnings off. Compose instead: run ctk in **silent mode** for
+the side effect, and let the other program own the display.
+
+Write this variant instead of the launcher above, substituting the user's existing command:
+
+```bash
+#!/bin/bash
+# Continuity Toolkit - composed StatusLine launcher.
+# ctk runs silently for its side effect (writing the context-percentage file
+# that keeps context warnings alive); the second program owns the display.
+script=$(find "$HOME/.claude/plugins/cache" \
+  \( -path "*/ctk/*/hooks/dist/src/statusline/context-percentage.js" \
+  -o -path "*/continuity-toolkit/*/hooks/dist/src/statusline/context-percentage.js" \) \
+  2>/dev/null | sort -V | tail -1)
+
+# stdin can only be consumed once, so capture it and feed both programs.
+payload=$(cat)
+
+[ -f "$script" ] && printf '%s' "$payload" | CONTINUITY_STATUSLINE_SILENT=1 node "$script"
+
+# <<< the user's existing statusLine command goes here, reading the same payload
+printf '%s' "$payload" | <OTHER_STATUSLINE_COMMAND>
+```
+
+Two things to get right:
+- **stdin is consumable once.** Capture it into `payload` and pipe that to each program; piping
+  the raw stdin to both leaves the second one with nothing and it renders its "unknown" fallback.
+- **Order of operations.** If the other tool has its own configurator (claude-hud ships
+  `/claude-hud:configure`), run that **first** — it claims `statusLine` — and compose afterwards,
+  or its setup will overwrite this launcher.
+
+Point `statusLine.command` at this same launcher path; Step 2 is unchanged.
+
 ### Step 2: Configure Global StatusLine Settings
 
 Read `~/.claude/settings.json` and merge the `statusLine` configuration into it. If the file doesn't exist, create it. If it already has other settings, preserve them and only add/update the `statusLine` key.

@@ -646,9 +646,20 @@ function readStdinSync(): string {
 // =============================================================================
 
 function main(): void {
+  // Silent mode: perform the side effect (write the percentage file that keeps
+  // the context warnings alive) and print nothing, so another statusline —
+  // claude-hud, a custom script — can own the display. Claude Code runs exactly
+  // one statusLine program, so without this the choice is either ctk's output
+  // or working context warnings, never both. Every write below goes through
+  // `emit` so no fallback string can leak into the other program's output.
+  const silent = process.env['CONTINUITY_STATUSLINE_SILENT'] === '1';
+  const emit = (text: string): void => {
+    if (!silent) process.stdout.write(text);
+  };
+
   const raw = readStdinSync();
   if (!raw) {
-    process.stdout.write(`${FALLBACK_STATUS}\n`);
+    emit(`${FALLBACK_STATUS}\n`);
     return;
   }
 
@@ -656,20 +667,20 @@ function main(): void {
   try {
     data = JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    process.stdout.write(`${FALLBACK_STATUS}\n`);
+    emit(`${FALLBACK_STATUS}\n`);
     return;
   }
 
   // Extract used_percentage (pre-calculated by Claude Code)
   const contextWindow = data['context_window'] as Record<string, unknown> | undefined;
   if (!contextWindow) {
-    process.stdout.write(`${FALLBACK_STATUS}\n`);
+    emit(`${FALLBACK_STATUS}\n`);
     return;
   }
 
   const usedPercentage = contextWindow['used_percentage'];
   if (typeof usedPercentage !== 'number' || Number.isNaN(usedPercentage)) {
-    process.stdout.write(`${FALLBACK_STATUS}\n`);
+    emit(`${FALLBACK_STATUS}\n`);
     return;
   }
 
@@ -707,7 +718,8 @@ function main(): void {
 
   // Output rich status string to stdout (third usage line appears only when
   // rate_limits is present in the payload — Pro/Max, post-first-response).
-  process.stdout.write(
+  // Suppressed in silent mode; the percentage file above was still written.
+  emit(
     `${formatStatusLine(pct, modelName, workspaceName, gitBranch, costUsd, durationMs, worktreePath, fiveHourPct, sevenDayPct, extras)}\n`
   );
 }
