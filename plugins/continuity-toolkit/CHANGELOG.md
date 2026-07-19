@@ -2,6 +2,30 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.1] - 2026-07-19 — narrow security-blocker fixes; the read carve-out was attempted twice and withdrawn
+
+`BASH_SENSITIVE_PATTERNS` matches the **raw text** of a command against a path list, for every command, regardless of what the command does. Mentioning a path is enough — so a `--version` probe on an absolute binary path, `cat /etc/hosts`, and any script or commit message containing `process.env` were all denied. Because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight; four agents died this way while reviewing ctk 2.8.0.
+
+**This release fixes only the part that can be fixed safely.** Two attempts to allow read-only access to system directories were built and both were demolished by adversarial review before merge:
+
+1. A **blocklist of mutating verbs** let every writer outside the list through — `python3 -c "open(…,'w')"`, `sed -i`, `find -delete`, `tar -C`, `touch`, `mkdir`, `git checkout --`. It also missed fd-numbered redirects (`1>`), compared only the *first* path occurrence against the redirect position (so `cat <sysfile> > <sysfile>` passed), and let `cd <sysdir> && rm -rf .` launder the target into another segment.
+2. An **allowlist of safe readers** leaked through a pipe-then-absolute-path segment split (`ls | /usr/bin/tee <syspath>`), through command substitution (`cat "$(touch <syspath>)"`, which also readmitted `sed -i` and `find -delete`), and through two-operand writers that ride in on the allowlist — `sort -o`, `uniq IN OUT`, `xxd IN OUT`.
+
+Both share one root cause: deciding *"is this path the target of a write?"* requires a shell parse, and a position-0 regex over unparsed text was certifying a segment that can hold more than one command. The payoff was convenience; the demonstrated failure mode was arbitrary writes to `/usr/local/bin` and `/etc/cron.d` — a PATH hijack needing no sudo on a default Homebrew Mac. **System directories therefore stay deny-by-default.** The nine demonstrated bypasses ship as regression tests so a future attempt has to confront them rather than rediscover them.
+
+### Fixed — the narrowly-safe half
+
+- **The `process.env` / `import.meta.env` idioms no longer read as file access.** The exemption is anchored to the **exact token**, not to preceding bytes: a byte test (`(?<!process)`) would also suppress real filenames like `build-process.env` and could be laundered by creating one. This was the most frequent false positive by far — it blocked commits whose *message* described an environment variable.
+- **`/proc/<pid>/environ` is now always blocked.** `ENV_DUMP_PATTERNS` exists to stop env-var leakage via `env`/`printenv`; reading it out of procfs walked straight around that control.
+- **A bare `env`/`printenv` invoked by absolute path is now caught on its own merits.** It was previously blocked only as a side effect of the blanket system-binaries rule — as the old test's own comment admitted — so any relaxation of that rule would have opened a real dump bypass.
+- **Credential material under otherwise-readable trees** — private TLS keys, kube and docker config, mounted secrets, keytabs, `p12`/`pfx`/`jks`, kubeconfig. The filename pattern requires a **name before the extension** and rejects property access, after a first draft denied `jq '.key'`, `m.key(1)` and `schema.key.ts` — a fresh instance of the very over-blocking this release exists to fix.
+
+### Known gaps, deliberately not addressed here
+
+- System-directory patterns require a **trailing slash**, so a bare operand (`rm -r /etc`) misses. Pre-existing and identical on 2.8.0; tightening it would add blocks, which is the opposite of this release's purpose, so it is left for its own change.
+- Patterns are **case-sensitive**, so `/ETC/passwd` misses on a case-insensitive filesystem. Pre-existing, same on 2.8.0.
+- `globalThis.process.env` and `window.process.env` remain denied — the exemption is exact-token by design.
+
 ## [2.8.0] - 2026-07-19 — context warnings never fired; statusline surfaces discarded payload fields
 
 ### Fixed — the context-warning pipeline was dead for every user

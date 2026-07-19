@@ -1,6 +1,6 @@
 {
   "name": "ctk",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "Session continuity and context management toolkit - 10 skills, 1 agent, 11 commands, 28 shared hooks, session persistence, delta-cache token compression, web research, and smart context monitoring",
   "author": {
     "name": "Arie Goldkin",

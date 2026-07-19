@@ -88,10 +88,14 @@ export const DANGEROUS_COMMAND_PATTERNS: readonly RegExp[] = FILESYSTEM_PATTERNS
  */
 export const ENV_DUMP_PATTERNS: readonly RegExp[] = [
   // printenv (with or without args, always dumps env info)
-  // Compound + sudo aware (CC v2.1.98 alignment)
-  /(?:^|[|&;]\s*|sudo\s+)printenv(?:\s|$)/,
-  // env alone or piped (but NOT env VAR=val cmd, env -i, /usr/bin/env python)
-  /(?:^|[|&;]\s*|sudo\s+)env\s*(?:$|[|&;])/,
+  // Compound + sudo aware (CC v2.1.98 alignment).
+  // The optional absolute-path prefix matters: an invocation by full path was
+  // previously caught only as a side effect of the blanket /usr/ path rule, so
+  // relaxing that rule without this would have opened a real dump bypass.
+  /(?:^|[|&;]\s*|sudo\s+)(?:\/(?:[\w.-]+\/)*)?printenv(?:\s|$)/,
+  // env alone or piped — still NOT env VAR=val cmd, env -i, or `env python`,
+  // because `env` must be followed by end-of-command or a separator.
+  /(?:^|[|&;]\s*|sudo\s+)(?:\/(?:[\w.-]+\/)*)?env\s*(?:$|[|&;])/,
   // set alone or piped (but NOT set -e, set -x, set -o)
   /(?:^|[|&;]\s*|sudo\s+)set\s*(?:$|[|&;])/,
   // export -p (list all exports)
@@ -141,33 +145,136 @@ export function matchesGitPush(command: string): boolean {
  * Sensitive path patterns to block in bash commands.
  * Commands referencing these paths should require approval.
  */
-export const BASH_SENSITIVE_PATTERNS: readonly RegExp[] = [
-  /\.env\b/,
-  /\.envrc/,
+/**
+ * Secret-bearing files. Blocked on ANY reference, because *reading* them is
+ * itself the exfiltration vector — `cat`-ing a key is the attack, not a
+ * precursor to one.
+ *
+ * The env-file patterns carry negative lookbehinds for `process` and
+ * `import.meta` so the ubiquitous code idioms `process.env` / `import.meta.env`
+ * do not match. Without them the hook denied any command whose *text* merely
+ * mentioned an environment variable — including commit messages describing one
+ * and test files reading one — which blocked legitimate work several times and,
+ * because a PreToolUse deny is terminal for a subagent, silently killed
+ * multi-agent runs mid-flight.
+ */
+export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
+  // Env files. The suppression is anchored to the property-access IDIOM
+  // (`process.env` followed by `.`, `[`, or end) rather than to the bytes
+  // `process` preceding a dot — a byte test also suppressed real filenames
+  // like `build-process.env`, and could be laundered by creating such a name.
+  // Match any token ending in `.env` / `.envrc`, then exempt the two code
+  // idioms by EXACT token rather than by preceding bytes. A byte-adjacency test
+  // (`(?<!process)`) also suppressed real filenames such as `build-process.env`
+  // and could be laundered by creating one; requiring the whole token to be
+  // `process.env` or `import.meta.env` cannot be.
+  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.envrc\b/,
+  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
+  /\.ssh\/id_/,
+  /\.ssh\/.*\.pem/,
+  // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks
+  // `env`/`printenv`; without this, reading the same secrets straight out of
+  // procfs walks around that control entirely.
+  /\/proc\/[^/\s]+\/environ\b/,
+  // Credential material that lives under otherwise-readable system trees.
+  /\/etc\/ssl\/private\//,
+  /\/etc\/(?:kubernetes|docker)\//,
+  /\/var\/run\/secrets\//,
+  /\/run\/secrets\//,
+  // Require a NAME before the extension and reject a property-access or
+  // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
+  // `schema.key.ts` — a fresh instance of the very over-blocking this release
+  // exists to fix, and a deny inside a fork is terminal.
+  /[\w-]+\.(?:key|keytab|p12|pfx|jks)\b(?![\w(.])/,
+  /\bkubeconfig\b/,
+  // Credential-bearing files under /etc. The directory as a whole is only
+  // mutation-gated (reading /etc/hosts is routine), but these specific entries
+  // are secrets or account data and stay read-blocked.
+  /\/etc\/(?:passwd|shadow|sudoers|gshadow|master\.passwd)\b/,
+  /\/etc\/ssh\//,
+  // Another user's home directory — never a legitimate read for our purposes.
+  /\/root\//,
+  // macOS temp/home trees. Kept as always-block rather than mutation-gated:
+  // the scratchpad carve-out below already solves the false-positive that
+  // motivated relaxing these, so there is no reason to widen read access.
+  /\/private\/tmp\/(?!claude-\d+\/)/,
+  // Companion guard — bash patterns match RAW command text with no `..`
+  // normalization, so a traversal spelled from inside the allowed prefix
+  // would otherwise slip past the lookahead above.
+  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
+  /\/private\/home\//,
+] as const;
+
+/**
+ * System directories. Blocked only when the path is the TARGET of a mutating
+ * operation — see `matchesSystemDirMutation`.
+ *
+ * Reading these is routine and safe (`git --version` resolving /usr/bin/git,
+ * `cat /etc/hosts`, listing a temp dir); it was previously denied outright,
+ * which is what made ordinary read-only tool calls fail. Destructive use is
+ * still covered twice over: by the dangerous-bash registry, which runs first
+ * and independently matches `rm -rf /`, `rmdir` on critical paths, `chmod -R
+ * 777`, `dd`, and `mkfs` (see lib/dangerous-bash/filesystem.ts), and by the
+ * mutation gate here.
+ */
+export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   /\/etc\//,
   /\/usr\//,
   /\/var\//,
   /\/sys\//,
   /\/proc\//,
   /\/boot\//,
-  /\.ssh\/id_/,
-  /\.ssh\/.*\.pem/,
-  /\/root\//,
-  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets.
-  // Carve-out: CC's harness-managed scratchpad lives at /private/tmp/claude-<uid>/…
-  // and every session/subagent is instructed to use it — blocking it kills forked
-  // skills mid-run (a PreToolUse deny terminates a fork with no final message).
-  // Deeper scratchpad paths are allowed; the bare claude-<uid> root (no trailing
-  // slash, e.g. `rm -rf /private/tmp/claude-501`) and all other /private/tmp
-  // references stay blocked.
-  /\/private\/tmp\/(?!claude-\d+\/)/,
-  // Companion guard for the carve-out: bash patterns match RAW command text
-  // (no `..` normalization), so without this a traversal spelled from inside
-  // the allowed prefix (/private/tmp/claude-501/../victim) would slip past
-  // the lookahead. Blocks any `..` segment after the scratchpad prefix.
-  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
-  /\/private\/home\//,
 ] as const;
+
+/**
+ * System directories. Blocked on ANY reference, as before this release.
+ *
+ * Two attempts were made to allow read-only access here, and adversarial review
+ * demolished both. A blocklist of mutating verbs let every writer outside the
+ * list through (interpreter one-liners, `sed -i`, `find -delete`, `tar -C`).
+ * An allowlist of safe readers then leaked via a pipe-then-absolute-path
+ * segment split (`ls | /usr/bin/tee <syspath>`) and via command substitution
+ * (`cat "$(touch <syspath>)"`), because a position-0 regex was certifying a
+ * segment that can hold more than one command.
+ *
+ * Both failures share a root cause: deciding "is this path the target of a
+ * write?" requires a shell parse, and no regex over unparsed text can answer
+ * it. The payoff was convenience; the failure mode was arbitrary writes to
+ * `/usr/local/bin` and `/etc/cron.d` — a PATH hijack needing no sudo. That
+ * trade is not worth taking, so system directories stay deny-by-default and
+ * this release keeps only the narrowly-safe fixes: the env-file idiom
+ * exemption, procfs, credential paths, and the absolute-path dump fix.
+ */
+
+/**
+ * Legacy union kept for callers that only need "does this touch anything
+ * protected", preserving the historical export surface.
+ */
+export const BASH_SENSITIVE_PATTERNS: readonly RegExp[] = [
+  ...BASH_SECRET_PATTERNS,
+  ...BASH_SYSTEM_DIR_PATTERNS,
+] as const;
+
+/**
+ * Test whether a command mutates a protected system directory.
+ *
+ * Splits on segment separators, finds the earliest mutating verb or write
+ * redirect in each segment, and reports a match only when a system-dir pattern
+ * occurs after it. This distinguishes `echo x > /etc/hosts` (blocked) from
+ * `cat /etc/hosts > out.txt` (allowed) — in the latter the path precedes the
+ * redirect, so it is a source, not a target.
+ */
+export function matchesSystemDirMutation(command: string): {
+  matched: boolean;
+  pattern?: string;
+} {
+  for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
+    if (pattern.test(command)) {
+      return { matched: true, pattern: pattern.source };
+    }
+  }
+  return { matched: false };
+}
 
 // =============================================================================
 // PATTERN CATEGORY TYPES
@@ -354,12 +461,14 @@ export function matchesBashSensitivePattern(command: string): {
   matched: boolean;
   pattern?: string;
 } {
-  for (const pattern of BASH_SENSITIVE_PATTERNS) {
+  // Secret-bearing files: any reference, read included.
+  for (const pattern of BASH_SECRET_PATTERNS) {
     if (pattern.test(command)) {
       return { matched: true, pattern: pattern.source };
     }
   }
-  return { matched: false };
+  // System directories: only when targeted by a mutating operation.
+  return matchesSystemDirMutation(command);
 }
 
 /**

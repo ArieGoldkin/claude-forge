@@ -2445,10 +2445,14 @@ FILESYSTEM_PATTERNS.map(
 );
 var ENV_DUMP_PATTERNS = [
   // printenv (with or without args, always dumps env info)
-  // Compound + sudo aware (CC v2.1.98 alignment)
-  /(?:^|[|&;]\s*|sudo\s+)printenv(?:\s|$)/,
-  // env alone or piped (but NOT env VAR=val cmd, env -i, /usr/bin/env python)
-  /(?:^|[|&;]\s*|sudo\s+)env\s*(?:$|[|&;])/,
+  // Compound + sudo aware (CC v2.1.98 alignment).
+  // The optional absolute-path prefix matters: an invocation by full path was
+  // previously caught only as a side effect of the blanket /usr/ path rule, so
+  // relaxing that rule without this would have opened a real dump bypass.
+  /(?:^|[|&;]\s*|sudo\s+)(?:\/(?:[\w.-]+\/)*)?printenv(?:\s|$)/,
+  // env alone or piped — still NOT env VAR=val cmd, env -i, or `env python`,
+  // because `env` must be followed by end-of-command or a separator.
+  /(?:^|[|&;]\s*|sudo\s+)(?:\/(?:[\w.-]+\/)*)?env\s*(?:$|[|&;])/,
   // set alone or piped (but NOT set -e, set -x, set -o)
   /(?:^|[|&;]\s*|sudo\s+)set\s*(?:$|[|&;])/,
   // export -p (list all exports)
@@ -2472,33 +2476,72 @@ function matchesGitPush(command) {
   if (/--help\b/.test(command)) return false;
   return true;
 }
-var BASH_SENSITIVE_PATTERNS = [
-  /\.env\b/,
-  /\.envrc/,
+var BASH_SECRET_PATTERNS = [
+  // Env files. The suppression is anchored to the property-access IDIOM
+  // (`process.env` followed by `.`, `[`, or end) rather than to the bytes
+  // `process` preceding a dot — a byte test also suppressed real filenames
+  // like `build-process.env`, and could be laundered by creating such a name.
+  // Match any token ending in `.env` / `.envrc`, then exempt the two code
+  // idioms by EXACT token rather than by preceding bytes. A byte-adjacency test
+  // (`(?<!process)`) also suppressed real filenames such as `build-process.env`
+  // and could be laundered by creating one; requiring the whole token to be
+  // `process.env` or `import.meta.env` cannot be.
+  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.envrc\b/,
+  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
+  /\.ssh\/id_/,
+  /\.ssh\/.*\.pem/,
+  // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks
+  // `env`/`printenv`; without this, reading the same secrets straight out of
+  // procfs walks around that control entirely.
+  /\/proc\/[^/\s]+\/environ\b/,
+  // Credential material that lives under otherwise-readable system trees.
+  /\/etc\/ssl\/private\//,
+  /\/etc\/(?:kubernetes|docker)\//,
+  /\/var\/run\/secrets\//,
+  /\/run\/secrets\//,
+  // Require a NAME before the extension and reject a property-access or
+  // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
+  // `schema.key.ts` — a fresh instance of the very over-blocking this release
+  // exists to fix, and a deny inside a fork is terminal.
+  /[\w-]+\.(?:key|keytab|p12|pfx|jks)\b(?![\w(.])/,
+  /\bkubeconfig\b/,
+  // Credential-bearing files under /etc. The directory as a whole is only
+  // mutation-gated (reading /etc/hosts is routine), but these specific entries
+  // are secrets or account data and stay read-blocked.
+  /\/etc\/(?:passwd|shadow|sudoers|gshadow|master\.passwd)\b/,
+  /\/etc\/ssh\//,
+  // Another user's home directory — never a legitimate read for our purposes.
+  /\/root\//,
+  // macOS temp/home trees. Kept as always-block rather than mutation-gated:
+  // the scratchpad carve-out below already solves the false-positive that
+  // motivated relaxing these, so there is no reason to widen read access.
+  /\/private\/tmp\/(?!claude-\d+\/)/,
+  // Companion guard — bash patterns match RAW command text with no `..`
+  // normalization, so a traversal spelled from inside the allowed prefix
+  // would otherwise slip past the lookahead above.
+  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
+  /\/private\/home\//
+];
+var BASH_SYSTEM_DIR_PATTERNS = [
   /\/etc\//,
   /\/usr\//,
   /\/var\//,
   /\/sys\//,
   /\/proc\//,
-  /\/boot\//,
-  /\.ssh\/id_/,
-  /\.ssh\/.*\.pem/,
-  /\/root\//,
-  // macOS-specific — CC v2.1.113 expanded dangerous-removal targets.
-  // Carve-out: CC's harness-managed scratchpad lives at /private/tmp/claude-<uid>/…
-  // and every session/subagent is instructed to use it — blocking it kills forked
-  // skills mid-run (a PreToolUse deny terminates a fork with no final message).
-  // Deeper scratchpad paths are allowed; the bare claude-<uid> root (no trailing
-  // slash, e.g. `rm -rf /private/tmp/claude-501`) and all other /private/tmp
-  // references stay blocked.
-  /\/private\/tmp\/(?!claude-\d+\/)/,
-  // Companion guard for the carve-out: bash patterns match RAW command text
-  // (no `..` normalization), so without this a traversal spelled from inside
-  // the allowed prefix (/private/tmp/claude-501/../victim) would slip past
-  // the lookahead. Blocks any `..` segment after the scratchpad prefix.
-  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
-  /\/private\/home\//
+  /\/boot\//
 ];
+[
+  ...BASH_SECRET_PATTERNS,
+  ...BASH_SYSTEM_DIR_PATTERNS
+];
+function matchesSystemDirMutation(command) {
+  for (const pattern of BASH_SYSTEM_DIR_PATTERNS) {
+    if (pattern.test(command)) {
+      return { matched: true, pattern: pattern.source };
+    }
+  }
+  return { matched: false };
+}
 var PATTERN_CHECKS2 = [
   {
     patterns: ENV_PATTERNS,
@@ -2554,12 +2597,12 @@ function unwrapExecWrappers(command) {
   return current;
 }
 function matchesBashSensitivePattern(command) {
-  for (const pattern of BASH_SENSITIVE_PATTERNS) {
+  for (const pattern of BASH_SECRET_PATTERNS) {
     if (pattern.test(command)) {
       return { matched: true, pattern: pattern.source };
     }
   }
-  return { matched: false };
+  return matchesSystemDirMutation(command);
 }
 function validateBashCommand(command, sessionId, agentContext) {
   const normalized = normalizeHomeRefs(normalizeBashEscapes(command));
