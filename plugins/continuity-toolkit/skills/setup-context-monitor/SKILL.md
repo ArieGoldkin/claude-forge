@@ -51,10 +51,10 @@ tokens: 217.4k in · 826 out · 215.8k cached
 
 | Line | Contents | Present when |
 |---|---|---|
-| 1 | Model + effort/mode badge, project, branch, open PR, worktree | Always (PR only when one is open for the branch) |
+| 1 | Model + effort/mode badge, project, branch, open PR, worktree | Always. Branch is omitted outside a git repo or on a detached HEAD; the PR segment only when an open PR exists for the branch; the effort badge only on models that report a reasoning-effort level |
 | 2 | Context bar + %, freshness emoji, session cost, duration | Always |
-| 3 | 5-hour and 7-day rate-limit bars with reset countdowns | Claude.ai Pro/Max, after the first API response |
-| 4 | Session token accounting (in / out / cache reads) | Always |
+| 3 | 5-hour and 7-day rate-limit bars with reset countdowns | Claude.ai Pro/Max, after the first API response. A countdown is dropped if its timestamp is absent or implausible (beyond eight days) |
+| 4 | Session token accounting (in / out / cache reads) | Whenever the payload reports non-zero tokens — omitted rather than printing a row of zeros. The cached segment appears only when there are cache reads |
 
 The effort badge shows `⚡ fast` in fast mode, otherwise the effort level with `◐` when extended
 thinking is on. Set `CONTINUITY_STATUSLINE_COMPACT=1` to collapse to the classic two lines.
