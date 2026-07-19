@@ -12,8 +12,8 @@
     {
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
-      "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 10 skills, 11 commands, 32 shared hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact \u2192 SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.7.4",
+      "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 11 skills, 12 commands, 35 hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact \u2192 SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
+      "version": "2.8.0",
       "category": "development"
     },
     {

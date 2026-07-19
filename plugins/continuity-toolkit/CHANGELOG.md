@@ -2,6 +2,41 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.0] - 2026-07-19 — context warnings never fired; statusline surfaces discarded payload fields
+
+### Fixed — the context-warning pipeline was dead for every user
+
+**ctk's flagship feature did not work.** The statusline writes the context-percentage file and the `context-monitor` hook reads it, keyed by session id on both sides — but the two used *different precedence*. The writer read `process.env.CLAUDE_SESSION_ID` only, and **Claude Code does not export that variable into the statusline child process**, so every file was written as `claude-context-pct-default.txt`. The hook receives `session_id` in its input and looked for `claude-context-pct-<uuid>.txt`, which never existed. `readPercentage()` returned null, `contextMonitor()` silent-succeeded, and the 70/80/90% warnings could not fire for anyone.
+
+The failure was invisible by construction: a missing file is a legitimate "statusline not configured" state, logged at **debug** level while the default log level is `warn`. Nothing errored; the feature simply never ran.
+
+Proven on a live machine before and after: with the old build, the only file present was `-default.txt` while the hook — queried with the real session id — returned bare `{"continue":true,"suppressOutput":true}`. With the fix, the statusline writes `claude-context-pct-<session>.txt` and the same hook returns the 85% warning. `extractSessionId()` now mirrors the hook's `getSessionId()` precedence exactly (payload → env → `default`), with a test that asserts the two agree across every input shape.
+
+This is the fourth hook in this repo found firing and doing nothing, after `lint-checker`, `error-warner` (both 2.7.3), and `/etk:review-mr`'s empty return (etk 2.14.1).
+
+### Statusline surfaces the payload fields it was discarding
+
+Claude Code hands the statusline a rich JSON payload on stdin; ctk parsed six fields and dropped the rest. Evaluated [claude-hud](https://github.com/jarrodwatts/claude-hud) (MIT) as a reference and adopted only what needs no new data source — the transcript-parsing features stay claude-hud's, cited rather than rebuilt. Field presence was **verified against a real captured payload** (CC 2.1.214), not assumed from docs. **`dist` rebuilt.**
+
+### Added
+
+- **Effort / mode badge** in the model bracket — `[Opus 4.8 ◐ xhigh]`, or `⚡ fast` in fast mode. From `effort.level`, `fast_mode`, `thinking.enabled` (verified live: `effort.level = "xhigh"`).
+- **Rate-limit reset countdowns** — `session: █░░░░░░░░░ 11% (resets in 4h 31m)`. From `rate_limits.*.resets_at`, a Unix timestamp in **seconds** (verified live). Read independently of `used_percentage`, since either may be absent alone.
+- **Token accounting line** — `tokens: 217.4k in · 826 out · 215.8k cached`. Counts are abbreviated because 1M-context sessions are live (`context_window_size = 1000000` observed), where raw figures are unreadable at statusline size. The cached segment is omitted when there are no cache reads.
+- **Open-PR segment** — `PR #35 pending`, from `pr.{number,review_state}`. **Documented in the official schema but absent from the live capture** (the payload omits `pr` unless an open PR exists for the branch), so it is deliberately defensive: rendered only when the object and a numeric `number` are both present.
+- **`CONTINUITY_STATUSLINE_COMPACT=1`** collapses output to the classic two lines.
+- **`CONTINUITY_STATUSLINE_SILENT=1` — run alongside another statusline instead of instead of it.** Claude Code runs exactly one `statusLine` program, and running ctk's script is what writes the file the `context-monitor` hook reads, so adopting claude-hud (or any other statusline) previously meant giving up the context warnings. Silent mode performs the side effect and prints nothing, letting the other program own every pixel while the warnings keep firing. Every stdout path routes through one `emit` wrapper, including the fallback string, so nothing can leak into the other program's output. `/ctk:setup-context-monitor` Step 1a documents the composed launcher — including that stdin is consumable once and must be captured before being fed to both, and that a tool with its own configurator must be set up *first* because it claims `statusLine`. Verified end-to-end: with a stand-in HUD composed in, the display showed the HUD's lines only, ctk still wrote `pct=91`, and the hook returned `CONTEXT CRITICAL: 91%+`.
+- **Two guards added after diffing the built output against 2.7.4** (neither was caught by unit tests): the token line is suppressed when every count is zero — a `context_window` with no token fields was rendering the pure-noise line `tokens: 0 in · 0 out` — and a reset countdown beyond eight days is treated as a malformed timestamp and omitted, since a `resets_at` supplied in milliseconds rendered `resets in 1136754d 12h`.
+- Tests covering the new extractors and formatters, including that no-extras output stays byte-identical to the previous two/three-line rendering (pinned against bytes from the 2.7.4 build, not against the new code compared with itself).
+
+### Fixed
+
+- **`/ctk:doctor` reported a false healthy for context warnings.** Step 4 checked only whether `~/.config/claude/continuity-statusline.sh` *exists* — but that file survives untouched when `statusLine` is repointed at another program, so a user whose context warnings were dead got an "OK". Doctor now reads the configured `statusLine.command` and reports OK / NOT CONFIGURED / **CONFLICT**, naming the program and stating the consequence. Same false-healthy class as the `check-maintenance` `*.md` glob fixed in 2.7.1.
+
+### Changed
+
+- **`/ctk:setup-context-monitor` no longer overwrites an existing `statusLine` silently.** It now checks first (Step 0) and stops to ask when another program is configured. It also documents the genuine either/or: Claude Code runs one statusline, and ctk's script is the sole writer of the file the `context-monitor` hook reads — so choosing another statusline turns the 70/80/90% warnings off. claude-hud is cited as the option for transcript-derived tool/agent/todo tracking, which ctk does not duplicate.
+
 ## [2.7.4] - 2026-07-18 — stop blocking CC's own scratchpad directory
 
 `security-blocker` (and the shared `isProtectedPath()` in `path-utils`) blocked **every** reference to `/private/tmp/` — including CC's harness-managed scratchpad at `/private/tmp/claude-<uid>/<project>/<session>/scratchpad`, which the CC system prompt instructs every session and subagent to use for temporary files. **`dist` rebuilt** (shared hook source changed).

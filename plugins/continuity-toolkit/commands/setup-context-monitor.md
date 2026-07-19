@@ -16,7 +16,7 @@ One-time setup to enable proactive context window usage warnings. Creates a stab
 ## Prerequisites
 
 - Continuity toolkit plugin installed and hooks compiled (`cd hooks && npm run build`)
-- Claude Code v4.1+ (StatusLine support required)
+- Claude Code v2.1.97+ (StatusLine `refreshInterval` and `workspace.git_worktree`)
 
 ## What This Command Does
 
@@ -35,7 +35,20 @@ Create the directory and launcher script at `~/.config/claude/continuity-statusl
 mkdir -p ~/.config/claude
 ```
 
-**Always overwrite** the launcher (do not skip if it already exists). A pre-existing launcher from an older install may hardcode the legacy `continuity-toolkit` cache path only and silently fail to `[?] unknown` once the plugin is renamed or its old cache is cleaned. Re-running this command must self-heal those installs.
+### Step 0: Check for an Existing StatusLine
+
+Run this **before writing anything**:
+
+```bash
+python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude/settings.json')));print(json.dumps(d.get('statusLine','(unset)')))"
+```
+
+| Existing value | Action |
+|---|---|
+| Unset, or already `continuity-statusline.sh` | Proceed |
+| Any other program | **Stop and ask.** Name what is configured and offer Step 1a (compose) or replacement |
+
+**Always overwrite the *launcher file*** once the user has chosen ctk (do not skip if it already exists). A pre-existing launcher from an older install may hardcode the legacy `continuity-toolkit` cache path only and silently fail to `[?] unknown` once the plugin is renamed or its old cache is cleaned. Re-running this command must self-heal those installs. This is about the launcher script's *contents* — it is not licence to repoint a `statusLine` the user deliberately set, which is what Step 0 guards.
 
 Write the following content to `~/.config/claude/continuity-statusline.sh`:
 
@@ -58,6 +71,44 @@ Make it executable:
 ```bash
 chmod +x ~/.config/claude/continuity-statusline.sh
 ```
+
+#### Step 1a: Composing with another statusline (claude-hud, a custom script)
+
+Only relevant when Step 0 found a **different** program already configured and the user wants to
+keep it. Claude Code runs exactly one `statusLine`, but running ctk's script is what writes the
+percentage file the `context-monitor` hook reads — so the naive fix (point `statusLine` at the
+other program) turns the 70/80/90% warnings off. Compose instead: run ctk in **silent mode** for
+the side effect, and let the other program own the display.
+
+Write this variant instead of the launcher above, substituting the user's existing command:
+
+```bash
+#!/bin/bash
+# Continuity Toolkit - composed StatusLine launcher.
+# ctk runs silently for its side effect (writing the context-percentage file
+# that keeps context warnings alive); the second program owns the display.
+script=$(find "$HOME/.claude/plugins/cache" \
+  \( -path "*/ctk/*/hooks/dist/src/statusline/context-percentage.js" \
+  -o -path "*/continuity-toolkit/*/hooks/dist/src/statusline/context-percentage.js" \) \
+  2>/dev/null | sort -V | tail -1)
+
+# stdin can only be consumed once, so capture it and feed both programs.
+payload=$(cat)
+
+[ -f "$script" ] && printf '%s' "$payload" | CONTINUITY_STATUSLINE_SILENT=1 node "$script"
+
+# <<< the user's existing statusLine command goes here, reading the same payload
+printf '%s' "$payload" | <OTHER_STATUSLINE_COMMAND>
+```
+
+Two things to get right:
+- **stdin is consumable once.** Capture it into `payload` and pipe that to each program; piping
+  the raw stdin to both leaves the second one with nothing and it renders its "unknown" fallback.
+- **Order of operations.** If the other tool has its own configurator (claude-hud ships
+  `/claude-hud:configure`), run that **first** — it claims `statusLine` — and compose afterwards,
+  or its setup will overwrite this launcher.
+
+Point `statusLine.command` at this same launcher path; Step 2 is unchanged.
 
 ### Step 2: Configure Global StatusLine Settings
 
@@ -90,14 +141,19 @@ After configuring:
 2. After restart, send a message and wait for a response
 3. Check if the temp file was created:
 
+The script writes to Node's `os.tmpdir()`, **not** `/tmp` — on macOS that is a per-user
+`/var/folders/…/T` directory, so a hard-coded `/tmp` check reports failure on every macOS
+install even when the pipeline is healthy. Resolve the directory instead of assuming it:
+
 ```bash
-ls -la /tmp/claude-context-pct-*.txt
+node -e "const os=require('os'),fs=require('fs');console.log(fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))"
 ```
 
-4. If the file exists, read its content to see the current percentage:
+4. If a file exists, read its content to see the current percentage. It is keyed by session id,
+   so match the session you are actually in:
 
 ```bash
-cat /tmp/claude-context-pct-*.txt
+node -e "const os=require('os'),fs=require('fs'),p=require('path');for(const f of fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))console.log(f,'=',fs.readFileSync(p.join(os.tmpdir(),f),'utf8').trim())"
 ```
 
 5. The context-monitor hook will automatically inject warnings when the percentage crosses thresholds (70%, 80%, 90%).
@@ -113,9 +169,10 @@ cat /tmp/claude-context-pct-*.txt
        |
        | node executes the script
        v
-Reads stdin JSON --> writes /tmp/claude-context-pct-*.txt --> outputs two-line status:
-       |                                                         Line 1: [Opus] my-app | feature/auth
-       |                                                         Line 2: ████░░░░░░ 42% | $0.08 | 7m 3s
+Reads stdin JSON --> writes <os.tmpdir()>/claude-context-pct-<session>.txt
+       |            --> outputs two to four lines (two in compact mode, none when silent):
+       |                Line 1: [Opus ◐ xhigh] 📁 my-app | 🌿 feature/auth
+       |                Line 2: ████░░░░░░ 42% 👍 | $0.08 | ⏱️ 7m
        |
        v
 UserPromptSubmit hook reads temp file --> injects tiered warnings

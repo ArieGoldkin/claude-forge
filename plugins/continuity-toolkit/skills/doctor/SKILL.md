@@ -64,10 +64,69 @@ Flag if duplicate shared hooks detected across multiple plugins.
 
 ```
 Ledger:          .claude/continuity/ledgers/CONTINUITY_*.md exists?
-Context monitor: ~/.config/claude/continuity-statusline.sh exists?
+Context monitor: see Step 4a — file existence alone is NOT the check
 Shared context:  .claude/context/shared-context.json exists?
 Last session:    was_cleanly_ended field value
 ```
+
+### Step 4a: Verify the Context-Warning Pipeline Is Actually Wired
+
+**The launcher existing does not mean context warnings work.** ctk's statusline script is the
+only writer of the context-percentage temp file that the `context-monitor` hook reads to inject
+the 70/80/90% warnings. If `statusLine` points at any *other* program — claude-hud, a custom
+script, a different plugin — the launcher file still sits on disk untouched while the warnings
+silently stop firing. Checking for the file alone reports a false healthy.
+
+Read the configured command and compare it to ctk's launcher:
+
+```bash
+# The value that actually decides whether warnings fire
+python3 -c "import json,os;d=json.load(open(os.path.expanduser('~/.claude/settings.json')));print(json.dumps(d.get('statusLine','(unset)')))"
+```
+
+Classify the result:
+
+| `statusLine.command` | Context warnings | Report |
+|---|---|---|
+| Contains `continuity-statusline.sh` | Necessary, not sufficient — go to the end-to-end check | see below |
+| Unset / no `statusLine` key | **Dead** | NOT CONFIGURED — run `/ctk:setup-context-monitor` |
+| Runs ctk with `CONTINUITY_STATUSLINE_SILENT=1` alongside another program | **Healthy** — this is the composed launcher | OK (composed) |
+| Points at any other program | **Dead** | CONFLICT — name the program; see the resolution below |
+
+A composed launcher is *not* a conflict: if the command pipes the payload through ctk with
+`CONTINUITY_STATUSLINE_SILENT=1`, the side effect still runs and the warnings still fire even
+though another program owns the display. Read the launcher's contents before classifying.
+
+**The config string alone does not prove the warnings fire.** The statusline writes the
+percentage file and the hook reads it, keyed by session id on both sides; if those keys ever
+disagree the file is written under one name and sought under another, and the warnings stay
+silent with a perfectly correct `statusLine`. That exact defect shipped through ctk 2.7.4 — the
+writer keyed off `CLAUDE_SESSION_ID`, which Claude Code does not export into the statusline
+child process, so every file was written as `-default.txt` while the hook looked for the real
+session UUID. Verify the artifact, not the intent:
+
+```bash
+# Does a percentage file exist for THIS session? (needs the current session id)
+node -e "const os=require('os'),fs=require('fs');console.log(fs.readdirSync(os.tmpdir()).filter(f=>f.startsWith('claude-context-pct-')))"
+```
+
+| Files found | Meaning |
+|---|---|
+| One matching the current session id | Pipeline verified end-to-end — report OK |
+| Only `claude-context-pct-default.txt` | *May* indicate the pre-2.8.0 keying bug — but `default` is also the legitimate fallback when the payload carries no `session_id` and `CLAUDE_SESSION_ID` is unset. Confirm the installed ctk version before recommending an update |
+| None | The statusline has not run yet this session; re-check after a turn or two before reporting a fault |
+
+On CONFLICT, state the consequence plainly rather than just flagging a mismatch: *"`statusLine`
+runs <program>, so ctk's 70/80/90% context warnings are not firing."* Then offer three
+resolutions, composition first:
+
+1. **Keep both** — rebuild the launcher to run ctk with `CONTINUITY_STATUSLINE_SILENT=1` and
+   `<program>` for the display (`/ctk:setup-context-monitor` Step 1a). Usually the right answer.
+2. Switch back to ctk alone with `/ctk:setup-context-monitor`.
+3. Keep `<program>` alone and accept that the warnings are off.
+
+Do not silently "fix" the user's `statusLine`; it is their configuration and they may have chosen
+it deliberately.
 
 ### Step 5: Check Environment
 
@@ -112,7 +171,7 @@ Present structured dashboard with:
 | Check | Status |
 |-------|--------|
 | Continuity setup | OK |
-| Context monitor | OK / NOT CONFIGURED |
+| Context monitor | OK / NOT CONFIGURED / CONFLICT (statusLine runs <program>) |
 | Last session | Clean / Stale |
 | Node.js | vXX.x |
 | VCS CLI | glab / gh / none |

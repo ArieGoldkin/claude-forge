@@ -8,23 +8,38 @@
  * @module tests/statusline/context-percentage
  */
 
-import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANSI,
   buildProgressBar,
   extractCost,
+  extractEffort,
   extractModelName,
+  extractPr,
   extractRateLimits,
+  extractSessionId,
+  extractTokenUsage,
   extractWorkspaceName,
   extractWorktreePath,
   formatCost,
   formatDuration,
+  formatEffortBadge,
   formatLine1,
   formatLine2,
   formatLine3,
+  formatLine4,
+  formatPrSegment,
+  formatResetIn,
   formatStatusLine,
+  formatTokenCount,
   getBarColor,
   getContextEmoji,
+  isSafeSessionId,
 } from '../../src/statusline/context-percentage.js';
 
 // =============================================================================
@@ -268,19 +283,39 @@ describe('extractRateLimits', () => {
         seven_day: { used_percentage: 41.2, resets_at: 1738857600 },
       },
     };
-    expect(extractRateLimits(data)).toEqual({ fiveHourPct: 24, sevenDayPct: 41 });
+    expect(extractRateLimits(data)).toEqual({
+      fiveHourPct: 24,
+      sevenDayPct: 41,
+      fiveHourResetsAt: 1738425600,
+      sevenDayResetsAt: 1738857600,
+    });
   });
 
   it('should return nulls when rate_limits is absent (API/Bedrock users)', () => {
-    expect(extractRateLimits({})).toEqual({ fiveHourPct: null, sevenDayPct: null });
+    expect(extractRateLimits({})).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 
   it('should handle each window being independently absent', () => {
     const onlyFive = { rate_limits: { five_hour: { used_percentage: 50 } } };
-    expect(extractRateLimits(onlyFive)).toEqual({ fiveHourPct: 50, sevenDayPct: null });
+    expect(extractRateLimits(onlyFive)).toEqual({
+      fiveHourPct: 50,
+      sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
 
     const onlySeven = { rate_limits: { seven_day: { used_percentage: 80 } } };
-    expect(extractRateLimits(onlySeven)).toEqual({ fiveHourPct: null, sevenDayPct: 80 });
+    expect(extractRateLimits(onlySeven)).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: 80,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 
   it('should default non-number / NaN used_percentage to null', () => {
@@ -293,12 +328,36 @@ describe('extractRateLimits', () => {
     expect(extractRateLimits(data as Record<string, unknown>)).toEqual({
       fiveHourPct: null,
       sevenDayPct: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
     });
   });
 
-  it('should return null for a window object with no used_percentage', () => {
+  it('should read resets_at independently of used_percentage', () => {
+    // A window may carry a reset timestamp with no usage figure; the reset is
+    // still valid data and must survive the missing percentage.
     const data = { rate_limits: { five_hour: { resets_at: 1738425600 } } };
-    expect(extractRateLimits(data)).toEqual({ fiveHourPct: null, sevenDayPct: null });
+    expect(extractRateLimits(data)).toEqual({
+      fiveHourPct: null,
+      sevenDayPct: null,
+      fiveHourResetsAt: 1738425600,
+      sevenDayResetsAt: null,
+    });
+  });
+
+  it('should reject non-positive / non-numeric resets_at', () => {
+    const data = {
+      rate_limits: {
+        five_hour: { used_percentage: 10, resets_at: 0 },
+        seven_day: { used_percentage: 20, resets_at: 'soon' },
+      },
+    };
+    expect(extractRateLimits(data as Record<string, unknown>)).toEqual({
+      fiveHourPct: 10,
+      sevenDayPct: 20,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+    });
   });
 });
 
@@ -537,5 +596,578 @@ describe('formatLine1 with worktree', () => {
   it('should omit worktree indicator when not provided', () => {
     const line = formatLine1('Opus', 'my-project', 'main');
     expect(line).not.toContain('wt:');
+  });
+});
+
+// =============================================================================
+// Effort / mode badge, resets, tokens, PR (CC 2.1.176+ payload fields)
+//
+// Field presence below is grounded in a real captured statusline payload
+// (CC 2.1.214): effort.level="xhigh", fast_mode=false, thinking.enabled=true,
+// rate_limits.*.resets_at in Unix SECONDS, context_window.current_usage.*,
+// context_window_size=1000000. `pr` was absent from that capture (no open PR
+// for the branch) — it is documented but unobserved, hence the defensive tests.
+// =============================================================================
+
+describe('extractEffort', () => {
+  it('should extract level and flags from a real-shaped payload', () => {
+    const data = { effort: { level: 'xhigh' }, fast_mode: false, thinking: { enabled: true } };
+    expect(extractEffort(data)).toEqual({ level: 'xhigh', fastMode: false, thinking: true });
+  });
+
+  it('should return nulls/false when the fields are absent (unsupported model)', () => {
+    expect(extractEffort({})).toEqual({ level: null, fastMode: false, thinking: false });
+  });
+
+  it('should not treat a truthy non-boolean fast_mode as enabled', () => {
+    expect(extractEffort({ fast_mode: 'yes' }).fastMode).toBe(false);
+  });
+});
+
+describe('formatEffortBadge', () => {
+  it('should show fast mode in preference to effort level', () => {
+    expect(formatEffortBadge('xhigh', true, true)).toBe('⚡ fast');
+  });
+
+  it('should show effort with a thinking marker', () => {
+    expect(formatEffortBadge('xhigh', false, true)).toBe('◐ xhigh');
+  });
+
+  it('should show bare effort when thinking is off', () => {
+    expect(formatEffortBadge('high', false, false)).toBe('high');
+  });
+
+  it('should return empty when there is no level and no fast mode', () => {
+    expect(formatEffortBadge(null, false, true)).toBe('');
+  });
+});
+
+describe('formatResetIn', () => {
+  const now = 1_784_400_000_000; // fixed clock (ms)
+
+  it('should format hours and minutes', () => {
+    expect(formatResetIn(1_784_425_200, now)).toBe('resets in 7h 0m');
+  });
+
+  it('should format days and hours past 24h', () => {
+    expect(formatResetIn(1_784_757_600, now)).toBe('resets in 4d 3h');
+  });
+
+  it('should format minutes only under an hour', () => {
+    expect(formatResetIn(now / 1000 + 1500, now)).toBe('resets in 25m');
+  });
+
+  it('should return empty for an absent timestamp', () => {
+    expect(formatResetIn(null, now)).toBe('');
+  });
+
+  it('should return empty for a reset already in the past', () => {
+    expect(formatResetIn(now / 1000 - 60, now)).toBe('');
+  });
+});
+
+describe('formatTokenCount', () => {
+  it.each([
+    [826, '826'],
+    [215_762, '215.8k'],
+    [1_000_000, '1.0M'],
+    [1_500_000, '1.5M'],
+    [0, '0'],
+  ])('should abbreviate %i as %s', (input, expected) => {
+    expect(formatTokenCount(input)).toBe(expected);
+  });
+});
+
+describe('extractTokenUsage', () => {
+  it('should pull totals and cache reads from a real-shaped payload', () => {
+    const data = {
+      context_window: {
+        total_input_tokens: 217_362,
+        total_output_tokens: 826,
+        context_window_size: 1_000_000,
+        current_usage: { cache_read_input_tokens: 215_762 },
+      },
+    };
+    expect(extractTokenUsage(data)).toEqual({
+      totalInput: 217_362,
+      totalOutput: 826,
+      cacheRead: 215_762,
+      windowSize: 1_000_000,
+    });
+  });
+
+  it('should return null when the context window block is absent', () => {
+    expect(extractTokenUsage({})).toBeNull();
+  });
+
+  it('should default missing numeric fields to 0 rather than NaN', () => {
+    expect(extractTokenUsage({ context_window: {} })).toEqual({
+      totalInput: 0,
+      totalOutput: 0,
+      cacheRead: 0,
+      windowSize: 0,
+    });
+  });
+});
+
+describe('formatLine4', () => {
+  it('should render in/out/cached', () => {
+    const line = formatLine4({ totalInput: 217_362, totalOutput: 826, cacheRead: 215_762 });
+    expect(line).toContain('215.8k cached');
+    expect(line).toContain('217.4k in');
+    expect(line).toContain('826 out');
+  });
+
+  it('should omit the cached segment when there are no cache reads', () => {
+    const line = formatLine4({ totalInput: 100, totalOutput: 20, cacheRead: 0 });
+    expect(line).not.toContain('cached');
+  });
+
+  it('should return empty for absent usage', () => {
+    expect(formatLine4(null)).toBe('');
+  });
+});
+
+describe('extractPr / formatPrSegment (documented, unobserved live)', () => {
+  it('should extract number and review state', () => {
+    const data = { pr: { number: 35, url: 'https://x/pull/35', review_state: 'pending' } };
+    expect(extractPr(data)).toEqual({ number: 35, reviewState: 'pending' });
+    expect(formatPrSegment(extractPr(data))).toBe('PR #35 pending');
+  });
+
+  it('should tolerate a missing review_state', () => {
+    expect(formatPrSegment(extractPr({ pr: { number: 7 } }))).toBe('PR #7');
+  });
+
+  it('should return null when pr is absent (the normal case)', () => {
+    expect(extractPr({})).toBeNull();
+    expect(formatPrSegment(null)).toBe('');
+  });
+
+  it('should reject a pr object with no numeric number rather than rendering NaN', () => {
+    expect(extractPr({ pr: { url: 'https://x' } })).toBeNull();
+    expect(extractPr({ pr: { number: 'twelve' } } as Record<string, unknown>)).toBeNull();
+  });
+});
+
+describe('formatStatusLine with extras', () => {
+  const now = 1_784_400_000_000;
+
+  it('should stay byte-identical to the 2.7.4 output when no extras are passed', () => {
+    // Pinned against bytes captured from the PREVIOUS release's built script
+    // (git show main:.../dist/.../context-percentage.js) for the equivalent
+    // payload. Comparing the new function against itself with `{}` would be
+    // circular — `{}` is the parameter's own default, so such a test passes
+    // regardless of whether the output drifted.
+    const expected = [
+      '\x1b[36m[Opus]\x1b[0m 📁 proj | 🌿 main',
+      '\x1b[32m██░░░░░░░░\x1b[0m 22% ✨ | \x1b[33m$1.50\x1b[0m | ⏱️ 1m',
+      'session: \x1b[32m█░░░░░░░░░\x1b[0m 11% · weekly: \x1b[32m█████░░░░░\x1b[0m 51%',
+    ].join('\n');
+
+    expect(formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51)).toBe(expected);
+  });
+
+  it('should render four lines with all extras present', () => {
+    const out = formatStatusLine(22, 'Opus 4.8', 'proj', 'main', 51.48, 61_472_869, '', 11, 51, {
+      effortBadge: '◐ xhigh',
+      prSegment: 'PR #35 pending',
+      fiveHourResetsAt: 1_784_425_200,
+      sevenDayResetsAt: 1_784_757_600,
+      tokens: { totalInput: 217_362, totalOutput: 826, cacheRead: 215_762 },
+      nowMs: now,
+    });
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toContain('[Opus 4.8 ◐ xhigh]');
+    expect(lines[0]).toContain('PR #35 pending');
+    expect(lines[2]).toContain('resets in 7h 0m');
+    expect(lines[3]).toContain('215.8k cached');
+  });
+
+  it('should collapse to two lines in compact mode', () => {
+    const out = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', 11, 51, {
+      effortBadge: '◐ xhigh',
+      tokens: { totalInput: 100, totalOutput: 20, cacheRead: 5 },
+      compact: true,
+      nowMs: now,
+    });
+    expect(out.split('\n')).toHaveLength(2);
+    expect(out).toContain('◐ xhigh');
+  });
+
+  it('should omit the usage line but keep tokens for an API user with no rate limits', () => {
+    const out = formatStatusLine(22, 'Opus', 'proj', 'main', 1.5, 60_000, '', null, null, {
+      tokens: { totalInput: 100, totalOutput: 20, cacheRead: 0 },
+      nowMs: now,
+    });
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(3);
+    expect(lines[2]).toContain('tokens:');
+  });
+});
+
+// =============================================================================
+// getGitBranch portability
+//
+// `git branch --show-current` requires git >= 2.22; on older git it exits
+// non-zero and the branch segment silently vanished from line 1 (reproduced on
+// git 2.15.0). The implementation uses `rev-parse --abbrev-ref HEAD` instead.
+// =============================================================================
+
+describe('getGitBranch portability', () => {
+  // These previously grepped the source for a literal `execSync('git …')`
+  // string. That shape was flagged in review as brittle, and it then broke on
+  // a legitimate refactor (the calls moved behind a `tryGit(cmd)` helper) while
+  // the behaviour was entirely correct. The invariant worth pinning is which
+  // commands actually get invoked, which the mocked tests below assert — plus
+  // one check on the shipped bundle, since dist/ is tracked and is what runs.
+  it('should ship a bundle that tries the portable command first', () => {
+    const dist = readFileSync(
+      new URL('../../dist/src/statusline/context-percentage.js', import.meta.url),
+      'utf8'
+    );
+    const revParse = dist.indexOf('git rev-parse --abbrev-ref HEAD');
+    const showCurrent = dist.indexOf('git branch --show-current');
+    expect(revParse).toBeGreaterThan(-1);
+    // --show-current may appear only as the unborn-head fallback, after it.
+    expect(showCurrent).toBeGreaterThan(revParse);
+  });
+});
+
+describe('getGitBranch behaviour', () => {
+  // The previous test here asserted `typeof getGitBranch() === 'string'`, which
+  // the declared return type already guarantees — it passed against the very
+  // git-2.22 bug this block exists to prevent, because the broken version
+  // returned '' silently. These drive the three real branches instead.
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('node:child_process');
+    vi.doUnmock('node:fs');
+  });
+
+  async function loadWithGit(execImpl: (cmd: string) => string) {
+    // Force a cache miss so every case exercises the git path, not a leftover
+    // cache file from a previous run.
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return { ...actual, existsSync: () => false, writeFileSync: () => {}, renameSync: () => {} };
+    });
+    vi.doMock('node:child_process', () => ({
+      execSync: (cmd: string) => execImpl(cmd),
+    }));
+    return await import('../../src/statusline/context-percentage.js');
+  }
+
+  it('should return the branch name on success', async () => {
+    const mod = await loadWithGit(() => 'feature/my-branch\n');
+    expect(mod.getGitBranch()).toBe('feature/my-branch');
+  });
+
+  it('should normalise a detached HEAD to empty rather than printing "HEAD"', async () => {
+    const mod = await loadWithGit(() => 'HEAD\n');
+    expect(mod.getGitBranch()).toBe('');
+  });
+
+  it('should return empty when git throws (not a repo, git absent)', async () => {
+    const mod = await loadWithGit(() => {
+      throw new Error('fatal: not a git repository');
+    });
+    expect(mod.getGitBranch()).toBe('');
+  });
+
+  it('should invoke the portable command, not the git >= 2.22 flag', async () => {
+    const seen: string[] = [];
+    const mod = await loadWithGit((cmd) => {
+      seen.push(cmd);
+      return 'main\n';
+    });
+    mod.getGitBranch();
+    expect(seen).toEqual(['git rev-parse --abbrev-ref HEAD']);
+  });
+});
+
+// =============================================================================
+// Session-id keying — writer/reader pair
+//
+// The statusline WRITES the context-percentage file and the context-monitor
+// hook READS it. Their session-id precedence must match exactly or the file is
+// written under one name and looked for under another, silently disabling the
+// 70/80/90% warnings. That is precisely what shipped: the writer read only
+// CLAUDE_SESSION_ID, which CC does not export into the statusline child, so it
+// wrote "-default.txt" while the hook looked for "-<uuid>.txt".
+// =============================================================================
+
+describe('extractSessionId', () => {
+  const ENV_KEY = 'CLAUDE_SESSION_ID';
+  const original = process.env[ENV_KEY];
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[ENV_KEY];
+    else process.env[ENV_KEY] = original;
+  });
+
+  it('should prefer the payload session_id — the field CC actually supplies', () => {
+    process.env[ENV_KEY] = 'from-env';
+    expect(extractSessionId({ session_id: '99753a0e-6a54-4673-b873-3448edd238c5' })).toBe(
+      '99753a0e-6a54-4673-b873-3448edd238c5'
+    );
+  });
+
+  it('should fall back to the env var when the payload omits it', () => {
+    process.env[ENV_KEY] = 'from-env';
+    expect(extractSessionId({})).toBe('from-env');
+  });
+
+  it('should fall back to "default" when neither is present', () => {
+    delete process.env[ENV_KEY];
+    expect(extractSessionId({})).toBe('default');
+  });
+
+  it('should ignore a non-string or empty payload session_id', () => {
+    delete process.env[ENV_KEY];
+    expect(extractSessionId({ session_id: '' })).toBe('default');
+    expect(extractSessionId({ session_id: 12345 } as Record<string, unknown>)).toBe('default');
+  });
+
+  it('should match the context-monitor hook precedence exactly', () => {
+    // Mirrors getSessionId() in shared/hooks-infra/src/hooks/prompt/context-monitor.ts:
+    // input.session_id -> CLAUDE_SESSION_ID -> 'default'.
+    const hookGetSessionId = (input: { session_id?: unknown }): string => {
+      if (typeof input.session_id === 'string' && input.session_id) return input.session_id;
+      return process.env[ENV_KEY] || 'default';
+    };
+
+    for (const payload of [{ session_id: 'abc-123' }, { session_id: '' }, {}] as Record<
+      string,
+      unknown
+    >[]) {
+      process.env[ENV_KEY] = 'env-session';
+      expect(extractSessionId(payload)).toBe(hookGetSessionId(payload));
+      delete process.env[ENV_KEY];
+      expect(extractSessionId(payload)).toBe(hookGetSessionId(payload));
+    }
+  });
+});
+
+// =============================================================================
+// Hardening found by diffing built output against the previous release
+// =============================================================================
+
+describe('formatLine4 zero-data suppression', () => {
+  it('should omit the line entirely when every count is zero', () => {
+    // A context_window block with no token fields yields all zeros; rendering
+    // "tokens: 0 in · 0 out" was a pure noise line in the previous build.
+    expect(formatLine4({ totalInput: 0, totalOutput: 0, cacheRead: 0 })).toBe('');
+  });
+
+  it('should still render when only cache reads are non-zero', () => {
+    expect(formatLine4({ totalInput: 0, totalOutput: 0, cacheRead: 5 })).toContain('5 cached');
+  });
+});
+
+describe('formatResetIn implausible-value guard', () => {
+  const now = 1_784_400_000_000;
+
+  it('should omit a countdown beyond the longest real window', () => {
+    // A resets_at mistakenly supplied in milliseconds previously rendered
+    // "resets in 1136754d 12h".
+    expect(formatResetIn(99_999_999_999, now)).toBe('');
+  });
+
+  it('should still render a genuine seven-day window', () => {
+    expect(formatResetIn(now / 1000 + 7 * 86_400 - 60, now)).toContain('resets in 6d');
+  });
+});
+
+// =============================================================================
+// Silent mode — composition with another statusline
+//
+// CC runs one statusLine program, but ctk's script is what writes the file the
+// context-monitor hook reads. Silent mode keeps the side effect while ceding
+// the display, so a user can run claude-hud (or anything else) AND keep the
+// 70/80/90% warnings. Exercised against the BUILT script, since the flag is
+// read in main(), which only runs when the file is executed directly.
+// =============================================================================
+
+describe('CONTINUITY_STATUSLINE_SILENT', () => {
+  const dist = fileURLToPath(
+    new URL('../../dist/src/statusline/context-percentage.js', import.meta.url)
+  );
+  const SILENT_FLAG = 'CONTINUITY_STATUSLINE_SILENT';
+
+  const payload = (sid: string): string =>
+    JSON.stringify({
+      session_id: sid,
+      context_window: { used_percentage: 42, total_input_tokens: 100, total_output_tokens: 10 },
+      model: { display_name: 'Opus' },
+    });
+
+  const runScript = (input: string, silent: boolean): string => {
+    const childEnv = { ...globalThis.process.env } as Record<string, string>;
+    if (silent) childEnv[SILENT_FLAG] = '1';
+    else delete childEnv[SILENT_FLAG];
+    return execFileSync('node', [dist], { input, encoding: 'utf8', env: childEnv });
+  };
+
+  const pctFile = (sid: string): string => join(tmpdir(), `claude-context-pct-${sid}.txt`);
+
+  afterEach(() => {
+    for (const sid of ['silent-probe', 'loud-probe']) {
+      try {
+        unlinkSync(pctFile(sid));
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+
+  it('should print nothing at all when silent', () => {
+    expect(runScript(payload('silent-probe'), true)).toBe('');
+  });
+
+  it('should STILL write the percentage file when silent — the whole point', () => {
+    runScript(payload('silent-probe'), true);
+    expect(readFileSync(pctFile('silent-probe'), 'utf8').trim()).toBe('42');
+  });
+
+  it('should print normally when the flag is unset', () => {
+    expect(runScript(payload('loud-probe'), false)).toContain('42%');
+  });
+
+  it('should reject a path-traversal session_id rather than writing outside tmpdir', () => {
+    // Unsanitised, join(tmpdir(), 'claude-context-pct-' + '../../..' + '.txt')
+    // escapes the temp directory and the percentage is written+renamed there.
+    const evil = '../../../../../../tmp/pwned';
+    runScript(JSON.stringify({ session_id: evil, context_window: { used_percentage: 7 } }), true);
+    expect(existsSync(join(tmpdir(), `claude-context-pct-${evil}.txt`))).toBe(false);
+    // Falls back to the default key instead.
+    expect(readFileSync(pctFile('default'), 'utf8').trim()).toBe('7');
+  });
+
+  it('should suppress the fallback string too, so it cannot corrupt the other program', () => {
+    // Malformed input takes the FALLBACK_STATUS path; in silent mode that must
+    // print nothing, or it would inject "[?] unknown" into the other program's
+    // output. This is the leak the `emit` wrapper exists to prevent.
+    expect(runScript('{ not json', true)).toBe('');
+  });
+});
+
+// =============================================================================
+// Hardening from independent code review of this PR
+// =============================================================================
+
+describe('isSafeSessionId', () => {
+  it('should accept the UUID shape Claude Code actually supplies', () => {
+    expect(isSafeSessionId('99753a0e-6a54-4673-b873-3448edd238c5')).toBe(true);
+    expect(isSafeSessionId('default')).toBe(true);
+  });
+
+  it('should reject path separators and traversal', () => {
+    expect(isSafeSessionId('../../../../tmp/pwned')).toBe(false);
+    expect(isSafeSessionId('a/b')).toBe(false);
+    expect(isSafeSessionId('..')).toBe(false);
+  });
+
+  it('should reject empty, over-long, and non-string values', () => {
+    expect(isSafeSessionId('')).toBe(false);
+    expect(isSafeSessionId('x'.repeat(129))).toBe(false);
+    expect(isSafeSessionId(12345)).toBe(false);
+    expect(isSafeSessionId(null)).toBe(false);
+  });
+
+  it('should fall back to "default" for an unsafe payload id', () => {
+    expect(extractSessionId({ session_id: '../escape' })).toBe('default');
+  });
+});
+
+describe('non-finite payload values', () => {
+  // Infinity satisfies `typeof v === 'number' && !Number.isNaN(v)`, and
+  // {"total_duration_ms":1e999} is valid JSON that parses to Infinity.
+  // Parsed from JSON text rather than written as a numeric literal: 1e999 in
+  // source trips noPrecisionLoss, and parsing is the real arrival path anyway.
+  const overflowed = (json: string): Record<string, unknown> =>
+    JSON.parse(json) as Record<string, unknown>;
+
+  it('should not let Infinity through extractCost', () => {
+    const data = overflowed('{"cost":{"total_cost_usd":1e999,"total_duration_ms":1e999}}');
+    expect(data['cost']).toHaveProperty('total_cost_usd', Number.POSITIVE_INFINITY);
+    expect(extractCost(data)).toEqual({ costUsd: 0, durationMs: 0 });
+  });
+
+  it('should not render "Infinityh NaNm" or "$∞"', () => {
+    const { costUsd, durationMs } = extractCost(
+      overflowed('{"cost":{"total_cost_usd":1e999,"total_duration_ms":1e999}}')
+    );
+    const line = formatLine2(22, costUsd, durationMs);
+    expect(line).not.toContain('Infinity');
+    expect(line).not.toContain('NaN');
+    expect(line).not.toContain('∞');
+  });
+
+  it('should treat a non-finite rate-limit percentage as absent', () => {
+    const data = overflowed('{"rate_limits":{"five_hour":{"used_percentage":1e999}}}');
+    expect(extractRateLimits(data).fiveHourPct).toBeNull();
+  });
+});
+
+describe('formatTokenCount unit boundaries', () => {
+  it('should not round past its own unit (999_999 is not "1000.0k")', () => {
+    expect(formatTokenCount(999_999)).toBe('1.0M');
+    expect(formatTokenCount(999_999_999)).toBe('1000M');
+  });
+
+  it('should keep ordinary values unchanged', () => {
+    expect(formatTokenCount(215_762)).toBe('215.8k');
+    expect(formatTokenCount(1_500_000)).toBe('1.5M');
+    expect(formatTokenCount(826)).toBe('826');
+  });
+
+  it('should not emit Infinity', () => {
+    expect(formatTokenCount(Number.POSITIVE_INFINITY)).toBe('0');
+  });
+});
+
+describe('formatResetIn sub-minute countdown', () => {
+  const now = 1_784_400_000_000;
+
+  it('should not read as already-reset when under a minute remains', () => {
+    // "resets in 0m" is exactly wrong at the moment it matters most.
+    expect(formatResetIn(now / 1000 + 30, now)).toBe('resets in 1m');
+  });
+});
+
+describe('getGitBranch unborn HEAD', () => {
+  it('should fall back to --show-current when rev-parse fails on an unborn head', async () => {
+    // Verified on this machine: `rev-parse --abbrev-ref HEAD` exits 128 in a
+    // fresh `git init` before the first commit, while `branch --show-current`
+    // (git >= 2.22) reads the HEAD symref and succeeds. Shipping only rev-parse
+    // regressed fresh repos on modern git.
+    const seen: string[] = [];
+    // resetModules BEFORE mocking: the module is already in cache from earlier
+    // suites, so without this the real execSync runs and `seen` stays empty.
+    vi.resetModules();
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      return { ...actual, existsSync: () => false, writeFileSync: () => {}, renameSync: () => {} };
+    });
+    vi.doMock('node:child_process', () => ({
+      execSync: (cmd: string) => {
+        seen.push(cmd);
+        if (cmd.includes('rev-parse')) throw new Error("fatal: ambiguous argument 'HEAD'");
+        return 'main\n';
+      },
+    }));
+    const mod = await import('../../src/statusline/context-percentage.js');
+    expect(mod.getGitBranch()).toBe('main');
+    expect(seen).toEqual(['git rev-parse --abbrev-ref HEAD', 'git branch --show-current']);
+    vi.doUnmock('node:child_process');
+    vi.doUnmock('node:fs');
+    vi.resetModules();
   });
 });
