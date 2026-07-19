@@ -24,7 +24,19 @@ cat [.]envfile         bracket glob
 
 Enumerating shell metacharacters is unbounded and fails silently, one character at a time. The lookbehind now asserts the one thing that actually matters — the match may not begin **inside a token** (`(?<![\w.-])`) — which closes the class outright and no longer depends on predicting how a filename will be delimited. That "not mid-token" property is also what keeps `build-process.env` and `preprocess.env` blocked as whole filenames, which the code-idiom exemptions depend on.
 
-No false-positive cost: scoped npm packages (`npm i @scope/pkg`), `ssh user@host` and `git log --author=@me` carry no env-file token to match, and each is pinned. This matters because a PreToolUse deny is terminal for a forked skill, so over-blocking is not a lesser evil than the bypass. All seven closed vectors are pinned, and reverting the lookbehind fails exactly those seven tests — verified by mutation, not assumed.
+Scoped npm packages (`npm i @scope/pkg`), `ssh user@host` and `git log --author=@me` carry no env-file token to match, and each is pinned. All seven closed vectors are pinned, and reverting the lookbehind fails exactly those seven tests — verified by mutation, not assumed.
+
+**Known cost, measured rather than asserted.** The inversion blocks strictly more than the enumerated form, so it was swept against 27 realistic developer commands. Three are newly denied:
+
+```
+kubectl get pod -o jsonpath='{.env}'     <-- genuine false positive
+git commit -m "[.env] rotate keys"
+echo "see {.env,.env.local}"
+```
+
+Only the first is a real misfire: a JSONPath selector is not a file reference. The other two are literal env-file mentions in message text, already denied in their common spellings (`git commit -m "update .env"` has always been blocked), so they are consistent with existing behavior rather than a new class.
+
+This was accepted deliberately, not overlooked. A PreToolUse deny is terminal for a forked skill, so over-blocking is not a free win — but the alternative is leaving brace expansion, redirects and `scp host:` open, and those are genuine read and exfiltration paths. If the kubectl case proves annoying in practice, the fix is a narrow JSONPath exemption, **not** a return to enumerating delimiters.
 
 ### Added
 
