@@ -23,7 +23,12 @@ const MAX_LOCK_ATTEMPTS = 20;
  *
  * Updates:
  * - session_heartbeat.last_activity = current timestamp
- * - last_agent_idle = { agent_id, timestamp }
+ * - last_agent_idle = { teammate_name, team_name, timestamp }
+ *
+ * TeammateIdle input carries `teammate_name` and `team_name` -- NOT
+ * `agent_id`/`agent_type`, which this hook read until 2.8.4 and which CC never
+ * sends for this event (both landed as "unknown" on every real idle). Verified
+ * against the CC v2.1.215 binary and a live probe.
  *
  * Always returns outputSilentSuccess() -- TeammateIdle hooks cannot block.
  *
@@ -32,10 +37,10 @@ const MAX_LOCK_ATTEMPTS = 20;
  */
 export async function teammateIdleSaver(input: HookInput): Promise<HookResult> {
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
-  const agentId = input.agent_id || 'unknown';
-  const agentType = input.agent_type || 'unknown';
+  const teammateName = input.teammate_name || 'unknown';
+  const teamName = input.team_name || 'unknown';
 
-  logDebug(HOOK_NAME, `Teammate idle: agent_id=${agentId}, agent_type=${agentType}`);
+  logDebug(HOOK_NAME, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
 
   const contextFile = path.join(projectDir, CONTINUITY_DIRS.context, 'shared-context.json');
 
@@ -71,8 +76,8 @@ export async function teammateIdleSaver(input: HookInput): Promise<HookResult> {
 
     // Record last agent idle event
     context['last_agent_idle'] = {
-      agent_id: agentId,
-      agent_type: agentType,
+      teammate_name: teammateName,
+      team_name: teamName,
       timestamp,
     };
 
@@ -81,7 +86,7 @@ export async function teammateIdleSaver(input: HookInput): Promise<HookResult> {
     fs.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}\n`);
     fs.renameSync(tempFile, contextFile);
 
-    logInfo(HOOK_NAME, `Heartbeat updated on teammate idle (agent: ${agentId})`);
+    logInfo(HOOK_NAME, `Heartbeat updated on teammate idle (teammate: ${teammateName})`);
   } catch (error) {
     logError(HOOK_NAME, `Failed to update context file: ${error}`);
   } finally {

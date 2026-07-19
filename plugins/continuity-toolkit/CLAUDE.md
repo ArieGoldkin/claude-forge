@@ -1,8 +1,8 @@
 # Continuity Toolkit - Claude Code Plugin
 
 > **Plugin Name**: ctk (formerly `continuity-toolkit`, renamed in v2.0.0)
-> **Version**: 2.8.3
-> **Last Updated**: 2026-07-18
+> **Version**: 2.8.4
+> **Last Updated**: 2026-07-19
 
 ## Overview
 

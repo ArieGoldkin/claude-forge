@@ -3,7 +3,8 @@
  *
  * Verifies that the TeammateIdle hook:
  * - Updates last_activity in shared-context.json
- * - Records last_agent_idle event
+ * - Records last_agent_idle event (teammate_name + team_name -- the fields CC
+ *   actually sends; see the 2.8.4 field-name correction)
  * - Handles missing context file gracefully
  * - Handles corrupted JSON gracefully
  * - Releases lock on success and failure
@@ -19,12 +20,12 @@ import { CONTINUITY_DIRS } from '../../src/lib/continuity.js';
 import { teammateIdleSaver } from '../../src/lifecycle/teammate-idle-saver.js';
 import type { HookInput } from '../../src/types.js';
 
-function createMockInput(agentId = 'agent-123', agentType = 'code-review'): HookInput {
+function createMockInput(teammateName = 'sec-reviewer', teamName = 'session-abc123'): HookInput {
   return {
     tool_name: 'TeammateIdle' as HookInput['tool_name'],
     tool_input: {},
-    agent_id: agentId,
-    agent_type: agentType,
+    teammate_name: teammateName,
+    team_name: teamName,
   };
 }
 
@@ -95,11 +96,11 @@ describe('teammate-idle-saver', () => {
       createFullStructure(tempDir);
       const contextFile = createContextFile(tempDir);
 
-      await teammateIdleSaver(createMockInput('agent-456', 'test-runner'));
+      await teammateIdleSaver(createMockInput('release-reviewer', 'session-xyz789'));
 
       const content = JSON.parse(fs.readFileSync(contextFile, 'utf8'));
-      expect(content.last_agent_idle.agent_id).toBe('agent-456');
-      expect(content.last_agent_idle.agent_type).toBe('test-runner');
+      expect(content.last_agent_idle.teammate_name).toBe('release-reviewer');
+      expect(content.last_agent_idle.team_name).toBe('session-xyz789');
       expect(content.last_agent_idle.timestamp).toBeDefined();
     });
 
@@ -171,7 +172,7 @@ describe('teammate-idle-saver', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle missing agent_id', async () => {
+    it('should handle missing teammate_name', async () => {
       createFullStructure(tempDir);
       const contextFile = createContextFile(tempDir);
 
@@ -181,7 +182,8 @@ describe('teammate-idle-saver', () => {
       });
 
       const content = JSON.parse(fs.readFileSync(contextFile, 'utf8'));
-      expect(content.last_agent_idle.agent_id).toBe('unknown');
+      expect(content.last_agent_idle.teammate_name).toBe('unknown');
+      expect(content.last_agent_idle.team_name).toBe('unknown');
     });
 
     it('should produce valid JSON when stringified', async () => {

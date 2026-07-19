@@ -4784,9 +4784,9 @@ var HOOK_NAME25 = "teammate-idle-saver";
 var MAX_LOCK_ATTEMPTS2 = 20;
 async function teammateIdleSaver(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const agentId = input.agent_id || "unknown";
-  const agentType = input.agent_type || "unknown";
-  logDebug(HOOK_NAME25, `Teammate idle: agent_id=${agentId}, agent_type=${agentType}`);
+  const teammateName = input.teammate_name || "unknown";
+  const teamName = input.team_name || "unknown";
+  logDebug(HOOK_NAME25, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
     logDebug(HOOK_NAME25, "No context file found, nothing to update");
@@ -4811,15 +4811,15 @@ async function teammateIdleSaver(input) {
     heartbeat["last_activity"] = timestamp;
     context["session_heartbeat"] = heartbeat;
     context["last_agent_idle"] = {
-      agent_id: agentId,
-      agent_type: agentType,
+      teammate_name: teammateName,
+      team_name: teamName,
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME25, `Heartbeat updated on teammate idle (agent: ${agentId})`);
+    logInfo(HOOK_NAME25, `Heartbeat updated on teammate idle (teammate: ${teammateName})`);
   } catch (error) {
     logError(HOOK_NAME25, `Failed to update context file: ${error}`);
   } finally {
@@ -4832,10 +4832,10 @@ var METRICS_DIR = ".claude/continuity/metrics";
 var METRICS_FILE = "tasks.jsonl";
 async function taskCompletedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const agentId = input.agent_id || "unknown";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
-  const toolUseId = input.tool_use_id || void 0;
-  logDebug(HOOK_NAME26, `Task completed: agent_id=${agentId}, session_id=${sessionId}`);
+  const taskId = input.task_id || "unknown";
+  const teammateName = input.teammate_name || void 0;
+  logDebug(HOOK_NAME26, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR);
   const metricsFile = path2.join(metricsDir, METRICS_FILE);
   try {
@@ -4843,14 +4843,18 @@ async function taskCompletedLogger(input) {
       fs6.mkdirSync(metricsDir, { recursive: true });
     }
     const entry = {
+      event: "completed",
       timestamp: formatTimestamp(),
-      agent_id: agentId,
+      task_id: taskId,
       session_id: sessionId,
-      ...toolUseId && { tool_use_id: toolUseId }
+      ...input.task_subject && { task_subject: input.task_subject },
+      ...input.task_description && { task_description: input.task_description },
+      ...teammateName && { teammate_name: teammateName },
+      ...input.team_name && { team_name: input.team_name }
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME26, `Task completion logged for agent ${agentId}`);
+    logInfo(HOOK_NAME26, `Task completion logged for task ${taskId}`);
   } catch (error) {
     logError(HOOK_NAME26, `Failed to log task completion: ${error}`);
   }
@@ -4861,10 +4865,10 @@ var METRICS_DIR2 = ".claude/continuity/metrics";
 var METRICS_FILE2 = "tasks.jsonl";
 async function taskCreatedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const agentId = input.agent_id || "unknown";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
-  const toolUseId = input.tool_use_id || void 0;
-  logDebug(HOOK_NAME27, `Task created: agent_id=${agentId}, session_id=${sessionId}`);
+  const taskId = input.task_id || "unknown";
+  const teammateName = input.teammate_name || void 0;
+  logDebug(HOOK_NAME27, `Task created: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR2);
   const metricsFile = path2.join(metricsDir, METRICS_FILE2);
   try {
@@ -4874,13 +4878,16 @@ async function taskCreatedLogger(input) {
     const entry = {
       event: "created",
       timestamp: formatTimestamp(),
-      agent_id: agentId,
+      task_id: taskId,
       session_id: sessionId,
-      ...toolUseId && { tool_use_id: toolUseId }
+      ...input.task_subject && { task_subject: input.task_subject },
+      ...input.task_description && { task_description: input.task_description },
+      ...teammateName && { teammate_name: teammateName },
+      ...input.team_name && { team_name: input.team_name }
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME27, `Task creation logged for agent ${agentId}`);
+    logInfo(HOOK_NAME27, `Task creation logged for task ${taskId}`);
   } catch (error) {
     logError(HOOK_NAME27, `Failed to log task creation: ${error}`);
   }
