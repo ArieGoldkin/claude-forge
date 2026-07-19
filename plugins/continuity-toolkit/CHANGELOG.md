@@ -2,6 +2,29 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.4] - 2026-07-19 — the three agent-team lifecycle hooks read fields Claude Code never sends; they logged "unknown" since they shipped
+
+Behavior change in the `TeammateIdle`, `TaskCreated` and `TaskCompleted` hooks. **`dist` is rebuilt** — this compiles from changed hook source, unlike 2.8.3.
+
+### Fixed
+
+**All three hooks keyed on `agent_id`/`agent_type`, which are absent from these three payloads.** CC's own hook-input descriptions — read straight out of the v2.1.215 binary — say the payloads carry different fields:
+
+- `TeammateIdle`: *"Input to command is JSON with **teammate_name and team_name**."*
+- `TaskCreated` / `TaskCompleted`: *"Input to command is JSON with **task_id, task_subject, task_description, teammate_name, and team_name**."*
+
+Neither `agent_id` nor `agent_type` appears in any of the three. So `teammate-idle-saver` wrote `last_agent_idle: { agent_id: "unknown", agent_type: "unknown" }` on **every** real idle since it shipped, and the two task loggers recorded `agent_id: "unknown"` while never capturing the `task_id`/`task_subject`/`task_description` the event actually delivers. `session_id` is a genuine common field (present in all inputs) and is retained.
+
+This was found by direct measurement, not code reading: a live named teammate went idle and the deployed hook recorded `"unknown"`, exactly as the code implied it must. The binary and the CC agent-team message envelope (`teammate_id="…"`) corroborate the field names. A subagent tasked with the docs answer had confidently reported a `teammate_status` field as "documented" — it appears **zero** times in the binary; the verification against ground truth is the only reason it did not ship.
+
+### Changed
+
+- `HookInput` (shared types) gains `teammate_name`, `team_name`, `task_id`, `task_subject`, `task_description`, with a note that `teammate_name` is the teammate's *name* (used as a transcript-file prefix, `agent-a<name>-<hash>.jsonl`), not its transcript id — locating a teammate transcript needs a prefix match, not concatenation.
+- `last_agent_idle` now records `{ teammate_name, team_name, timestamp }`. Consumers reading the old `agent_id`/`agent_type` keys will see them absent; nothing in-repo consumed them except the hook's own tests.
+- The task loggers now record `{ event, timestamp, task_id, session_id, task_subject?, task_description?, teammate_name?, team_name? }`. `TaskCompleted` gains the `event: 'completed'` discriminator it was missing, so created/completed rows in the shared `tasks.jsonl` are distinguishable.
+
+Prerequisite for the planned subagent-visibility detector, which must derive a teammate's transcript path from the idle payload — impossible while that payload was being read through the wrong keys.
+
 ## [2.8.3] - 2026-07-19 — the 2.8.2 release notes shipped a false measurement; two test labels claimed a mechanism they do not cover
 
 Docs, comments and test labels only. **No code, pattern or behavior change** — `security-blocker.ts` is untouched and `dist` is unchanged, because nothing it compiles from changed.

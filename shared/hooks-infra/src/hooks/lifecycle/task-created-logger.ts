@@ -24,6 +24,12 @@ const METRICS_FILE = 'tasks.jsonl';
  * Appends one JSON line per task creation to `.claude/continuity/metrics/tasks.jsonl`.
  * Creates the metrics directory if it doesn't exist.
  *
+ * TaskCreated input carries `task_id`, `task_subject`, `task_description`,
+ * `teammate_name`, and `team_name` -- NOT `agent_id`/`tool_use_id`, which this
+ * hook logged until 2.8.4 and which CC never sends for this event (both landed
+ * "unknown"/absent on every real task). Verified against the CC v2.1.215 binary.
+ * `session_id` is a common field present in all hook inputs and is retained.
+ *
  * Always returns outputSilentSuccess() -- TaskCreated hooks cannot block.
  *
  * @param input - Hook input from Claude Code
@@ -31,11 +37,9 @@ const METRICS_FILE = 'tasks.jsonl';
  */
 export async function taskCreatedLogger(input: HookInput): Promise<HookResult> {
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
-  const agentId = input.agent_id || 'unknown';
   const sessionId = input.session_id || process.env['CLAUDE_SESSION_ID'] || 'unknown';
-  const toolUseId = input.tool_use_id || undefined;
-
-  logDebug(HOOK_NAME, `Task created: agent_id=${agentId}, session_id=${sessionId}`);
+  const taskId = input.task_id || 'unknown';
+  logDebug(HOOK_NAME, `Task created: task_id=${taskId}, session_id=${sessionId}`);
 
   const metricsDir = path.join(projectDir, METRICS_DIR);
   const metricsFile = path.join(metricsDir, METRICS_FILE);
@@ -48,14 +52,17 @@ export async function taskCreatedLogger(input: HookInput): Promise<HookResult> {
     const entry = {
       event: 'created',
       timestamp: formatTimestamp(),
-      agent_id: agentId,
+      task_id: taskId,
       session_id: sessionId,
-      ...(toolUseId && { tool_use_id: toolUseId }),
+      ...(input.task_subject && { task_subject: input.task_subject }),
+      ...(input.task_description && { task_description: input.task_description }),
+      ...(input.teammate_name && { teammate_name: input.teammate_name }),
+      ...(input.team_name && { team_name: input.team_name }),
     };
 
     fs.appendFileSync(metricsFile, `${JSON.stringify(entry)}\n`);
 
-    logInfo(HOOK_NAME, `Task creation logged for agent ${agentId}`);
+    logInfo(HOOK_NAME, `Task creation logged for task ${taskId}`);
   } catch (error) {
     logError(HOOK_NAME, `Failed to log task creation: ${error}`);
   }

@@ -192,6 +192,43 @@ export interface HookInput {
   last_assistant_message?: string;
 
   /**
+   * Name of the agent-team teammate the event concerns.
+   * Present in TeammateIdle, TaskCreated, and TaskCompleted input.
+   *
+   * NOT interchangeable with `agent_id`/`agent_type` -- those are absent from
+   * these three payloads. Verified against the CC v2.1.215 binary, whose hook
+   * descriptions read "Input to command is JSON with teammate_name and
+   * team_name" (TeammateIdle) and "... task_id, task_subject,
+   * task_description, teammate_name, and team_name" (Task*).
+   *
+   * This is the teammate's *name*, not its transcript id: a teammate named
+   * `sec-reviewer` writes to `subagents/agent-a<name>-<hash>.jsonl`, so
+   * locating its transcript needs a prefix match, not concatenation.
+   */
+  teammate_name?: string;
+
+  /**
+   * Agent-team name (e.g. "session-fc573d34").
+   * Present in TeammateIdle, TaskCreated, and TaskCompleted input.
+   */
+  team_name?: string;
+
+  /**
+   * Task identifier. Present in TaskCreated and TaskCompleted input.
+   */
+  task_id?: string;
+
+  /**
+   * Short task subject line. Present in TaskCreated and TaskCompleted input.
+   */
+  task_subject?: string;
+
+  /**
+   * Full task description. Present in TaskCreated and TaskCompleted input.
+   */
+  task_description?: string;
+
+  /**
    * Tool execution duration in milliseconds.
    * Present in PostToolUse and PostToolUseFailure hook inputs.
    * Available since Claude Code v2.1.119.

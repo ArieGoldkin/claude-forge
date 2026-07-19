@@ -21,9 +21,12 @@ function createMockInput(overrides: Partial<HookInput> = {}): HookInput {
   return {
     tool_name: 'TaskCompleted' as HookInput['tool_name'],
     tool_input: {},
-    agent_id: 'agent-789',
+    task_id: 'task-789',
     session_id: 'session-abc',
-    tool_use_id: 'tu-001',
+    task_subject: 'Review PR 38',
+    task_description: 'Security review of the env-file changes',
+    teammate_name: 'sec-reviewer',
+    team_name: 'session-fc573d34',
     ...overrides,
   };
 }
@@ -58,38 +61,55 @@ describe('task-completed-logger', () => {
       expect(fs.existsSync(metricsFile)).toBe(true);
     });
 
-    it('should write valid JSONL entry', async () => {
+    it('should write valid JSONL entry with event: completed', async () => {
       await taskCompletedLogger(createMockInput());
 
       const metricsFile = path.join(tempDir, '.claude/continuity/metrics/tasks.jsonl');
       const content = fs.readFileSync(metricsFile, 'utf8').trim();
       const entry = JSON.parse(content);
 
-      expect(entry.agent_id).toBe('agent-789');
+      expect(entry.event).toBe('completed');
+      expect(entry.task_id).toBe('task-789');
       expect(entry.session_id).toBe('session-abc');
-      expect(entry.tool_use_id).toBe('tu-001');
+      expect(entry.task_subject).toBe('Review PR 38');
+      expect(entry.task_description).toBe('Security review of the env-file changes');
+      expect(entry.teammate_name).toBe('sec-reviewer');
+      expect(entry.team_name).toBe('session-fc573d34');
       expect(entry.timestamp).toBeDefined();
+      // Guard against reverting to the fields CC never sends for this event.
+      expect(entry).not.toHaveProperty('agent_id');
+      expect(entry).not.toHaveProperty('tool_use_id');
     });
 
     it('should append multiple entries', async () => {
-      await taskCompletedLogger(createMockInput({ agent_id: 'agent-1' }));
-      await taskCompletedLogger(createMockInput({ agent_id: 'agent-2' }));
+      await taskCompletedLogger(createMockInput({ task_id: 'task-1' }));
+      await taskCompletedLogger(createMockInput({ task_id: 'task-2' }));
 
       const metricsFile = path.join(tempDir, '.claude/continuity/metrics/tasks.jsonl');
       const lines = fs.readFileSync(metricsFile, 'utf8').trim().split('\n');
 
       expect(lines).toHaveLength(2);
-      expect(JSON.parse(lines[0]).agent_id).toBe('agent-1');
-      expect(JSON.parse(lines[1]).agent_id).toBe('agent-2');
+      expect(JSON.parse(lines[0]).task_id).toBe('task-1');
+      expect(JSON.parse(lines[1]).task_id).toBe('task-2');
     });
 
-    it('should omit tool_use_id when not present', async () => {
-      await taskCompletedLogger(createMockInput({ tool_use_id: undefined }));
+    it('should omit optional task and teammate fields when not present', async () => {
+      await taskCompletedLogger(
+        createMockInput({
+          task_subject: undefined,
+          task_description: undefined,
+          teammate_name: undefined,
+          team_name: undefined,
+        })
+      );
 
       const metricsFile = path.join(tempDir, '.claude/continuity/metrics/tasks.jsonl');
       const entry = JSON.parse(fs.readFileSync(metricsFile, 'utf8').trim());
 
-      expect(entry).not.toHaveProperty('tool_use_id');
+      expect(entry).not.toHaveProperty('task_subject');
+      expect(entry).not.toHaveProperty('task_description');
+      expect(entry).not.toHaveProperty('teammate_name');
+      expect(entry).not.toHaveProperty('team_name');
     });
   });
 
@@ -103,13 +123,13 @@ describe('task-completed-logger', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle missing agent_id', async () => {
-      await taskCompletedLogger(createMockInput({ agent_id: undefined }));
+    it('should handle missing task_id', async () => {
+      await taskCompletedLogger(createMockInput({ task_id: undefined }));
 
       const metricsFile = path.join(tempDir, '.claude/continuity/metrics/tasks.jsonl');
       const entry = JSON.parse(fs.readFileSync(metricsFile, 'utf8').trim());
 
-      expect(entry.agent_id).toBe('unknown');
+      expect(entry.task_id).toBe('unknown');
     });
 
     it('should handle missing session_id', async () => {
