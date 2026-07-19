@@ -2,6 +2,33 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.1] - 2026-07-19 — security-blocker denied ordinary reads; fixed without widening writes
+
+`BASH_SENSITIVE_PATTERNS` matched the **raw text of a command** against a path list, for every command, regardless of what the command did. Mentioning a path was enough. A `--version` probe on an absolute binary path, `cat /etc/hosts`, listing a system directory, and any script or commit message containing `process.env` were all denied — and because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight. Four agents died this way while reviewing ctk 2.8.0, two of them mid-review, which is how it surfaced.
+
+### The shape of the fix matters more than the patterns
+
+The first attempt gated system directories on a **blocklist of mutating verbs** — block when a path follows `rm`/`mv`/`cp`/`tee`/… in the same segment. Adversarial review demolished it, empirically, against the built hook: `python3 -c "open('/etc/hosts','w')"`, `sed -i`, `find -delete`, `tar -C`, `touch`, `mkdir`, `git checkout --`, `patch -d` all wrote freely; `echo pwned 1>/etc/hosts` slipped past a redirect regex that rejected the fd digit; `cat /etc/hosts > /etc/crontab` passed because only the *first* path occurrence was compared to the redirect position; and `cd /etc/ && rm -rf .`, `T=/etc/hosts; rm -rf "$T"`, `echo /etc/hosts | xargs rm -f` laundered the target into a different segment. Reading `/proc/self/environ` — the file-based equivalent of the `env` dump this hook already blocks — became readable with **no prompt at all**.
+
+The root cause was structural: it asked *"is this path the target of a write?"*, which requires a shell parse, and answered it with metachar splitting plus a verb allowlist. Individually patchable, endlessly leaky.
+
+**The gate is now inverted.** System directories stay deny-by-default; a small, enumerable allowlist of read-only invocations (`cat`, `head`, `tail`, `grep`, `ls`, `stat`, `wc`, `diff`, `find` without an action flag, … plus `--version`/`--help` probes) is carved out. The set of safe readers is bounded; the set of possible writers is not. Redirect **targets** are scanned in full — every redirect form including `1>`, `2>>`, `&>`, `>|` — and a protected target is blocked regardless of how benign the reading command looks.
+
+### Corrected claim
+
+An earlier draft of this entry asserted that no destructive protection was removed because the dangerous-bash registry covers it. **That was false**, and the review proved it: `lib/dangerous-bash/filesystem.ts` covers whole-root/home `rm -rf`, `rmdir` on critical paths, `dd of=/dev/`, `mkfs`, fork bombs and device writes — it has **no concept of targeted system-path mutation**, which is precisely the surface the first attempt relaxed. The two layers did not overlap where the code comment claimed they did.
+
+### Also closed
+
+- **`/proc/<pid>/environ`** is now always blocked. `ENV_DUMP_PATTERNS` exists to stop env-var leakage via `env`/`printenv`; reading procfs walked straight around it.
+- **Credential material under otherwise-readable system trees** — `/etc/ssl/private/`, `/etc/kubernetes/`, `/etc/docker/`, `/var/run/secrets/`, `*.key`, `*.keytab`, `*.p12`, kubeconfig.
+- **A bare `env`/`printenv` invoked by absolute path** was never matched by the dump patterns — it was blocked only as a side effect of the blanket `/usr/` rule, as the old test's own comment admitted. Both dump patterns now accept an absolute-path prefix, so the dump is caught on its own merits.
+- **The env-file exemption is anchored to the exact token** (`process.env`, `import.meta.env`) rather than to preceding bytes. A byte test also suppressed real filenames like `build-process.env` and could be laundered by creating one.
+
+### Deliberately still blocked
+
+`env python`, `sudo env VAR=val cmd`, and compound loops that interpolate system paths remain denied — `env` runs arbitrary commands, so admitting it to the read allowlist would reopen the surface. These match the pre-change behaviour, so they are preserved restrictions, not new ones. 32 of the reviewer's exact bypass commands ship as regression tests.
+
 ## [2.8.0] - 2026-07-19 — context warnings never fired; statusline surfaces discarded payload fields
 
 ### Fixed — the context-warning pipeline was dead for every user
