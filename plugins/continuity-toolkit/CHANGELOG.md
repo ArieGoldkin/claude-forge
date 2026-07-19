@@ -2,6 +2,39 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.3] - 2026-07-19 — the 2.8.2 release notes shipped a false measurement; two test labels claimed a mechanism they do not cover
+
+Docs, comments and test labels only. **No code, pattern or behavior change** — `security-blocker.ts` is untouched and `dist` is unchanged, because nothing it compiles from changed.
+
+### Fixed
+
+**The 2.8.2 false-positive accounting was wrong — 3 claimed, 11 actual.** The entry asserted "swept against 27 realistic developer commands. Three are newly denied … only the first is a real misfire." Two independent reviewers each found more, and re-measuring confirmed **eleven** across three families. The sweep that produced "three" simply never contained the gitignore, glob or template families — it was a corpus gap, and the conclusion inherited it.
+
+The misfires it missed are worse than the one it named. `echo "*.env" >> .gitignore` is a *security-positive* setup action that never opens the file; `git check-ignore`, `ls -la` and `find -name` on a glob are metadata-only; `docker inspect -f '{{.env}}'` and the `jsonpath='{.items[*]…env}'` idiom are selectors, and that Go-template shape also hits `helm` and `nomad`. The 2.8.2 entry now carries the corrected table and a pointer here.
+
+In a project whose stated discipline is *measure, don't assert*, a false measurement in the release notes is the exact failure that discipline exists to prevent. The trade 2.8.2 made is still the right one; the record of its cost was not.
+
+**Stale comment contradicting the code it documents** — `hooks/tests/pretool/security-blocker.test.ts`. A block introduced with the first commit of 2.8.2 read "`@` joined the lookbehind class in 2.8.2." `@` joined nothing: the second commit *removed* the character class entirely in favour of an inverted lookbehind. A leftover from a mid-flight redesign, describing behavior that no longer exists.
+
+**One test label overstated; the other was right.** `cat [.].env` and `cat {.env,other}` were pinned as "reached via bracket glob" and "via brace expansion." Measured against a real fixture directory (`.env` / `..env` / `config.env`), the two are **not symmetric**:
+
+| spelling | reaches the secret? | blocked? | |
+|---|---|---|---|
+| `cat {.env,other}` | **yes** — brace-expands to `.env` | yes | label was accurate |
+| `cat [.].env` | **no** — bash won't let a bracket expression satisfy the leading-dot rule | yes | label overstated |
+| `cat [.]env` | **no** — same rule | no | not a vector either |
+| `cat {.,}env` | **yes** — constructs `.env` | **no** | **a real, unblocked gap** |
+
+So the brace label stays; the bracket one is corrected to what it actually pins (`]` as a preceding delimiter, reaching no file). Neither test is vacuous — both still fail when the lookbehind is reverted.
+
+The genuinely useful finding is the last row: `cat {.,}env` builds the filename without ever containing the literal token, so no text-level pattern can see it. Pre-existing, not a regression, and in the same class as the token obfuscation noted above — recorded so the delimiter fix is not mistaken for shell-expansion coverage.
+
+> This entry was itself corrected before merge. The first draft repeated a reviewer's claim that `cat [.]env` "resolves to the secret and is still allowed"; direct measurement showed it reaches no file. Copying an unverified claim into a correction is the same failure the correction exists to fix — hence the table, which is measured rather than asserted.
+
+### Provenance
+
+Both defects were found by independent reviewers whose reports never reached the caller — a teammate-delivery defect, diagnosed separately. The reports were recovered from the session transcripts and are preserved verbatim at `docs/reviews/2026-07-19_pr38-sec-review-recovered.md` and `docs/reviews/2026-07-19_pr38-release-review-recovered.md`. Both concluded the 2.8.2 regex is correct and should ship as written; every finding they raised was in the prose.
+
 ## [2.8.2] - 2026-07-19 — env-file patterns enumerated their delimiters, so any character not on the list was an open door
 
 ### Fixed
@@ -26,17 +59,33 @@ Enumerating shell metacharacters is unbounded and fails silently, one character 
 
 Scoped npm packages (`npm i @scope/pkg`), `ssh user@host` and `git log --author=@me` carry no env-file token to match, and each is pinned. All seven closed vectors are pinned, and reverting the lookbehind fails exactly those seven tests — verified by mutation, not assumed.
 
-**Known cost, measured rather than asserted.** The inversion blocks strictly more than the enumerated form, so it was swept against 27 realistic developer commands. Three are newly denied:
+**Known cost.** > ⚠ **The figures first published here were wrong and were corrected in 2.8.3.** The original text claimed "three are newly denied … only the first is a real misfire." The true count is **at least eleven**, across three families, and several are worse misfires than the one singled out. The corrected accounting is below; see the 2.8.3 entry for how the error happened.
+
+The inversion blocks strictly more than the enumerated form. Newly denied, by family:
 
 ```
-kubectl get pod -o jsonpath='{.env}'     <-- genuine false positive
+# selector / template idioms — not file references at all
+kubectl get pod  -o jsonpath='{.env}'
+kubectl get pods -o jsonpath='{.items[*].spec.containers[*].env}'
+docker inspect -f '{{.env}}' web            # same shape hits helm / nomad
+
+# gitignore and metadata-only operations — these never read the file
+echo "*.env" >> .gitignore                  # security-POSITIVE setup action
+echo "!.env.example" >> .gitignore
+git check-ignore *.env
+ls -la *.env
+find . -name "*.env"
+
+# literal env-file mentions in message text
 git commit -m "[.env] rotate keys"
 echo "see {.env,.env.local}"
 ```
 
-Only the first is a real misfire: a JSONPath selector is not a file reference. The other two are literal env-file mentions in message text, already denied in their common spellings (`git commit -m "update .env"` has always been blocked), so they are consistent with existing behavior rather than a new class.
+Only the last family is "consistent with existing behavior" (`git commit -m "update .env"` has always been blocked). The first two families are genuine misfires: a JSONPath or Go-template selector is not a file reference, and writing an ignore rule for env files is a routine, security-positive action that never opens the file.
 
-This was accepted deliberately, not overlooked. A PreToolUse deny is terminal for a forked skill, so over-blocking is not a free win — but the alternative is leaving brace expansion, redirects and `scp host:` open, and those are genuine read and exfiltration paths. If the kubectl case proves annoying in practice, the fix is a narrow JSONPath exemption, **not** a return to enumerating delimiters.
+This is still accepted deliberately — the alternative leaves brace expansion, redirects and `scp host:` open, and those are genuine read and exfiltration paths. But a PreToolUse deny is terminal for a forked skill, so the cost is real. If it proves annoying, the narrow fixes are a selector/template exemption and a glob/ignore-rule exemption — **not** a return to enumerating delimiters.
+
+**Scope of the fix — the delimiter class only.** Token obfuscation is untouched and still reaches the file: `cat .e"n"v`, `cat .[e]nv`, `X=env; cat .$X`, `cp *env /tmp/x`. None are regressions (all defeat the pre-2.8.2 pattern identically) and none are reachable by any lookbehind change, since they remove the literal token from the command text. Do not read the delimiter fix as completeness.
 
 ### Added
 
