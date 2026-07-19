@@ -16,9 +16,20 @@ In a project whose stated discipline is *measure, don't assert*, a false measure
 
 **Stale comment contradicting the code it documents** — `hooks/tests/pretool/security-blocker.test.ts`. A block introduced with the first commit of 2.8.2 read "`@` joined the lookbehind class in 2.8.2." `@` joined nothing: the second commit *removed* the character class entirely in favour of an inverted lookbehind. A leftover from a mid-flight redesign, describing behavior that no longer exists.
 
-**Two test labels claimed glob/brace construction is handled; it is not.** `cat [.].env` and `cat {.env,other}` are pinned as "env file reached via bracket glob" and "via brace expansion." Both strings contain a literal `.env` substring and match for *that* reason — not because the shell construction is understood. Verified against a real fixture directory: `[.].env` reaches **no file at all** (a bracket expression cannot satisfy bash's leading-dot rule), while `cat [.]env` and `cat {.,}env` — the spellings that genuinely resolve to the secret — remain **allowed**.
+**One test label overstated; the other was right.** `cat [.].env` and `cat {.env,other}` were pinned as "reached via bracket glob" and "via brace expansion." Measured against a real fixture directory (`.env` / `..env` / `config.env`), the two are **not symmetric**:
 
-The tests are not vacuous: each still fails when the lookbehind is reverted, because each exercises a real preceding delimiter (`]` and `{`). Only the labels overstated. They are relabelled to what they actually pin, and the unresolved spellings are recorded alongside so a future reader does not mistake the delimiter fix for shell-expansion coverage.
+| spelling | reaches the secret? | blocked? | |
+|---|---|---|---|
+| `cat {.env,other}` | **yes** — brace-expands to `.env` | yes | label was accurate |
+| `cat [.].env` | **no** — bash won't let a bracket expression satisfy the leading-dot rule | yes | label overstated |
+| `cat [.]env` | **no** — same rule | no | not a vector either |
+| `cat {.,}env` | **yes** — constructs `.env` | **no** | **a real, unblocked gap** |
+
+So the brace label stays; the bracket one is corrected to what it actually pins (`]` as a preceding delimiter, reaching no file). Neither test is vacuous — both still fail when the lookbehind is reverted.
+
+The genuinely useful finding is the last row: `cat {.,}env` builds the filename without ever containing the literal token, so no text-level pattern can see it. Pre-existing, not a regression, and in the same class as the token obfuscation noted above — recorded so the delimiter fix is not mistaken for shell-expansion coverage.
+
+> This entry was itself corrected before merge. The first draft repeated a reviewer's claim that `cat [.]env` "resolves to the secret and is still allowed"; direct measurement showed it reaches no file. Copying an unverified claim into a correction is the same failure the correction exists to fix — hence the table, which is measured rather than asserted.
 
 ### Provenance
 
