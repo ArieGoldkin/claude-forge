@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Shared hooks-infra library tests (lock, dangerous-bash, input, guards, …).
+  shared-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: shared/hooks-infra/package-lock.json
+      - run: npm ci
+        working-directory: shared/hooks-infra
+      - run: npm test
+        working-directory: shared/hooks-infra
+
+  # Per-plugin lint + typecheck + test. Each plugin's hooks depend on the
+  # shared library via symlinks, so shared deps are installed first.
+  plugins:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin:
+          - continuity-toolkit
+          - devops-toolkit
+          - ai-toolkit
+          - frontend-toolkit
+          - engineering-toolkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugins/${{ matrix.plugin }}/hooks/package-lock.json
+      - name: Install shared hooks-infra deps
+        run: npm ci
+        working-directory: shared/hooks-infra
+      - name: Install plugin hooks deps
+        run: npm ci
+        working-directory: plugins/${{ matrix.plugin }}/hooks
+      - name: Lint
+        run: npm run lint
+        working-directory: plugins/${{ matrix.plugin }}/hooks
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: plugins/${{ matrix.plugin }}/hooks
+      - name: Test
+        run: npm test
+        working-directory: plugins/${{ matrix.plugin }}/hooks
+
+  # Rejects top-level `themes`/`monitors` keys in plugin manifests
+  # (must be nested under `experimental`, CC v2.1.129+).
+  manifest-shape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bad-themes-at-root must fail
+        run: "! bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/bad-themes-at-root.json"
+      - name: bad-monitors-at-root must fail
+        run: "! bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/bad-monitors-at-root.json"
+      - name: good-nested-experimental must pass
+        run: bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/good-nested-experimental.json
+
+  # Static plugin-structure validation via the Claude Code CLI. Non-blocking
+  # (mirrors the GitLab `allow_failure: true`): the CLI install/validate path
+  # may not be available in every fork.
+  validate:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin:
+          - continuity-toolkit
+          - devops-toolkit
+          - ai-toolkit
+          - frontend-toolkit
+          - engineering-toolkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: claude plugin validate plugins/${{ matrix.plugin }}
+
+  # Secret scanning — the enforced CI-side gate. The .pre-commit gitleaks hook
+  # is local-only and bypassable; this job is not. Uses the repo's .gitleaks.toml.
+  # gitleaks-action is license-free for public repositories and individual
+  # accounts (a GITLEAKS_LICENSE is only required for GitHub *organizations*).
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # Advisory dependency audit for the ftk MCP server workspace (non-blocking).
+  # Current advisories live in the official MCP SDK's optional HTTP-transport
+  # deps and are unreachable via the stdio-only server — surfaced for visibility,
+  # not gated. `|| true` keeps it green; promote to blocking if a reachable
+  # runtime advisory ever appears.
+  mcp-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Audit ftk MCP workspace (advisory)
+        working-directory: plugins/frontend-toolkit/mcp
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm audit --omit=dev || true
