@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CONTINUITY_DIRS } from '../../src/lib/continuity.js';
+import { parseHookInput } from '../../src/lib/input.js';
 import { teammateIdleSaver } from '../../src/lifecycle/teammate-idle-saver.js';
 import type { HookInput } from '../../src/types.js';
 
@@ -193,6 +194,45 @@ describe('teammate-idle-saver', () => {
       const result = await teammateIdleSaver(createMockInput());
 
       expect(() => JSON.stringify(result)).not.toThrow();
+    });
+  });
+
+  // Regression (ctk 2.8.5). Every other test in this file hands the handler a
+  // pre-built HookInput with teammate_name already set -- a shape that never
+  // occurs at runtime, because real input is parsed by parseHookInput first.
+  // That gap let 2.8.4 ship a fix that could not work: the handler read
+  // teammate_name while normalizeInput's allowlist stripped it, so every real
+  // idle logged "unknown". These tests drive the RAW payload through the real
+  // parse path, so the handler is exercised the way Claude Code actually calls it.
+  describe('end-to-end from raw stdin payload (2.8.5 regression)', () => {
+    // Captured verbatim from a real TeammateIdle event, 2026-07-25.
+    const REAL_PAYLOAD =
+      '{"session_id":"a5f8a1c4","transcript_path":"/tmp/t.jsonl","cwd":"/repo",' +
+      '"prompt_id":"246ddadb","permission_mode":"auto","hook_event_name":"TeammateIdle",' +
+      '"teammate_name":"r1-probe-C","team_name":"session-9d7a8f62"}';
+
+    it('should record the real teammate_name when driven from a raw payload', async () => {
+      createFullStructure(tempDir);
+      const contextFile = createContextFile(tempDir);
+
+      // The real call path: raw JSON -> parseHookInput -> handler.
+      await teammateIdleSaver(parseHookInput(REAL_PAYLOAD));
+
+      const content = JSON.parse(fs.readFileSync(contextFile, 'utf8'));
+      expect(content.last_agent_idle.teammate_name).toBe('r1-probe-C');
+      expect(content.last_agent_idle.team_name).toBe('session-9d7a8f62');
+    });
+
+    it('should not fall back to "unknown" when the payload carries the fields', async () => {
+      createFullStructure(tempDir);
+      const contextFile = createContextFile(tempDir);
+
+      await teammateIdleSaver(parseHookInput(REAL_PAYLOAD));
+
+      const content = JSON.parse(fs.readFileSync(contextFile, 'utf8'));
+      // This is the exact assertion that fails on 2.8.4.
+      expect(content.last_agent_idle.teammate_name).not.toBe('unknown');
+      expect(content.last_agent_idle.team_name).not.toBe('unknown');
     });
   });
 });
