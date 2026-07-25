@@ -2,6 +2,53 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.9.0] - 2026-07-25 — four more handlers were inert, including a security control; plus a structural guard so the class stops recurring
+
+`dist` is rebuilt (shared library + hook source changed).
+
+### Fixed
+
+**Four registered PostToolUse/PostToolUseFailure handlers never saw their payload.** Same root cause as 2.8.5 — `normalizeInput`'s `passThrough` allowlist — but in two distinct shapes:
+
+| Handler | Read | Problem | Effect |
+|---|---|---|---|
+| `posttool/secret-detector` | `tool_output` | wrong name **and** not allowlisted | **never scanned a single byte of tool output for secrets** |
+| `posttool/error-warner` | `tool_output` | wrong name **and** not allowlisted | never analyzed command output |
+| `posttool/bash-output-measurer` | `tool_output` | wrong name **and** not allowlisted | recorded `outputBytes: 0` for every event |
+| `posttool/failure-logger` | `error`, `is_interrupt` | names correct, **not allowlisted** | never logged a failure, never emitted a fix hint |
+
+**Field names settled by live payload capture, not inference.** Temporary dumper hooks captured both events from CC 2.1.220:
+
+- `PostToolUse` sends **`tool_response`** = `{stdout, stderr, interrupted, isImage, noOutputExpected}`
+- `PostToolUseFailure` sends **`error`** (string) + **`is_interrupt`** (boolean)
+- **`tool_output` is sent by neither event** — the three handlers read a key Claude Code has never produced
+
+Renamed `tool_output` → `tool_response` in the three PostToolUse handlers, and added `tool_response`, `error`, `is_interrupt` to `passThrough`. For the three renamed handlers either change alone would have left them inert; `failure-logger` needed only the allowlist entry.
+
+An earlier draft of the issue claimed `is_interrupt` was absent from the binary. That was wrong — it came from counting *quoted* occurrences for one field and *quoted + bare* for another. The capture settled it: `is_interrupt` is real.
+
+### Added
+
+- **A structural guard** (`tests/lib/passthrough-completeness.test.ts`). Every prior fix pinned specific field *names*; those tests pass while new instances ship — 2,075 green tests coexisted with these four inert handlers. The guard parses every `interface X extends HookInput { … }` across **the shared tree and all five plugin hook trees** and asserts each declared field appears in `passThrough`, reporting the offending `file → field` pairs. Verified against three must-fail controls: removing the allowlist entries, reverting one rename, and planting a violation in a plugin directory.
+
+  **It is a net, not a proof.** It matches one declaration form, so a cast, bracket access, destructuring, a type alias, or a multi-base interface all pass it unseen — and those need no declaration at all, making them the *likely* shape of the next instance. It also does not parse `HookInput` itself, which declares `effort`, `background_tasks` and `session_crons` — none allowlisted. A live example the guard cannot see sits in the tree today: `phi-output-redactor` reads `message`/`text`/`assistant_message` by bracket access; all three are stripped. Full bypass list is documented in the test header. **The real class fix is to stop `normalizeInput` dropping data at all** — forward unknown fields, denylist what must be scrubbed. The allowlist enforces no security boundary (it is CC's own payload either way), so it buys nothing and costs silent data loss. Tracked separately.
+
+- **End-to-end payload tests** (`tests/posttool/posttool-payload-e2e.test.ts`) driving raw captured JSON through `parseHookInput` into each of the four handlers. Every pre-existing test for these built a `HookInput` by hand — a shape that never occurs at runtime — which is why the defect was invisible. **7 of the 8 fail on pre-fix code.**
+
+### Correction to an earlier draft of this entry
+
+An earlier draft claimed `error-warner` stayed inert for a second reason: that no `error_rules.json` exists in the repo or shipped plugin. **That was false.** The file is git-tracked at `shared/configs/rules/error_rules.json` and symlinked into `plugins/continuity-toolkit/.claude/rules/`, and `loadErrorRules()` finds it via its `$CLAUDE_PLUGIN_ROOT` fallback. **The field rename alone fully restores `error-warner`** — verified end-to-end with no mocks, emitting a real tip from the shipped rules.
+
+The false claim had a cost worth recording: the e2e test for that handler was deliberately weakened to `expect(result.continue).toBe(true)`, which is **tautological** (`errorWarner` returns `continue: true` on every path, including the inert one) and passed identically before and after the fix. It is now a real assertion.
+
+Root cause of the error: the check was `find … -not -path … 2>/dev/null`. The local `rtk` proxy rejects `find` with compound predicates, and `2>/dev/null` swallowed that error — turning a **tool failure** into a convincing empty result. `git ls-files | grep` refutes it in one command.
+
+Separately noted: `error-warner`'s `exit_code` branch is unreachable for Bash — the captured `tool_response` carries no `exit_code`, so error detection rests entirely on its substring heuristics.
+
+### Note
+
+Behaviorally inert for dtk/atk/ftk/etk — none of their registered hooks read these fields — so their `dist` is rebuilt for source consistency but their versions are unchanged.
+
 ## [2.8.5] - 2026-07-25 — 2.8.4's fix was inert: `normalizeInput` stripped the very fields it taught the handlers to read
 
 `dist` is rebuilt (shared library source changed).

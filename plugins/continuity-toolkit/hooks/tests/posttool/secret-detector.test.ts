@@ -25,7 +25,7 @@ import type { HookInput } from '../../src/types.js';
 // =============================================================================
 
 interface PostToolUseInput extends HookInput {
-  tool_output?: {
+  tool_response?: {
     stdout?: string;
     stderr?: string;
     exit_code?: number;
@@ -41,7 +41,7 @@ function createBashOutputInput(
   return {
     tool_name: 'Bash',
     tool_input: { command },
-    tool_output: {
+    tool_response: {
       stdout,
       stderr: options?.stderr,
       exit_code: options?.exit_code ?? 0,
@@ -439,7 +439,7 @@ describe('secretDetector', () => {
   });
 
   describe('no output', () => {
-    it('should return silent success when no tool_output', async () => {
+    it('should return silent success when no tool_response', async () => {
       const input = createBashNoOutputInput('echo hello');
       const result = await secretDetector(input);
       expect(result.continue).toBe(true);

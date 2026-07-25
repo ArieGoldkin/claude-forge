@@ -189,6 +189,13 @@ function normalizeInput(raw) {
     "task_id",
     "task_subject",
     "task_description",
+    // PostToolUse / PostToolUseFailure payloads. All three captured live from
+    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
+    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
+    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
+    "tool_response",
+    "error",
+    "is_interrupt",
     // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
     // (that was the 2.8.4 finding); kept for any event that does.
     "agent_type",
