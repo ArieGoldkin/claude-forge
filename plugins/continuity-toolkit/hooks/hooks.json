@@ -27,11 +27,6 @@
           },
           {
             "type": "command",
-            "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/bin/run-hook-wrapper.sh lifecycle/sandbox-reaper",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "sh ${CLAUDE_PLUGIN_ROOT}/hooks/bin/monitor-forward.sh",
             "timeout": 3
           }

@@ -1,52 +1,56 @@
 /**
- * In-memory provider used by the entire T2 test suite.
+ * In-memory provider backing the unit tests.
  *
- * T2 ships with the live run deliberately deferred to T4/Gate 1 (see the Phase-0
- * decision in `.develop/pipeline-state.md`): `@vercel/sandbox` needs
- * `{ token, projectId, teamId }` — a Vercel *project*, not merely a token — so
- * "provision → seed → teardown proven against the provider" is not satisfiable
- * here. This fake proves the *interface* and the launcher's sequencing.
+ * T2 defers the live run to T4/Gate 1, so this fake is what the launcher's
+ * sequencing is proven against. **Behaviour parity with the real SDK is
+ * UNPROVEN** — the fake implements `SandboxProvider`, so the compiler catches
+ * signature drift, but nothing here shows Vercel behaves this way at runtime.
  *
- * KNOWN LIMIT, stated plainly: behaviour parity with the real SDK is UNPROVEN.
- * The fake implements `SandboxProvider`, so the compiler catches signature
- * drift, but nothing here demonstrates that Vercel behaves this way at runtime.
- * That is T4's job and must not be claimed before then.
+ * ## Fidelity rules this fake exists to honour
+ *
+ * A review found that an earlier version made two whole branches untestable by
+ * being too lenient, so these are now deliberate:
+ *
+ * 1. **`destroy()` does NOT imply `stopped`.** It used to, which meant the test
+ *    asserting "both stops and destroys" passed with the entire `stop()` call
+ *    deleted — the snapshot-storage cost regression it named was the one thing
+ *    it could not catch. Callers assert on {@link FakeSandbox.calls} instead.
+ * 2. **Unknown ids raise `SandboxNotFoundError`,** like a real provider, rather
+ *    than succeeding silently and hiding the reaper's not-found path.
  *
  * @module providers/fake
  */
 
 import {
+  type CallOptions,
   type ExecResult,
   type ProvisionOptions,
   type SandboxHandle,
-  type SandboxProvider,
   SandboxNotFoundError,
+  type SandboxProvider,
   type SeedFile,
 } from '../provider.js';
 
 /** Operations a test can force to fail. */
-export type FaultPoint = 'provision' | 'seed' | 'exec' | 'stop' | 'destroy';
+export type FaultPoint = 'provision' | 'seed' | 'exec' | 'stop' | 'destroy' | 'exists';
 
-interface FakeSandbox {
+export interface FakeSandbox {
   handle: SandboxHandle;
   files: Map<string, string>;
   commands: string[];
+  /** Ordered log of lifecycle calls — `['stop','destroy']` on a clean teardown. */
+  calls: string[];
   stopped: boolean;
   destroyed: boolean;
 }
 
-/**
- * Deterministic, dependency-free `SandboxProvider`.
- *
- * Ids are sequential rather than random so assertions can name them directly.
- */
+/** Deterministic, dependency-free `SandboxProvider`. */
 export class FakeProvider implements SandboxProvider {
   readonly name = 'fake';
 
   /** Every sandbox ever provisioned, including destroyed ones, for assertions. */
   readonly sandboxes = new Map<string, FakeSandbox>();
 
-  private counter = 0;
   private readonly faults = new Set<FaultPoint>();
 
   /** Force `point` to reject on its next and all subsequent calls. */
@@ -73,58 +77,76 @@ export class FakeProvider implements SandboxProvider {
     return sbx;
   }
 
-  /** Sandboxes that were provisioned and never destroyed — i.e. leaks. */
+  /** Sandboxes provisioned and never destroyed — i.e. leaks. */
   liveIds(): string[] {
     return [...this.sandboxes.values()].filter((s) => !s.destroyed).map((s) => s.handle.id);
   }
 
+  /** Ordered lifecycle calls recorded for a sandbox. */
+  callsFor(id: string): string[] {
+    return this.sandboxes.get(id)?.calls ?? [];
+  }
+
   async provision(opts: ProvisionOptions): Promise<SandboxHandle> {
     this.check('provision');
-    this.counter += 1;
     const handle: SandboxHandle = {
-      id: `fake_${this.counter}`,
+      id: opts.name,
       provider: this.name,
+      // Stands in for the provider-reported value; the real provider may clamp.
       expiresAt: new Date(Date.now() + opts.timeoutMs),
     };
     this.sandboxes.set(handle.id, {
       handle,
       files: new Map(),
       commands: [],
+      calls: ['provision'],
       stopped: false,
       destroyed: false,
     });
     return handle;
   }
 
-  async seed(handle: SandboxHandle, files: SeedFile[]): Promise<void> {
+  async seed(handle: SandboxHandle, files: SeedFile[], _opts?: CallOptions): Promise<void> {
     this.check('seed');
     const sbx = this.get(handle);
+    sbx.calls.push('seed');
     for (const file of files) {
       sbx.files.set(file.path, file.content);
     }
   }
 
-  async exec(handle: SandboxHandle, command: string, args: string[] = []): Promise<ExecResult> {
+  async exec(
+    handle: SandboxHandle,
+    command: string,
+    args: string[] = [],
+    _opts?: CallOptions
+  ): Promise<ExecResult> {
     this.check('exec');
     const sbx = this.get(handle);
     const line = [command, ...args].join(' ');
+    sbx.calls.push('exec');
     sbx.commands.push(line);
     return { exitCode: 0, stdout: `ran: ${line}`, stderr: '' };
   }
 
-  async stop(handle: SandboxHandle): Promise<void> {
+  async stop(handle: SandboxHandle, _opts?: CallOptions): Promise<void> {
     this.check('stop');
-    // Unknown ids raise, matching a real provider's not-found rather than
-    // silently succeeding — a lenient fake would hide whole branches from the
-    // suite. Re-stopping a known sandbox stays idempotent.
     const sbx = this.get(handle);
+    sbx.calls.push('stop');
     sbx.stopped = true;
   }
 
-  async destroy(handle: SandboxHandle): Promise<void> {
+  async destroy(handle: SandboxHandle, _opts?: CallOptions): Promise<void> {
     this.check('destroy');
     const sbx = this.get(handle);
-    sbx.stopped = true;
+    sbx.calls.push('destroy');
+    // Deliberately does NOT set `stopped` -- see the fidelity note above.
     sbx.destroyed = true;
+  }
+
+  async exists(handle: SandboxHandle, _opts?: CallOptions): Promise<boolean> {
+    this.check('exists');
+    const sbx = this.sandboxes.get(handle.id);
+    return sbx !== undefined && !sbx.destroyed;
   }
 }

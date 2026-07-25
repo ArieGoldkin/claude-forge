@@ -155,13 +155,6 @@ registerHook('lifecycle/session-loader', 'Load continuity context at session sta
 import { sessionEnd } from './lifecycle/session-end.js';
 registerHook('lifecycle/session-end', 'Mark session as cleanly ended', sessionEnd);
 
-import { sandboxReaper } from './lifecycle/sandbox-reaper.js';
-registerHook(
-  'lifecycle/sandbox-reaper',
-  'Reap orphaned sandboxes (inert unless the maintainer launcher is installed)',
-  sandboxReaper
-);
-
 import { preCompactSaver } from './lifecycle/pre-compact-saver.js';
 registerHook(
   'lifecycle/pre-compact-saver',

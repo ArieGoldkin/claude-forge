@@ -1,16 +1,27 @@
 /**
  * Reaper — destroys sandboxes the happy path failed to clean up.
  *
- * This is the recovery layer for the failure R1 (#51) measured: a terminating
- * event gives a process ZERO turns afterward, so `finally` blocks and teardown
- * calls scheduled after the work may never execute. Anything they miss shows up
- * here as a leftover registry row.
+ * Recovery for the failure R1 (#51) measured: a terminating event gives a
+ * process ZERO turns afterward, so `finally` blocks may never run. Whatever they
+ * miss shows up here as a leftover registry row.
  *
- * It is explicitly **best-effort**, and the honest framing matters. It needs a
- * reachable provider and working credentials; when invoked from a hook it is
- * also racing session shutdown. It is not the guarantee — the provider-side
- * creation timeout is. Do not describe this as a completeness proof; ctk 2.9.0
- * already shipped one overclaimed guard and a reviewer took it apart.
+ * Best-effort, and the framing matters. It needs a reachable provider and working
+ * credentials. It is not what stops a sandbox costing money — compute is bounded
+ * by the creation timeout and storage by the snapshot expiration, both set at
+ * create time. Do not describe this as a completeness proof.
+ *
+ * ## Why there is no longer an "expired" shortcut
+ *
+ * An earlier version dropped any row whose `expires_at` had passed when destroy
+ * failed, reasoning the provider must already have terminated it. Two things were
+ * wrong. `expires_at` bounds a SESSION, not the sandbox — a timed-out sandbox
+ * still exists and its snapshot still bills. And the value was a client-side
+ * guess, wrong whenever the plan clamped the timeout or a session was resumed. A
+ * harness demonstrated the consequence: a live, undeleted sandbox whose only
+ * record had been deleted.
+ *
+ * A row is now dropped only when the provider itself confirms the sandbox is
+ * gone. "Unreachable" is never treated as "absent".
  *
  * @module reap
  */
@@ -25,40 +36,53 @@ export interface ReapOptions {
   projectDir: string;
   /** Provider implementations keyed by the `provider` field of a record. */
   providers: Map<string, SandboxProvider>;
-  /** Injectable clock so expiry handling is testable. */
-  now?: Date;
+  /**
+   * Only reap rows belonging to this session.
+   *
+   * Omit to reap everything, which is correct for a maintainer running cleanup
+   * by hand but NOT for anything automatic: two sessions can share a project, and
+   * an unscoped reap destroys the other session's in-flight sandbox.
+   */
+  sessionId?: string;
 }
 
 export interface ReapResult {
-  /** Sandboxes destroyed and deregistered. */
+  /** Destroyed (or confirmed already gone) and deregistered. */
   reaped: string[];
-  /** Rows dropped because the provider had already auto-terminated them. */
-  expired: string[];
-  /** Rows left in place — provider unreachable, so a later run retries. */
+  /** Rows left in place — provider unreachable or sandbox still alive. */
   failed: string[];
+  /** Destroyed at the provider, but the registry row could not be removed. */
+  orphanedRows: string[];
   /** Rows left in place because no implementation is registered for them. */
   unknownProvider: string[];
+  /** Rows skipped because they belong to another session. */
+  skipped: string[];
 }
 
 /**
- * Destroy every sandbox recorded in the registry.
- *
- * Expiry handling is the subtle part. Once `expires_at` has passed the provider
- * has already terminated the sandbox, so a failing `destroy` is expected rather
- * than alarming — the row is dropped anyway. Without that, expired rows would
- * accumulate forever and every future reap would retry corpses.
+ * Destroy every sandbox recorded in the registry (optionally scoped to one
+ * session).
  */
 export async function reap(opts: ReapOptions): Promise<ReapResult> {
-  const { projectDir, providers } = opts;
-  const now = opts.now ?? new Date();
+  const { projectDir, providers, sessionId } = opts;
 
-  const result: ReapResult = { reaped: [], expired: [], failed: [], unknownProvider: [] };
+  const result: ReapResult = {
+    reaped: [],
+    failed: [],
+    orphanedRows: [],
+    unknownProvider: [],
+    skipped: [],
+  };
 
   for (const record of readRegistry(projectDir)) {
-    const provider = providers.get(record.provider);
+    if (sessionId !== undefined && record.session_id !== sessionId) {
+      result.skipped.push(record.sandbox_id);
+      continue;
+    }
 
+    const provider = providers.get(record.provider);
     if (!provider) {
-      // Keep the row: dropping it would strand a real sandbox with no trace.
+      // Keep the row: dropping it strands a real sandbox with no trace.
       result.unknownProvider.push(record.sandbox_id);
       continue;
     }
@@ -69,18 +93,31 @@ export async function reap(opts: ReapOptions): Promise<ReapResult> {
       expiresAt: new Date(record.expires_at),
     };
 
-    const destroyed = await teardown(provider, handle, projectDir);
+    const { destroyed, deregistered } = await teardown(provider, handle, projectDir);
 
-    if (destroyed) {
+    if (destroyed && deregistered) {
       result.reaped.push(record.sandbox_id);
       continue;
     }
 
-    if (handle.expiresAt.getTime() <= now.getTime()) {
-      // Already auto-terminated by the provider; the row is the only leftover.
-      await removeRecord(projectDir, record.sandbox_id);
-      result.expired.push(record.sandbox_id);
+    if (destroyed) {
+      // Gone at the provider but the row survives -- it will be retried, and
+      // meanwhile it keeps the reaper looking like it has work to do.
+      result.orphanedRows.push(record.sandbox_id);
       continue;
+    }
+
+    // Destroy failed. Ask the provider whether the sandbox is actually gone
+    // before touching the row. Only an authoritative "no" justifies dropping the
+    // last record of something that might still be running.
+    try {
+      if (!(await provider.exists(handle))) {
+        const removed = await removeRecord(projectDir, record.sandbox_id);
+        (removed ? result.reaped : result.orphanedRows).push(record.sandbox_id);
+        continue;
+      }
+    } catch {
+      // Unreachable. Keep the row.
     }
 
     result.failed.push(record.sandbox_id);
@@ -89,10 +126,7 @@ export async function reap(opts: ReapOptions): Promise<ReapResult> {
   return result;
 }
 
-/**
- * CLI entrypoint. Invoked detached by ctk's `sandbox-reaper` hook, and runnable
- * by hand as `npm run reap`.
- */
+/** CLI entrypoint. Run by hand as `npm run reap [projectDir]`. */
 async function main(): Promise<void> {
   const projectDir = process.argv[2] ?? process.env['CLAUDE_PROJECT_DIR'] ?? process.cwd();
 
@@ -104,7 +138,7 @@ async function main(): Promise<void> {
 
   process.stdout.write(`${JSON.stringify(result)}\n`);
 
-  if (result.failed.length > 0) {
+  if (result.failed.length > 0 || result.orphanedRows.length > 0) {
     process.exitCode = 1;
   }
 }

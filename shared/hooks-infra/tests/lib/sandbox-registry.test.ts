@@ -97,6 +97,40 @@ describe('readRegistry', () => {
 });
 
 // =============================================================================
+// SHAPE VALIDATION — one case per field.
+//
+// The junk rows above are all rejected by the `sandbox_id` check alone, so they
+// pin only that one field: deleting the status-enum, empty-id, or expires_at
+// checks left the suite green. Every field the reaper depends on now has a case
+// that fails if its check is removed.
+// =============================================================================
+
+describe('record validation', () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['an empty sandbox_id', { sandbox_id: '' }],
+    ['a non-string sandbox_id', { sandbox_id: 42 }],
+    ['a non-string provider', { provider: null }],
+    ['a non-string created_at', { created_at: 0 }],
+    // expires_at is load-bearing: the reaper reads it when deciding what to do
+    // with a row it could not destroy.
+    ['a non-string expires_at', { expires_at: 12345 }],
+    ['a non-string session_id', { session_id: {} }],
+    ['a status outside the enum', { status: 'exploded' }],
+    ['a non-string status', { status: 3 }],
+  ];
+
+  it.each(cases)('rejects %s', (_label, overrides) => {
+    writeRaw(JSON.stringify([{ ...record(), ...overrides }]));
+    expect(readRegistry(projectDir)).toEqual([]);
+  });
+
+  it.each(['provisioning', 'running', 'stopped'])('accepts status %s', (status) => {
+    writeRaw(JSON.stringify([{ ...record(), status }]));
+    expect(readRegistry(projectDir)).toHaveLength(1);
+  });
+});
+
+// =============================================================================
 // WRITE
 // =============================================================================
 
@@ -120,16 +154,54 @@ describe('addRecord', () => {
     expect(out[0]?.status).toBe('running');
   });
 
-  it('leaves no .tmp file behind (atomic temp+rename)', async () => {
+  it('leaves no .tmp residue', async () => {
+    // Deliberately NOT titled "atomic temp+rename": replacing the temp+rename
+    // with a plain writeFileSync also satisfies this, so it pins residue only.
+    // True atomicity is a cross-process property this suite cannot observe.
     await addRecord(projectDir, record());
     const dir = path.dirname(registryPath(projectDir));
     expect(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
-  it('does not lose records under concurrent writes', async () => {
+  it('does not lose records across sequential writes', async () => {
+    // Note: `Promise.all` here would prove nothing. The read-modify-write is
+    // synchronous once the lock is held, so same-thread callers cannot interleave
+    // and the property holds even with the lock deleted. Real contention is
+    // cross-PROCESS — the hook, a detached reaper, and the launcher — and is
+    // pinned by the held-lock test below instead.
     const ids = ['a', 'b', 'c', 'd', 'e'];
-    await Promise.all(ids.map((id) => addRecord(projectDir, record({ sandbox_id: id }))));
+    for (const id of ids) {
+      await addRecord(projectDir, record({ sandbox_id: id }));
+    }
     expect(readRegistry(projectDir).map((r) => r.sandbox_id).sort()).toEqual(ids);
+  });
+
+  it('refuses to write while another holder has the lock', async () => {
+    // This is what pins `acquireLock`: without it the write succeeds and this
+    // fails. Simulates a concurrent process mid-write.
+    const lockDir = `${registryPath(projectDir)}.lock`;
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true });
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+
+    try {
+      await expect(addRecord(projectDir, record())).resolves.toBe(false);
+      expect(readRegistry(projectDir)).toEqual([]);
+    } finally {
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes again once the lock is released', async () => {
+    const lockDir = `${registryPath(projectDir)}.lock`;
+    fs.mkdirSync(path.dirname(lockDir), { recursive: true });
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+    await addRecord(projectDir, record());
+    fs.rmSync(lockDir, { recursive: true, force: true });
+
+    await expect(addRecord(projectDir, record())).resolves.toBe(true);
+    expect(readRegistry(projectDir)).toHaveLength(1);
   });
 });
 
