@@ -182,6 +182,16 @@ function normalizeInput(raw) {
   const passThrough = [
     "source",
     "model",
+    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
+    // Task* additionally send task_id / task_subject / task_description.
+    // Verified against a captured live TeammateIdle payload (2026-07-25).
+    "teammate_name",
+    "team_name",
+    "task_id",
+    "task_subject",
+    "task_description",
+    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
+    // (that was the 2.8.4 finding); kept for any event that does.
     "agent_type",
     "agent_id",
     "worktree_path",

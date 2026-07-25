@@ -205,6 +205,56 @@ describe('parseHookInput', () => {
       expect(result.tool_name).toBe('Bash');
     });
   });
+
+  // Regression: ctk 2.8.4 corrected the agent-team handlers to read
+  // teammate_name/team_name, but normalizeInput's passThrough allowlist did not
+  // include those names -- so they were stripped before any handler saw them and
+  // every idle still logged "unknown". The 2.8.4 verification checked WHAT CC
+  // SENDS (binary strings, live probe, message envelope) but never that the field
+  // survived our own normalizer. These assertions pin the data flow, not the name.
+  describe('agent-team field passthrough (2.8.5 regression)', () => {
+    // Captured verbatim from a real TeammateIdle payload, 2026-07-25.
+    const REAL_TEAMMATE_IDLE_PAYLOAD =
+      '{"session_id":"a5f8a1c4","transcript_path":"/tmp/t.jsonl","cwd":"/repo",' +
+      '"permission_mode":"auto","hook_event_name":"TeammateIdle",' +
+      '"teammate_name":"r1-probe-C","team_name":"session-9d7a8f62"}';
+
+    it('should preserve teammate_name and team_name from a real TeammateIdle payload', () => {
+      const result = parseHookInput(REAL_TEAMMATE_IDLE_PAYLOAD) as Record<string, unknown>;
+
+      expect(result['teammate_name']).toBe('r1-probe-C');
+      expect(result['team_name']).toBe('session-9d7a8f62');
+    });
+
+    it('should NOT silently coerce a present teammate_name into undefined', () => {
+      // The exact failure shape: handlers do `input.teammate_name || 'unknown'`,
+      // so a dropped field degrades to a plausible default instead of throwing.
+      const result = parseHookInput(REAL_TEAMMATE_IDLE_PAYLOAD) as Record<string, unknown>;
+
+      expect(result['teammate_name']).toBeDefined();
+      expect(result['teammate_name']).not.toBe('unknown');
+    });
+
+    it('should preserve task_id, task_subject and task_description for Task* events', () => {
+      const json =
+        '{"hook_event_name":"TaskCreated","task_id":"t-42","task_subject":"Fix login",' +
+        '"task_description":"Users cannot log in","teammate_name":"builder","team_name":"team-1"}';
+      const result = parseHookInput(json) as Record<string, unknown>;
+
+      expect(result['task_id']).toBe('t-42');
+      expect(result['task_subject']).toBe('Fix login');
+      expect(result['task_description']).toBe('Users cannot log in');
+      expect(result['teammate_name']).toBe('builder');
+    });
+
+    it('should still pass through legacy agent_id/agent_type when an event sends them', () => {
+      const json = '{"hook_event_name":"SubagentStop","agent_id":"a-1","agent_type":"general"}';
+      const result = parseHookInput(json) as Record<string, unknown>;
+
+      expect(result['agent_id']).toBe('a-1');
+      expect(result['agent_type']).toBe('general');
+    });
+  });
 });
 
 describe('getToolName', () => {

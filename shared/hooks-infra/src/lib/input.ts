@@ -200,10 +200,28 @@ function normalizeInput(raw: unknown): HookInput {
     (normalized as unknown as Record<string, unknown>)['hook_event_name'] = obj['hook_event_name'];
   }
 
-  // Pass through other common fields from Claude Code
+  // Pass through other common fields from Claude Code.
+  //
+  // IMPORTANT: this is an ALLOWLIST — any field absent here is silently dropped
+  // before handlers ever see it. A handler that reads a field missing from this
+  // list is inert, and fails as a plausible-looking default rather than an error.
+  // ctk 2.8.4 shipped exactly that bug: the agent-team lifecycle handlers were
+  // corrected to read `teammate_name`/`team_name`, but those names were not added
+  // here, so they were stripped and every idle still logged "unknown". When adding
+  // a field read to any handler, add it here too and cover it end-to-end.
   const passThrough = [
     'source',
     'model',
+    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
+    // Task* additionally send task_id / task_subject / task_description.
+    // Verified against a captured live TeammateIdle payload (2026-07-25).
+    'teammate_name',
+    'team_name',
+    'task_id',
+    'task_subject',
+    'task_description',
+    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
+    // (that was the 2.8.4 finding); kept for any event that does.
     'agent_type',
     'agent_id',
     'worktree_path',

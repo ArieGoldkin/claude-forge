@@ -2,7 +2,36 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.8.5] - 2026-07-25 — 2.8.4's fix was inert: `normalizeInput` stripped the very fields it taught the handlers to read
+
+`dist` is rebuilt (shared library source changed).
+
+### Fixed
+
+**`normalizeInput()` in `lib/input.ts` is an allowlist, and 2.8.4's field names were not on it.** The function does not pass the parsed payload through — it builds a *new* object from `tool_name`, `session_id`, `tool_input` plus a fixed `passThrough` array. That array still listed the old `agent_id`/`agent_type` and never listed `teammate_name`, `team_name`, `task_id`, `task_subject`, or `task_description`.
+
+So 2.8.4 corrected the three agent-team handlers to read the right fields, and normalization deleted those fields one layer earlier. **Every real teammate idle still recorded `"unknown"` — the exact symptom 2.8.4 set out to fix.** The handlers' `input.teammate_name || 'unknown'` turned a dropped field into a plausible default instead of an error, which is why it looked like it had worked.
+
+Added the five agent-team fields to `passThrough`. Legacy `agent_id`/`agent_type` are retained for any event that does send them.
+
+**Why 2.8.4's verification missed it.** That release was checked three ways — the v2.1.215 binary's hook-input strings, a live named-teammate probe, and the agent-team message envelope. All three answer *what Claude Code sends*. None checked *what our own normalizer forwards*. The live probe recorded `"unknown"` and that was read as confirmation the old code was broken; the new code produces an identical symptom by a different mechanism, so the probe could not distinguish them.
+
+Evidence for this fix:
+- A raw `TeammateIdle` payload captured from a live idle contains `"teammate_name":"r1-probe-C","team_name":"session-9d7a8f62"` — 2.8.4's field names are correct.
+- Feeding that exact payload to the installed 2.8.4 hook wrote `teammate_name: "unknown"`, reproducibly.
+
+### Added
+
+- **End-to-end regression tests that drive the raw payload through `parseHookInput` into the handler**, rather than constructing a `HookInput` by hand. Every pre-existing test in `teammate-idle-saver.test.ts` built the input object directly — a shape that never occurs at runtime — which is why 2,073 green tests did not catch this. The new tests fail on 2.8.4 with `expected 'unknown' to be 'r1-probe-C'` (verified by reverting the fix) and pass on 2.8.5.
+- A comment on `passThrough` recording that it is an allowlist and that adding a field read to a handler requires adding it here too.
+
+### Note
+
+Behaviorally inert for dtk/atk/ftk/etk — none of their registered hooks read these fields — so their `dist` is rebuilt for source consistency but their versions are unchanged.
+
 ## [2.8.4] - 2026-07-19 — the three agent-team lifecycle hooks read fields Claude Code never sends; they logged "unknown" since they shipped
+
+> **⚠ CORRECTION (2026-07-25, see [2.8.5]):** the field names below are correct, but **this release did not take effect**. `normalizeInput()` stripped `teammate_name`/`team_name`/`task_*` before any handler saw them, so the hooks continued to log `"unknown"` exactly as before. Fixed in 2.8.5. The "verified three independent ways" claim below verified what CC *sends* — not that the fields survived our own input normalization. Annotating rather than rewriting, so a reader landing here is not handed a fix that never worked.
 
 Behavior change in the `TeammateIdle`, `TaskCreated` and `TaskCompleted` hooks. **`dist` is rebuilt** — this compiles from changed hook source, unlike 2.8.3.
 
