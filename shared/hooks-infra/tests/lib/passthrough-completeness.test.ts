@@ -21,9 +21,44 @@
  *
  * Every previous fix pinned specific FIELD NAMES. Those tests pass while new
  * instances of the same defect ship — 2,075 green tests coexisted with four
- * inert handlers. This test pins the MECHANISM instead: it fails whenever a
- * handler declares an input field the allowlist does not carry, regardless of
- * which field it is.
+ * inert handlers. This test widens that to a PATTERN: it fails whenever a
+ * handler declares an input field, via the canonical declaration form, that the
+ * allowlist does not carry — whatever the field is called.
+ *
+ * ── WHAT THIS DOES NOT CATCH ────────────────────────────────────────────────
+ *
+ * This is a text-level check for ONE declaration form:
+ *     interface X extends HookInput { ... }
+ * It is a useful net, NOT a complete one. Do not read a green run as proof that
+ * no inert handler exists. Confirmed bypasses, each verified by writing a real
+ * handler and watching this test stay green:
+ *
+ *   type X = HookInput & { f?: string }          type alias, not an interface
+ *   interface X extends HookInput, Other { }     second base breaks the regex
+ *   type B = HookInput; interface X extends B    indirect base
+ *   (input as any).f                             inline cast, no declaration
+ *   (input as Record<string, unknown>)['f']      bracket access
+ *   const { f } = input as ...                   destructuring
+ *
+ * The last three need no type declaration at all, and are the natural way to
+ * reach a field `HookInput` does not declare — so they are the LIKELY shape of
+ * the next instance, not an exotic one. A live example sits in the tree today:
+ * plugins/continuity-toolkit/hooks/src/messagedisplay/phi-output-redactor.ts
+ * reads `message` / `text` / `assistant_message` by bracket access; all three
+ * are stripped, and this test cannot see it.
+ *
+ * It also does not parse `HookInput` itself, which declares `effort`,
+ * `background_tasks` and `session_crons` — none of them allowlisted. A handler
+ * reading those gets `undefined` with a green typecheck and a green run here.
+ *
+ * ── THE ACTUAL CLASS FIX ────────────────────────────────────────────────────
+ *
+ * A parser-based guard will always be syntax whack-a-mole. The defect exists
+ * because normalizeInput DROPS DATA, so only normalizeInput can end it: forward
+ * unknown top-level fields and denylist the few that must be scrubbed, instead
+ * of allowlisting the few that may pass. The allowlist enforces no security
+ * boundary — it is Claude Code's own payload either way — so it buys nothing
+ * and costs silent data loss. Tracked separately.
  *
  * @module tests/lib/passthrough-completeness
  */
@@ -35,20 +70,73 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(HERE, '../../src');
+const REPO_ROOT = path.resolve(HERE, '../../../..');
 const INPUT_LIB = path.join(SRC, 'lib/input.ts');
-const HOOKS_DIR = path.join(SRC, 'hooks');
+
+/**
+ * Every directory holding hook implementations.
+ *
+ * Both the shared tree AND each plugin's own tree: plugin-specific handlers
+ * (ctk's hipaa-context-injector / phi-output-redactor / session-loader, dtk's
+ * repo-access-guard, etk's review-logger, …) consume the same normalizeInput
+ * output and are subject to the identical defect. Scanning only the shared tree
+ * left roughly a third of this repo's handlers unguarded.
+ *
+ * Plugin `src/lib` and `src/types.ts` are symlinks back into shared, and several
+ * hook files are symlinked too — `walk()` dedupes by realpath so a shared file
+ * is not reported once per plugin.
+ */
+const HOOK_DIRS = [
+  path.join(SRC, 'hooks'),
+  ...['continuity-toolkit', 'devops-toolkit', 'ai-toolkit', 'frontend-toolkit', 'engineering-toolkit'].map(
+    (p) => path.join(REPO_ROOT, 'plugins', p, 'hooks/src')
+  ),
+];
 
 /** Fields normalizeInput always sets itself, so they need no allowlist entry. */
 const ALWAYS_SET = new Set(['tool_name', 'session_id', 'tool_input', 'hook_event_name']);
 
-/** Recursively collect .ts files under a directory. */
+/**
+ * Recursively collect .ts files under a directory, following symlinked hook
+ * files but skipping node_modules/dist. Callers dedupe by realpath.
+ */
 function walk(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist') continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full));
+    let isDir = entry.isDirectory();
+    // Plugin src/lib is a symlink to the shared lib; statSync resolves it.
+    if (entry.isSymbolicLink()) {
+      try {
+        isDir = fs.statSync(full).isDirectory();
+      } catch {
+        continue; // broken symlink
+      }
+    }
+    if (isDir) out.push(...walk(full));
     else if (entry.name.endsWith('.ts')) out.push(full);
+  }
+  return out;
+}
+
+/** All hook source files across shared + every plugin, deduped by realpath. */
+function allHookFiles(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dir of HOOK_DIRS) {
+    for (const f of walk(dir)) {
+      let real: string;
+      try {
+        real = fs.realpathSync(f);
+      } catch {
+        continue;
+      }
+      if (seen.has(real)) continue;
+      seen.add(real);
+      out.push(f);
+    }
   }
   return out;
 }
@@ -74,7 +162,7 @@ function readPassThrough(): Set<string> {
 function readDeclaredFields(): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>();
 
-  for (const file of walk(HOOKS_DIR)) {
+  for (const file of allHookFiles()) {
     const src = fs.readFileSync(file, 'utf8');
     const re = /interface\s+\w+\s+extends\s+HookInput\s*\{/g;
     let m: RegExpExecArray | null = re.exec(src);
@@ -112,7 +200,7 @@ function readDeclaredFields(): Map<string, Set<string>> {
         d += opens - closes;
       }
 
-      const rel = path.relative(SRC, file);
+      const rel = path.relative(REPO_ROOT, file);
       const existing = result.get(rel) ?? new Set<string>();
       for (const f of fields) existing.add(f);
       result.set(rel, existing);

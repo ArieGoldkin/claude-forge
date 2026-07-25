@@ -29,14 +29,21 @@ An earlier draft of the issue claimed `is_interrupt` was absent from the binary.
 
 ### Added
 
-- **A structural guard against the defect class** (`tests/lib/passthrough-completeness.test.ts`). Every prior fix pinned specific field *names*; those tests pass while new instances ship — 2,075 green tests coexisted with these four inert handlers. The guard instead parses every `interface X extends HookInput { … }` in the hook sources and asserts each declared field appears in `passThrough`. Verified against two must-fail controls: removing the allowlist entries, and reverting one rename. It reports the offending `file → field` pairs directly.
-- **End-to-end payload tests** (`tests/posttool/posttool-payload-e2e.test.ts`) driving raw captured JSON through `parseHookInput` into each handler. Every pre-existing test for these handlers built a `HookInput` by hand — a shape that never occurs at runtime — which is why the defect was invisible. 5 of the 7 fail on pre-fix code.
+- **A structural guard** (`tests/lib/passthrough-completeness.test.ts`). Every prior fix pinned specific field *names*; those tests pass while new instances ship — 2,075 green tests coexisted with these four inert handlers. The guard parses every `interface X extends HookInput { … }` across **the shared tree and all five plugin hook trees** and asserts each declared field appears in `passThrough`, reporting the offending `file → field` pairs. Verified against three must-fail controls: removing the allowlist entries, reverting one rename, and planting a violation in a plugin directory.
 
-### Known issue — not fixed here
+  **It is a net, not a proof.** It matches one declaration form, so a cast, bracket access, destructuring, a type alias, or a multi-base interface all pass it unseen — and those need no declaration at all, making them the *likely* shape of the next instance. It also does not parse `HookInput` itself, which declares `effort`, `background_tasks` and `session_crons` — none allowlisted. A live example the guard cannot see sits in the tree today: `phi-output-redactor` reads `message`/`text`/`assistant_message` by bracket access; all three are stripped. Full bypass list is documented in the test header. **The real class fix is to stop `normalizeInput` dropping data at all** — forward unknown fields, denylist what must be scrubbed. The allowlist enforces no security boundary (it is CC's own payload either way), so it buys nothing and costs silent data loss. Tracked separately.
 
-**`error-warner` remains inert for a second, independent reason.** It loads its patterns via `loadErrorRules()` from `$CLAUDE_PROJECT_DIR/.claude/rules/error_rules.json` (or the plugin dir), and **no such file exists in this repo or the shipped plugin**. With no rules it returns silent success regardless of input, so the rename is necessary but not sufficient for that handler. Its existing test suite passes only because it `vi.mock`s `error-rules.js`, which is why the gap went unnoticed. Tracked separately.
+- **End-to-end payload tests** (`tests/posttool/posttool-payload-e2e.test.ts`) driving raw captured JSON through `parseHookInput` into each of the four handlers. Every pre-existing test for these built a `HookInput` by hand — a shape that never occurs at runtime — which is why the defect was invisible. **7 of the 8 fail on pre-fix code.**
 
-Also noted: `error-warner`'s `exit_code` trigger is dead on real payloads — the captured `tool_response` carries no `exit_code` (failures arrive on `PostToolUseFailure` as `error`).
+### Correction to an earlier draft of this entry
+
+An earlier draft claimed `error-warner` stayed inert for a second reason: that no `error_rules.json` exists in the repo or shipped plugin. **That was false.** The file is git-tracked at `shared/configs/rules/error_rules.json` and symlinked into `plugins/continuity-toolkit/.claude/rules/`, and `loadErrorRules()` finds it via its `$CLAUDE_PLUGIN_ROOT` fallback. **The field rename alone fully restores `error-warner`** — verified end-to-end with no mocks, emitting a real tip from the shipped rules.
+
+The false claim had a cost worth recording: the e2e test for that handler was deliberately weakened to `expect(result.continue).toBe(true)`, which is **tautological** (`errorWarner` returns `continue: true` on every path, including the inert one) and passed identically before and after the fix. It is now a real assertion.
+
+Root cause of the error: the check was `find … -not -path … 2>/dev/null`. The local `rtk` proxy rejects `find` with compound predicates, and `2>/dev/null` swallowed that error — turning a **tool failure** into a convincing empty result. `git ls-files | grep` refutes it in one command.
+
+Separately noted: `error-warner`'s `exit_code` branch is unreachable for Bash — the captured `tool_response` carries no `exit_code`, so error detection rests entirely on its substring heuristics.
 
 ### Note
 

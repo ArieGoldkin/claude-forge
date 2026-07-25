@@ -29,6 +29,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseHookInput } from '../../src/lib/input.js';
+import { bashOutputMeasurerHook } from '../../src/posttool/bash-output-measurer.js';
 import { errorWarner } from '../../src/posttool/error-warner.js';
 import { failureLogger } from '../../src/posttool/failure-logger.js';
 import { secretDetector } from '../../src/posttool/secret-detector.js';
@@ -102,28 +103,85 @@ describe('PostToolUse payload survives parseHookInput (2.9.0 regression)', () =>
     expect(JSON.stringify(leaked)).not.toBe(JSON.stringify(clean));
   });
 
-  it('error-warner consumes tool_response without throwing (see caveat)', async () => {
-    // DELIBERATELY NOT asserting that a tip is produced.
+  it('error-warner emits a real tip using the SHIPPED rules file (no mocks)', async () => {
+    // Uses ctk's real error_rules.json — resolved through loadErrorRules()'s
+    // CLAUDE_PLUGIN_ROOT fallback — with no vi.mock anywhere. Every other
+    // error-warner test mocks error-rules.js, which is why nobody could tell
+    // whether the handler worked end to end.
     //
-    // error-warner has a SECOND, INDEPENDENT defect that this release does not
-    // fix: it loads its patterns via loadErrorRules() from
-    //   $CLAUDE_PROJECT_DIR/.claude/rules/error_rules.json  (or the plugin dir)
-    // and NO such file exists anywhere in this repo or the shipped plugin. With
-    // no rules it returns silent success for every input, so it cannot emit a
-    // tip regardless of whether the payload reaches it.
-    //
-    // The existing error-warner.test.ts passes only because it `vi.mock`s
-    // error-rules.js — which is why the gap was invisible. Asserting a tip here
-    // would require the same mock and would prove nothing end-to-end.
-    //
-    // What this release DOES fix for this handler is the field name: it now
-    // reads `tool_response` (real) instead of `tool_output` (never sent). The
-    // rules-file gap is tracked separately.
-    const result = await errorWarner(
-      parseHookInput(postToolUsePayload('', 'node app.js', "Error: Cannot find module 'lodash'"))
-    );
+    // An earlier draft of this test asserted only `result.continue === true`.
+    // That is TAUTOLOGICAL — errorWarner returns continue:true on every path,
+    // including the fully inert pre-fix path — so it passed before and after
+    // the fix and proved nothing. It was written that weak because of a false
+    // premise (that no rules file existed); the file is git-tracked and
+    // symlinked into ctk. See the 2.9.0 CHANGELOG.
+    const originalRoot = process.env['CLAUDE_PLUGIN_ROOT'];
+    const originalProject = process.env['CLAUDE_PROJECT_DIR'];
+    // hooks/ -> plugin root, which contains .claude/rules/error_rules.json
+    process.env['CLAUDE_PLUGIN_ROOT'] = path.resolve(process.cwd(), '..');
+    delete process.env['CLAUDE_PROJECT_DIR'];
 
-    expect(result.continue).toBe(true);
+    try {
+      const result = await errorWarner(
+        parseHookInput(
+          postToolUsePayload(
+            '',
+            'node app.js',
+            'TypeError: Cannot read properties of undefined (reading "x")'
+          )
+        )
+      );
+
+      // Fails on pre-fix code: the handler read `tool_output`, saw nothing,
+      // and returned a bare silent success.
+      const tip = result.hookSpecificOutput?.additionalContext;
+      expect(tip).toBeDefined();
+      expect(String(tip)).toContain('optional chaining');
+    } finally {
+      if (originalRoot === undefined) delete process.env['CLAUDE_PLUGIN_ROOT'];
+      else process.env['CLAUDE_PLUGIN_ROOT'] = originalRoot;
+      if (originalProject !== undefined) process.env['CLAUDE_PROJECT_DIR'] = originalProject;
+    }
+  });
+
+  it('bash-output-measurer records the real output size, not zero', async () => {
+    // The third renamed handler had no end-to-end test at all. Its unit tests
+    // build HookInput by hand with tool_response already attached — the shape
+    // that never occurs at runtime, which is precisely how it shipped inert
+    // recording outputBytes:0 for every event.
+    const originalHome = process.env['HOME'];
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'measurer-e2e-'));
+    process.env['HOME'] = tmpHome;
+
+    try {
+      const stdout = 'x'.repeat(40);
+      await bashOutputMeasurerHook(parseHookInput(postToolUsePayload(stdout, 'ls -la')));
+
+      const files: string[] = [];
+      const findJsonl = (dir: string): void => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) findJsonl(full);
+          else if (e.name.endsWith('.jsonl')) files.push(full);
+        }
+      };
+      findJsonl(tmpHome);
+
+      expect(files.length).toBeGreaterThan(0);
+      const rows = fs
+        .readFileSync(files[0] as string, 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+
+      // Pre-fix this was 0 for every event — the measurement corpus the hook
+      // exists to produce was fabricated zeros.
+      expect(rows[0].outputBytes).toBe(40);
+    } finally {
+      if (originalHome === undefined) delete process.env['HOME'];
+      else process.env['HOME'] = originalHome;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   });
 });
 
