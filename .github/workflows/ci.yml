@@ -34,6 +34,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: tools/sandbox-launcher/package-lock.json
+      # The launcher imports the shared sandbox registry directly, so vitest and
+      # tsc both resolve shared/hooks-infra/tsconfig.json — which `extends`
+      # @tsconfig/node22 from *that* package's node_modules. Without this step
+      # the job fails on a missing module rather than anything real.
+      - name: Install shared hooks-infra deps
+        run: npm ci
+        working-directory: shared/hooks-infra
       - run: npm ci
         working-directory: tools/sandbox-launcher
       - name: Typecheck
