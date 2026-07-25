@@ -142,3 +142,33 @@ Neither command would have read anything sensitive. Each such false positive **t
 - "No trailing report" is a proxy for delivery failure; it does not prove the caller received nothing, nor that the agent's work was lost (it demonstrably was not — full findings were recovered from disk in the 2026-07-25 verifier incident).
 - Transcripts are live-updated by resumes, so counts drift.
 - The 5 non-denial no-report cases are unexplained and may be a distinct failure mode.
+
+---
+
+# Addendum — two further observations, same day
+
+Added after the analysis above was written, while adversarially reviewing PR #50 (the ctk 2.8.5 fix). Recorded here because both bear directly on the findings, and one validates the mitigation this document recommends.
+
+## The premature-return mode reproduced twice more
+
+The `Agent` tool returned **only the dispatched agent's opening line** — its preamble — while the agent kept working, on two further occasions:
+
+| Occurrence | Agent | Outcome |
+|---|---|---|
+| 1 (in the analysis above) | ADR-0001 adversarial verifier | 88 records, 1 text block, no `end_turn`; still mid-work |
+| 2 | PR #50 reviewer, first run | stopped at record 63 on a **normal** tool result — not a denial |
+| 3 | PR #50 reviewer, resumed run | completed its work; return again preamble-only |
+
+Occurrence 2 matters most: it ended on an ordinary tool result, **not** a `BLOCKED` denial. So premature return is a **distinct failure mode from denial-termination**, not a downstream symptom of it. Three independent instances now, across two different agents.
+
+This does not change the 2×2 result — that experiment isolated denial-termination specifically, and probe A returned its report correctly.
+
+## The mitigation was used in production and worked
+
+The PR #50 review was dispatched with this document's own rule applied: **checkpoint each finding to a file the moment it is confirmed, never buffer to the end.** The brief stated the reason explicitly and named the findings file.
+
+Both times the return value was lost, **the findings file survived complete** — including a MAJOR finding (three more hook handlers silently inert because they read a field absent from the input allowlist) that was independently reproduced afterwards and led to a fourth being found. Without the checkpoint discipline, that review would have been lost twice over, exactly as the two PR-38 reviews were lost in the 2026-07-19 session.
+
+This is the first production validation of the incremental-checkpointing rule, and it is the concrete basis for the constraint written into T3 (#46): *collect results via incremental checkpoints — never from the agent's return value, and never from a single end-of-run write.*
+
+**Caveat:** the review was still delivered **incomplete** — the resumed run finished its highest-value tasks but never produced the requested overall verdict or several assigned checks. Checkpointing preserves work that was done; it does not make an agent finish. Coverage still has to be verified against what was actually asked, not assumed from a file being non-empty.
