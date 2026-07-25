@@ -23,27 +23,6 @@ const MAX_OUTPUT_SIZE = 50 * 1024;
 // =============================================================================
 
 /**
- * Extended hook input with tool output (PostToolUse context).
- */
-interface PostToolUseInput extends HookInput {
-  /**
-   * PostToolUse payload field. Captured live from CC 2.1.220 for a Bash call:
-   * `{ stdout, stderr, interrupted, isImage, noOutputExpected }`.
-   * `exit_code` / `output` were NOT observed for Bash — kept optional in case
-   * other tools supply them, but do not rely on them.
-   *
-   * NOTE: this field must also appear in `passThrough` in lib/input.ts, or
-   * normalizeInput deletes it before this handler runs (see ctk 2.9.0).
-   */
-  tool_response?: {
-    stdout?: string;
-    stderr?: string;
-    exit_code?: number;
-    output?: string;
-  };
-}
-
-/**
  * Result of scanning text for secrets.
  */
 export interface SecretScanResult {
@@ -197,8 +176,8 @@ export async function secretDetector(input: HookInput): Promise<HookResult> {
   if (skipped) return skipped;
 
   // Get tool output from the extended input
-  const extendedInput = input as PostToolUseInput;
-  const toolOutput = extendedInput.tool_response;
+  // `tool_response` is declared on HookInput since #54 — no local interface.
+  const toolOutput = input.tool_response;
 
   if (!toolOutput) {
     logDebug(HOOK_NAME, 'No tool output available');

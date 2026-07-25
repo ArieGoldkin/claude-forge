@@ -283,6 +283,83 @@ export interface HookInput {
     /** Optional command or routine name. */
     command?: string;
   }>;
+
+  // ===========================================================================
+  // PostToolUse / PostToolUseFailure
+  //
+  // Declared here rather than in each handler. Until #54 these three lived in a
+  // local `interface X extends HookInput { … }` in four separate hook files —
+  // the very pattern that made the allowlist defect invisible, because a local
+  // declaration type-checks whether or not normalization forwards the data.
+  // All three names captured live from CC 2.1.220 (2026-07-25).
+  // ===========================================================================
+
+  /**
+   * Tool result payload, present on PostToolUse.
+   *
+   * Captured shape for a Bash call:
+   * `{ stdout, stderr, interrupted, isImage, noOutputExpected }`.
+   * Claude Code sends no `tool_output` key on any event.
+   *
+   * `exit_code` is deliberately NOT declared: it was never observed, and while
+   * it was declared, a handler gated on it and that branch never ran (#54
+   * item 4). `output` is declared because error-warner reads it defensively for
+   * non-Bash tools, but nothing gates on it either. There is no index signature
+   * here on purpose — an undeclared field should need a visible cast rather
+   * than silently type-checking as `unknown`, which is how the last four inert
+   * handlers stayed invisible.
+   */
+  tool_response?: {
+    stdout?: string;
+    stderr?: string;
+    interrupted?: boolean;
+    isImage?: boolean;
+    noOutputExpected?: boolean;
+    /** Not observed for Bash; read defensively, never gated on. */
+    output?: string;
+  };
+
+  /** Failure description, present on PostToolUseFailure. */
+  error?: string;
+
+  /** Whether the failure was a user interrupt. Present on PostToolUseFailure. */
+  is_interrupt?: boolean;
+
+  // ===========================================================================
+  // MessageDisplay (CC v2.1.152+)
+  //
+  // Captured live from CC 2.1.220 on 2026-07-25 (22 records). The full payload
+  // is exactly: session_id, transcript_path, cwd, prompt_id, hook_event_name,
+  // turn_id, message_id, index, final, delta. Note what is ABSENT: `message`,
+  // `text`, `assistant_message`, `last_assistant_message` and `tool_input` were
+  // in 0 of 22 records. phi-output-redactor guessed four of those names and was
+  // inert on every one (#54 item 2).
+  // ===========================================================================
+
+  /**
+   * The assistant message text for this MessageDisplay event.
+   *
+   * Named `delta` because the event is part of a streaming protocol — see
+   * `index` and `final`. Every captured record was a complete single-chunk
+   * message (index 0, final true, longest 202 chars); a multi-chunk message
+   * was NOT observed, so do not assume one cannot occur.
+   */
+  delta?: string;
+
+  /** Chunk ordinal within a streamed message. 0 in every captured record. */
+  index?: number;
+
+  /** Whether this is the last chunk of the message. True in every capture. */
+  final?: boolean;
+
+  /** Identifier of the assistant message this event belongs to. */
+  message_id?: string;
+
+  /** Identifier of the turn this event belongs to. */
+  turn_id?: string;
+
+  /** Identifier of the user prompt that started this turn. */
+  prompt_id?: string;
 }
 
 /**

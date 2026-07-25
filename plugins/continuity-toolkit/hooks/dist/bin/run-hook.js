@@ -243,51 +243,11 @@ function normalizeInput(raw) {
     toolInput = {};
   }
   const sessionId = typeof obj["session_id"] === "string" && obj["session_id"] ? obj["session_id"] : getDefaultSessionId();
-  const normalized = {
-    tool_name: eventName,
-    session_id: sessionId,
-    tool_input: toolInput
-  };
-  if (obj["hook_event_name"]) {
-    normalized["hook_event_name"] = obj["hook_event_name"];
-  }
-  const passThrough = [
-    "source",
-    "model",
-    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
-    // Task* additionally send task_id / task_subject / task_description.
-    // Verified against a captured live TeammateIdle payload (2026-07-25).
-    "teammate_name",
-    "team_name",
-    "task_id",
-    "task_subject",
-    "task_description",
-    // PostToolUse / PostToolUseFailure payloads. All three captured live from
-    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
-    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
-    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
-    "tool_response",
-    "error",
-    "is_interrupt",
-    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
-    // (that was the 2.8.4 finding); kept for any event that does.
-    "agent_type",
-    "agent_id",
-    "worktree_path",
-    "worktree_branch",
-    "cwd",
-    "transcript_path",
-    "permission_mode",
-    "prompt",
-    "tool_use_id",
-    "last_assistant_message",
-    "duration_ms"
-  ];
-  for (const field of passThrough) {
-    if (obj[field] !== void 0) {
-      normalized[field] = obj[field];
-    }
-  }
+  const normalized = { ...obj };
+  Reflect.deleteProperty(normalized, "__proto__");
+  normalized["tool_name"] = eventName;
+  normalized["session_id"] = sessionId;
+  normalized["tool_input"] = toolInput;
   return normalized;
 }
 function isUsableInput(input) {
@@ -3861,8 +3821,7 @@ function scanForSecrets(text) {
 async function secretDetector(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
-  const extendedInput = input;
-  const toolOutput = extendedInput.tool_response;
+  const toolOutput = input.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME16, "No tool output available");
     return outputSilentSuccess();
@@ -4293,8 +4252,7 @@ async function errorWarner(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
   const command = getCommand(input);
-  const extendedInput = input;
-  const toolOutput = extendedInput.tool_response;
+  const toolOutput = input.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME21, "No tool output available");
     return outputSilentSuccess();
@@ -4304,7 +4262,7 @@ async function errorWarner(input) {
     logDebug(HOOK_NAME21, "Empty output, skipping");
     return outputSilentSuccess();
   }
-  const hasError = toolOutput.exit_code !== void 0 && toolOutput.exit_code !== 0 || outputText.includes("Error") || outputText.includes("error") || outputText.includes("FAIL") || outputText.includes("failed") || outputText.includes("Cannot") || outputText.includes("cannot") || outputText.includes("stream abort") || outputText.includes("STREAM_ABORT");
+  const hasError = outputText.includes("Error") || outputText.includes("error") || outputText.includes("FAIL") || outputText.includes("failed") || outputText.includes("Cannot") || outputText.includes("cannot") || outputText.includes("stream abort") || outputText.includes("STREAM_ABORT");
   if (!hasError) {
     logDebug(HOOK_NAME21, "No error indicators found");
     return outputSilentSuccess();
@@ -4363,8 +4321,7 @@ var KNOWN_PATTERNS = [
   }
 ];
 async function failureLogger(input) {
-  const failureInput = input;
-  const error = failureInput.error;
+  const error = input.error;
   if (!error) {
     return outputSilentSuccess();
   }
@@ -5543,18 +5500,9 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
 var HOOK_NAME39 = "phi-output-redactor";
 var OPT_IN_ENV_VAR = "CONTINUITY_PHI_OUTPUT_REDACT";
 function extractAssistantMessage(input) {
-  const record = input;
-  const candidates = [
-    record["message"],
-    record["text"],
-    record["assistant_message"],
-    input.last_assistant_message,
-    input.tool_input?.["message"]
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
+  const delta = input.delta;
+  if (typeof delta === "string" && delta.length > 0) {
+    return delta;
   }
   return null;
 }

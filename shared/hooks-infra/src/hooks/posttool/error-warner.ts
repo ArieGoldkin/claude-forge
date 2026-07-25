@@ -20,31 +20,6 @@ import type { HookInput, HookResult } from '../types.js';
 const HOOK_NAME = 'error-warner';
 
 // =============================================================================
-// TYPES
-// =============================================================================
-
-/**
- * Extended hook input with tool output (PostToolUse context).
- */
-interface PostToolUseInput extends HookInput {
-  /**
-   * PostToolUse payload field. Captured live from CC 2.1.220 for a Bash call:
-   * `{ stdout, stderr, interrupted, isImage, noOutputExpected }`.
-   * `exit_code` / `output` were NOT observed for Bash — kept optional in case
-   * other tools supply them, but do not rely on them.
-   *
-   * NOTE: this field must also appear in `passThrough` in lib/input.ts, or
-   * normalizeInput deletes it before this handler runs (see ctk 2.9.0).
-   */
-  tool_response?: {
-    stdout?: string;
-    stderr?: string;
-    exit_code?: number;
-    output?: string;
-  };
-}
-
-// =============================================================================
 // MAIN HOOK
 // =============================================================================
 
@@ -65,16 +40,18 @@ export async function errorWarner(input: HookInput): Promise<HookResult> {
   // guardHasCommand ensures command is present; narrow for TypeScript
   const command = getCommand(input) as string;
 
-  // Get tool output from the extended input
-  const extendedInput = input as PostToolUseInput;
-  const toolOutput = extendedInput.tool_response;
+  // `tool_response` is now declared on HookInput (#54) — captured live from
+  // CC 2.1.220, no local interface needed.
+  const toolOutput = input.tool_response;
 
   if (!toolOutput) {
     logDebug(HOOK_NAME, 'No tool output available');
     return outputSilentSuccess();
   }
 
-  // Combine stdout, stderr, and output fields
+  // Combine stdout and stderr. `output` is kept in the join because the capture
+  // only covers Bash and another tool may supply it; it costs nothing when
+  // absent. Unlike `exit_code` below, reading it gates nothing.
   const outputText = [toolOutput.stdout, toolOutput.stderr, toolOutput.output]
     .filter(Boolean)
     .join('\n');
@@ -84,14 +61,21 @@ export async function errorWarner(input: HookInput): Promise<HookResult> {
     return outputSilentSuccess();
   }
 
-  // Only analyze if there seems to be an error
-  // Check exit code or error-like patterns
+  // Only analyze if there seems to be an error.
+  //
+  // Detection is PURELY a substring heuristic. There used to be an
+  // `exit_code !== 0` clause first, which read as the authoritative signal with
+  // the substrings as backup — but the captured PostToolUse `tool_response`
+  // carries no `exit_code` for Bash, so that clause never once fired and the
+  // heuristics were always doing all the work (#54 item 4). Removed rather than
+  // left in place: a dead gate that looks load-bearing misleads the next reader
+  // about how this hook actually decides.
+  //
   // Note: CC v2.1.105+ aborts stalled API streams after 5 minutes of no data and
   // retries non-streaming. These "stream abort + retry" events may surface as transient
   // API errors in tool output. Error rules should distinguish stream-abort retries
   // (benign, CC handles automatically) from genuine API failures.
   const hasError =
-    (toolOutput.exit_code !== undefined && toolOutput.exit_code !== 0) ||
     outputText.includes('Error') ||
     outputText.includes('error') ||
     outputText.includes('FAIL') ||

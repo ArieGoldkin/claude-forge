@@ -1,8 +1,27 @@
 /**
  * Tests for the phi-output-redactor MessageDisplay hook.
+ *
+ * WHY THESE DRIVE RAW JSON
+ *
+ * Every test in this file used to build a `HookInput` by hand and set a
+ * top-level `message` field. That shape does not exist. A live capture of CC
+ * 2.1.220 (2026-07-25, 22 records) shows the MessageDisplay payload is exactly:
+ *
+ *   session_id, transcript_path, cwd, prompt_id, hook_event_name,
+ *   turn_id, message_id, index, final, delta
+ *
+ * `message`, `text`, `assistant_message`, `last_assistant_message` and
+ * `tool_input` appear in 0 of 22 records. The handler read four of those names,
+ * so it was inert on every message it ever saw — and this suite was green the
+ * whole time, because a hand-built input can assert any shape you like.
+ *
+ * So these tests go through `parseHookInput` from the raw JSON string, the same
+ * pattern posttool-payload-e2e.test.ts adopted in 2.9.0. A hand-built input
+ * proves the function works on data Claude Code does not send.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { parseHookInput } from '../../src/lib/input.js';
 import {
   extractAssistantMessage,
   phiOutputRedactor,
@@ -11,47 +30,66 @@ import type { HookInput } from '../../src/types.js';
 
 const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
 
-function makeInput(message: string | null, extras: Partial<HookInput> = {}): HookInput {
-  const base = {
-    tool_name: 'Bash',
-    tool_input: {},
+/**
+ * A verbatim MessageDisplay record from the capture, with only `delta` varied.
+ * Field names, ordering and the index/final values are exactly as captured.
+ */
+function capturedPayload(delta: string): string {
+  return JSON.stringify({
+    session_id: 'efc54e3d-827f-4a8e-aa81-d50e49a5ce5c',
+    transcript_path: '/Users/dev/.claude/projects/-Users-dev-proj/efc54e3d.jsonl',
+    cwd: '/Users/dev/proj',
+    prompt_id: '5bd851fd-a52e-4a42-95ed-87d3e2e6a89c',
     hook_event_name: 'MessageDisplay',
-    ...extras,
-  } as HookInput;
-  if (message !== null) {
-    (base as unknown as Record<string, unknown>)['message'] = message;
-  }
-  return base;
+    turn_id: 'ff38951d-2f5a-47bc-9265-577943dd9039',
+    message_id: 'bd41ec77-7674-4177-8ea2-12b1f33770a8',
+    index: 0,
+    final: true,
+    delta,
+  });
+}
+
+/** Parse a captured MessageDisplay payload the way the hook runner does. */
+function fromCapture(delta: string): HookInput {
+  return parseHookInput(capturedPayload(delta));
 }
 
 describe('extractAssistantMessage', () => {
-  it('reads top-level `message`', () => {
-    const input = makeInput('hello world');
-    expect(extractAssistantMessage(input)).toBe('hello world');
+  it('reads `delta` from a real captured MessageDisplay payload', () => {
+    expect(extractAssistantMessage(fromCapture('hello world'))).toBe('hello world');
   });
 
-  it('reads top-level `text` as fallback', () => {
-    const input = { tool_name: 'Bash', tool_input: {}, text: 'from text' } as unknown as HookInput;
-    expect(extractAssistantMessage(input)).toBe('from text');
+  it('survives normalization end-to-end, not just as a hand-built object', () => {
+    // The regression that mattered: before #54 the allowlist stripped unknown
+    // top-level fields, so even the right field name would have arrived empty.
+    const input = fromCapture('hello world');
+    expect(input.delta).toBe('hello world');
+    expect(input.tool_name).toBe('MessageDisplay');
   });
 
-  it('reads `last_assistant_message` as fallback', () => {
-    const input: HookInput = {
-      tool_name: 'Bash',
-      tool_input: {},
-      last_assistant_message: 'tail-message',
-    };
-    expect(extractAssistantMessage(input)).toBe('tail-message');
-  });
-
-  it('returns null when nothing is present', () => {
-    const input: HookInput = { tool_name: 'Bash', tool_input: {} };
+  it('returns null when delta is absent', () => {
+    const input = parseHookInput(JSON.stringify({ hook_event_name: 'MessageDisplay' }));
     expect(extractAssistantMessage(input)).toBeNull();
   });
 
-  it('returns null on empty string', () => {
-    const input = makeInput('');
-    expect(extractAssistantMessage(input)).toBeNull();
+  it('returns null on empty delta', () => {
+    expect(extractAssistantMessage(fromCapture(''))).toBeNull();
+  });
+
+  it('does NOT read the four names that were guessed and never sent', () => {
+    // Pins the narrowing. These were candidates 1-4 of a 5-candidate fallback
+    // chosen because "docs are sparse on exact field naming"; all four are
+    // absent from every captured record. If a future CC really does send one,
+    // capture it first — do not restore it on the strength of its plausibility.
+    for (const name of ['message', 'text', 'assistant_message', 'last_assistant_message']) {
+      const input = parseHookInput(
+        JSON.stringify({ hook_event_name: 'MessageDisplay', [name]: 'should not be read' })
+      );
+      // The field itself now survives normalization (that is #54's fix) …
+      expect((input as unknown as Record<string, unknown>)[name]).toBe('should not be read');
+      // … the handler simply does not treat it as the message text.
+      expect(extractAssistantMessage(input), `'${name}' must not be read`).toBeNull();
+    }
   });
 });
 
@@ -65,30 +103,26 @@ describe('phiOutputRedactor', () => {
 
   describe('opt-in gating', () => {
     it('returns silent success when env var is unset', async () => {
-      const input = makeInput('SSN 123-45-6789 here.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('SSN 123-45-6789 here.'));
       expect(result.hookSpecificOutput).toBeUndefined();
       expect(result.continue).toBe(true);
     });
 
     it('returns silent success when env var is set to "0"', async () => {
       process.env[OPT_IN_ENV_VAR] = '0';
-      const input = makeInput('SSN 123-45-6789 here.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('SSN 123-45-6789 here.'));
       expect(result.hookSpecificOutput).toBeUndefined();
     });
 
     it('activates when env var is exactly "1"', async () => {
       process.env[OPT_IN_ENV_VAR] = '1';
-      const input = makeInput('SSN 123-45-6789 here.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('SSN 123-45-6789 here.'));
       expect(result.hookSpecificOutput?.hookEventName).toBe('MessageDisplay');
     });
 
     it('does NOT activate on truthy-ish values other than "1"', async () => {
       process.env[OPT_IN_ENV_VAR] = 'true';
-      const input = makeInput('SSN 123-45-6789 here.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('SSN 123-45-6789 here.'));
       expect(result.hookSpecificOutput).toBeUndefined();
     });
   });
@@ -99,34 +133,43 @@ describe('phiOutputRedactor', () => {
     });
 
     it('redacts a single SSN and returns transformedMessage', async () => {
-      const input = makeInput('Patient SSN 123-45-6789 admitted.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('Patient SSN 123-45-6789 admitted.'));
       expect(result.hookSpecificOutput?.['transformedMessage']).toBe(
         'Patient SSN [SSN-REDACTED] admitted.'
       );
     });
 
     it('returns silent success when nothing matches (no transform needed)', async () => {
-      const input = makeInput('All clear, no sensitive data.');
-      const result = await phiOutputRedactor(input);
+      const result = await phiOutputRedactor(fromCapture('All clear, no sensitive data.'));
       expect(result.hookSpecificOutput).toBeUndefined();
     });
 
     it('returns silent success when no message text is present', async () => {
-      const input = makeInput(null);
+      const input = parseHookInput(JSON.stringify({ hook_event_name: 'MessageDisplay' }));
       const result = await phiOutputRedactor(input);
       expect(result.hookSpecificOutput).toBeUndefined();
     });
 
     it('redacts mixed PHI patterns', async () => {
-      const input = makeInput(
-        'Patient 123-45-6789 reached at (555) 123-4567 via card 4111-1111-1111-1111.'
+      const result = await phiOutputRedactor(
+        fromCapture('Patient 123-45-6789 reached at (555) 123-4567 via card 4111-1111-1111-1111.')
       );
-      const result = await phiOutputRedactor(input);
       const out = result.hookSpecificOutput?.['transformedMessage'] as string;
       expect(out).toContain('[SSN-REDACTED]');
       expect(out).toContain('[PHONE-REDACTED]');
       expect(out).toContain('[CC-REDACTED]');
+    });
+
+    it('redacts each chunk of a hypothetical multi-chunk message independently', async () => {
+      // index/final are a streaming protocol. No multi-chunk message was ever
+      // observed, so this documents the BEST-EFFORT contract rather than
+      // claiming CC chunks: each chunk is scanned on its own, and PHI split
+      // across a boundary is caught in neither half.
+      const firstHalf = await phiOutputRedactor(fromCapture('SSN 123-45-'));
+      const secondHalf = await phiOutputRedactor(fromCapture('6789 for the record'));
+
+      expect(firstHalf.hookSpecificOutput).toBeUndefined();
+      expect(secondHalf.hookSpecificOutput).toBeUndefined();
     });
   });
 });

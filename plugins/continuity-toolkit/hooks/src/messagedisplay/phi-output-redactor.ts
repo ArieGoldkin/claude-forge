@@ -33,27 +33,36 @@ const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
 /**
  * Extract the assistant message text from MessageDisplay hook input.
  *
- * CC v2.1.152 docs are sparse on exact field naming. Try the most
- * likely fields in order: top-level `message`, `text`, then
- * `last_assistant_message` (already typed on HookInput), and fall
- * back to `tool_input.message`. Return null if no candidate found —
- * the hook then becomes a no-op.
+ * The field is `delta`. That is not a guess — it comes from a live capture of
+ * CC 2.1.220 (2026-07-25, 22 records via a temporary dumper hook). The complete
+ * payload is: session_id, transcript_path, cwd, prompt_id, hook_event_name,
+ * turn_id, message_id, index, final, delta.
+ *
+ * This function previously tried five candidate names — `message`, `text`,
+ * `assistant_message`, `last_assistant_message`, `tool_input.message` — chosen
+ * because "CC v2.1.152 docs are sparse on exact field naming". All five appear
+ * in 0 of 22 captured records, so the hook was inert for every message it ever
+ * saw, on a PHI redaction path (#54 item 2). Two independent causes stacked:
+ * normalizeInput's allowlist stripped three of the names, AND all five names
+ * were wrong. Fixing only the first would have changed nothing.
+ *
+ * CHUNKING CAVEAT: `delta` / `index` / `final` are a streaming protocol. Every
+ * captured record was a complete single-chunk message (index 0, final true,
+ * longest 202 chars), but a multi-chunk message was never observed and must not
+ * be assumed impossible. If Claude Code does split a long message, this hook
+ * sees each chunk separately and a PHI pattern straddling a chunk boundary
+ * ("123-45-" | "6789") matches in neither. Redaction is therefore best-effort
+ * per chunk, which is strictly better than the nothing it did before, but it is
+ * not a guarantee — one more reason this is defense in depth and not a
+ * compliance claim.
+ *
+ * @returns The message text, or null if absent/empty (hook becomes a no-op)
  */
 export function extractAssistantMessage(input: HookInput): string | null {
-  const record = input as unknown as Record<string, unknown>;
+  const delta = input.delta;
 
-  const candidates = [
-    record['message'],
-    record['text'],
-    record['assistant_message'],
-    input.last_assistant_message,
-    (input.tool_input as Record<string, unknown> | undefined)?.['message'],
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.length > 0) {
-      return candidate;
-    }
+  if (typeof delta === 'string' && delta.length > 0) {
+    return delta;
   }
 
   return null;

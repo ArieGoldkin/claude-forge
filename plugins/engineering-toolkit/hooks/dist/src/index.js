@@ -170,51 +170,11 @@ function normalizeInput(raw) {
     toolInput = {};
   }
   const sessionId = typeof obj["session_id"] === "string" && obj["session_id"] ? obj["session_id"] : getDefaultSessionId();
-  const normalized = {
-    tool_name: eventName,
-    session_id: sessionId,
-    tool_input: toolInput
-  };
-  if (obj["hook_event_name"]) {
-    normalized["hook_event_name"] = obj["hook_event_name"];
-  }
-  const passThrough = [
-    "source",
-    "model",
-    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
-    // Task* additionally send task_id / task_subject / task_description.
-    // Verified against a captured live TeammateIdle payload (2026-07-25).
-    "teammate_name",
-    "team_name",
-    "task_id",
-    "task_subject",
-    "task_description",
-    // PostToolUse / PostToolUseFailure payloads. All three captured live from
-    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
-    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
-    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
-    "tool_response",
-    "error",
-    "is_interrupt",
-    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
-    // (that was the 2.8.4 finding); kept for any event that does.
-    "agent_type",
-    "agent_id",
-    "worktree_path",
-    "worktree_branch",
-    "cwd",
-    "transcript_path",
-    "permission_mode",
-    "prompt",
-    "tool_use_id",
-    "last_assistant_message",
-    "duration_ms"
-  ];
-  for (const field of passThrough) {
-    if (obj[field] !== void 0) {
-      normalized[field] = obj[field];
-    }
-  }
+  const normalized = { ...obj };
+  Reflect.deleteProperty(normalized, "__proto__");
+  normalized["tool_name"] = eventName;
+  normalized["session_id"] = sessionId;
+  normalized["tool_input"] = toolInput;
   return normalized;
 }
 function isUsableInput(input) {

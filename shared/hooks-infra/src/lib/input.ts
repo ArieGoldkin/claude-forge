@@ -160,6 +160,11 @@ function createDefaultInput(): HookInput {
  *
  * This function normalizes both formats to a consistent HookInput.
  *
+ * Every other top-level field is forwarded verbatim. `HookInput` therefore
+ * describes the fields we have *documented*, not the fields a handler can
+ * reach — a handler may read a field the type does not declare and get real
+ * data. Prefer adding it to `HookInput` so the next author finds it.
+ *
  * @param raw - Raw parsed object from stdin
  * @returns Normalized HookInput
  */
@@ -188,66 +193,46 @@ function normalizeInput(raw: unknown): HookInput {
       ? obj['session_id']
       : getDefaultSessionId();
 
-  // Build normalized input
-  const normalized: HookInput = {
-    tool_name: eventName as ToolName,
-    session_id: sessionId,
-    tool_input: toolInput as ToolInput,
-  };
-
-  // Preserve hook_event_name for lifecycle events (in case handlers need it)
-  if (obj['hook_event_name']) {
-    (normalized as unknown as Record<string, unknown>)['hook_event_name'] = obj['hook_event_name'];
-  }
-
-  // Pass through other common fields from Claude Code.
+  // FORWARD EVERY FIELD CLAUDE CODE SENT. This is a DENYLIST, not an allowlist.
   //
-  // IMPORTANT: this is an ALLOWLIST — any field absent here is silently dropped
-  // before handlers ever see it. A handler that reads a field missing from this
-  // list is inert, and fails as a plausible-looking default rather than an error.
-  // ctk 2.8.4 shipped exactly that bug: the agent-team lifecycle handlers were
-  // corrected to read `teammate_name`/`team_name`, but those names were not added
-  // here, so they were stripped and every idle still logged "unknown". When adding
-  // a field read to any handler, add it here too and cover it end-to-end.
-  const passThrough = [
-    'source',
-    'model',
-    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
-    // Task* additionally send task_id / task_subject / task_description.
-    // Verified against a captured live TeammateIdle payload (2026-07-25).
-    'teammate_name',
-    'team_name',
-    'task_id',
-    'task_subject',
-    'task_description',
-    // PostToolUse / PostToolUseFailure payloads. All three captured live from
-    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
-    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
-    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
-    'tool_response',
-    'error',
-    'is_interrupt',
-    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
-    // (that was the 2.8.4 finding); kept for any event that does.
-    'agent_type',
-    'agent_id',
-    'worktree_path',
-    'worktree_branch',
-    'cwd',
-    'transcript_path',
-    'permission_mode',
-    'prompt',
-    'tool_use_id',
-    'last_assistant_message',
-    'duration_ms',
-  ];
-  for (const field of passThrough) {
-    if (obj[field] !== undefined) {
-      (normalized as unknown as Record<string, unknown>)[field] = obj[field];
-    }
-  }
+  // Until ctk 2.9.0 this function rebuilt the input from a fixed `passThrough`
+  // allowlist, so any field not named there was silently deleted before handlers
+  // ran. A handler reading a dropped field is INERT and fails as a plausible
+  // default (`f || 'unknown'`, `if (!f) return`) rather than an error — invisible
+  // to the type checker, because each such handler declared its own
+  // `interface X extends HookInput { f }` that made the read compile while
+  // normalization removed the data. That shipped three times across seven
+  // handlers (2.8.4 agent-team, 2.9.0 secret-detector / error-warner /
+  // bash-output-measurer / failure-logger), and 2.9.0's parser-based guard was
+  // defeated by six ordinary syntaxes because it matched declaration form.
+  //
+  // The allowlist enforced no security boundary — it is Claude Code's own
+  // payload either way — so it bought nothing and cost silent data loss. Only
+  // normalizeInput can end a defect caused by normalizeInput dropping data.
+  //
+  // Spread, NOT a per-key assignment loop: a payload carrying `__proto__` would
+  // invoke Object.prototype's setter under `normalized[key] = …` and swap this
+  // object's prototype, letting the payload inject fields a handler then reads
+  // through the prototype chain. Spread defines own data properties and never
+  // calls setters, so `__proto__` lands inert; it is deleted below regardless.
+  //
+  // `Reflect.deleteProperty`, not `delete` (biome lint/performance/noDelete) and
+  // NOT biome's suggested `normalized['__proto__'] = undefined` autofix: after
+  // the spread this object has an OWN `__proto__` data property, so assignment
+  // hits that property rather than the setter and leaves the key in place with
+  // an undefined value. Removing it is the point.
+  const normalized = { ...obj } as Record<string, unknown>;
+  Reflect.deleteProperty(normalized, '__proto__');
 
-  return normalized;
+  // The three normalized fields win over whatever the raw payload carried:
+  // tool_name absorbs hook_event_name, session_id falls back to the environment,
+  // and tool_input is coerced to an object. `hook_event_name` itself is now
+  // forwarded by the spread above, unconditionally rather than only when truthy.
+  normalized['tool_name'] = eventName;
+  normalized['session_id'] = sessionId;
+  normalized['tool_input'] = toolInput;
+
+  return normalized as unknown as HookInput;
 }
 
 /**
