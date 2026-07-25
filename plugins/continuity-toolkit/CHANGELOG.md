@@ -2,6 +2,46 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.9.0] - 2026-07-25 — four more handlers were inert, including a security control; plus a structural guard so the class stops recurring
+
+`dist` is rebuilt (shared library + hook source changed).
+
+### Fixed
+
+**Four registered PostToolUse/PostToolUseFailure handlers never saw their payload.** Same root cause as 2.8.5 — `normalizeInput`'s `passThrough` allowlist — but in two distinct shapes:
+
+| Handler | Read | Problem | Effect |
+|---|---|---|---|
+| `posttool/secret-detector` | `tool_output` | wrong name **and** not allowlisted | **never scanned a single byte of tool output for secrets** |
+| `posttool/error-warner` | `tool_output` | wrong name **and** not allowlisted | never analyzed command output |
+| `posttool/bash-output-measurer` | `tool_output` | wrong name **and** not allowlisted | recorded `outputBytes: 0` for every event |
+| `posttool/failure-logger` | `error`, `is_interrupt` | names correct, **not allowlisted** | never logged a failure, never emitted a fix hint |
+
+**Field names settled by live payload capture, not inference.** Temporary dumper hooks captured both events from CC 2.1.220:
+
+- `PostToolUse` sends **`tool_response`** = `{stdout, stderr, interrupted, isImage, noOutputExpected}`
+- `PostToolUseFailure` sends **`error`** (string) + **`is_interrupt`** (boolean)
+- **`tool_output` is sent by neither event** — the three handlers read a key Claude Code has never produced
+
+Renamed `tool_output` → `tool_response` in the three PostToolUse handlers, and added `tool_response`, `error`, `is_interrupt` to `passThrough`. For the three renamed handlers either change alone would have left them inert; `failure-logger` needed only the allowlist entry.
+
+An earlier draft of the issue claimed `is_interrupt` was absent from the binary. That was wrong — it came from counting *quoted* occurrences for one field and *quoted + bare* for another. The capture settled it: `is_interrupt` is real.
+
+### Added
+
+- **A structural guard against the defect class** (`tests/lib/passthrough-completeness.test.ts`). Every prior fix pinned specific field *names*; those tests pass while new instances ship — 2,075 green tests coexisted with these four inert handlers. The guard instead parses every `interface X extends HookInput { … }` in the hook sources and asserts each declared field appears in `passThrough`. Verified against two must-fail controls: removing the allowlist entries, and reverting one rename. It reports the offending `file → field` pairs directly.
+- **End-to-end payload tests** (`tests/posttool/posttool-payload-e2e.test.ts`) driving raw captured JSON through `parseHookInput` into each handler. Every pre-existing test for these handlers built a `HookInput` by hand — a shape that never occurs at runtime — which is why the defect was invisible. 5 of the 7 fail on pre-fix code.
+
+### Known issue — not fixed here
+
+**`error-warner` remains inert for a second, independent reason.** It loads its patterns via `loadErrorRules()` from `$CLAUDE_PROJECT_DIR/.claude/rules/error_rules.json` (or the plugin dir), and **no such file exists in this repo or the shipped plugin**. With no rules it returns silent success regardless of input, so the rename is necessary but not sufficient for that handler. Its existing test suite passes only because it `vi.mock`s `error-rules.js`, which is why the gap went unnoticed. Tracked separately.
+
+Also noted: `error-warner`'s `exit_code` trigger is dead on real payloads — the captured `tool_response` carries no `exit_code` (failures arrive on `PostToolUseFailure` as `error`).
+
+### Note
+
+Behaviorally inert for dtk/atk/ftk/etk — none of their registered hooks read these fields — so their `dist` is rebuilt for source consistency but their versions are unchanged.
+
 ## [2.8.5] - 2026-07-25 — 2.8.4's fix was inert: `normalizeInput` stripped the very fields it taught the handlers to read
 
 `dist` is rebuilt (shared library source changed).

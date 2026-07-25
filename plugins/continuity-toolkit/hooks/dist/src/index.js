@@ -308,6 +308,17 @@ function normalizeInput(raw) {
     "task_id",
     "task_subject",
     "task_description",
+    // PostToolUse / PostToolUseFailure payloads. All three captured live from
+    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
+    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
+    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
+    "tool_response",
+    "error",
+    "is_interrupt",
+    // PostToolUse / PostToolUseFailure payloads. All three captured live from
+    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
+    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
+    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
     // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
     // (that was the 2.8.4 finding); kept for any event that does.
     "agent_type",
@@ -3998,7 +4009,7 @@ async function secretDetector(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
   const extendedInput = input;
-  const toolOutput = extendedInput.tool_output;
+  const toolOutput = extendedInput.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME16, "No tool output available");
     return outputSilentSuccess();
@@ -4430,7 +4441,7 @@ async function errorWarner(input) {
   if (skipped) return skipped;
   const command = getCommand(input);
   const extendedInput = input;
-  const toolOutput = extendedInput.tool_output;
+  const toolOutput = extendedInput.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME21, "No tool output available");
     return outputSilentSuccess();
@@ -5984,7 +5995,7 @@ async function readCacheInvalidatorHook(input) {
 // src/posttool/bash-output-measurer.ts
 var HOOK_NAME44 = "bash-output-measurer";
 function combineOutput(input) {
-  const out = input.tool_output;
+  const out = input.tool_response;
   if (!out) return "";
   return [out.stdout, out.stderr, out.output].filter(Boolean).join("");
 }

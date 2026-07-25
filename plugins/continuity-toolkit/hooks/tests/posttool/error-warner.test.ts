@@ -55,11 +55,11 @@ function createBashInputWithOutput(
     exit_code?: number;
     output?: string;
   }
-): HookInput & { tool_output: typeof output } {
+): HookInput & { tool_response: typeof output } {
   return {
     tool_name: 'Bash',
     tool_input: { command },
-    tool_output: output,
+    tool_response: output,
   };
 }
 
@@ -101,7 +101,7 @@ describe('errorWarner', () => {
   });
 
   describe('no output', () => {
-    it('should return silent success when no tool_output', async () => {
+    it('should return silent success when no tool_response', async () => {
       const input: HookInput = {
         tool_name: 'Bash',
         tool_input: { command: 'ls -la' },

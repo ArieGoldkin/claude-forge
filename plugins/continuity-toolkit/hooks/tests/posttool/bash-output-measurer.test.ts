@@ -26,7 +26,7 @@ let tempRoot: string;
 let jsonlPath: string;
 
 interface BashHookInput extends HookInput {
-  tool_output?: {
+  tool_response?: {
     stdout?: string;
     stderr?: string;
     exit_code?: number;
@@ -44,7 +44,7 @@ function buildBashInput(
     tool_name: 'Bash',
     session_id: SESSION_ID,
     tool_input: command !== undefined ? { command } : {},
-    tool_output: { stdout: output, exit_code: 0 },
+    tool_response: { stdout: output, exit_code: 0 },
   };
   if (duration !== undefined) input.duration_ms = duration;
   return input;
@@ -134,7 +134,7 @@ describe('bash-output-measurer hook', () => {
       tool_name: 'Bash',
       session_id: 'unknown',
       tool_input: { command: 'git status' },
-      tool_output: { stdout: 'clean\n', exit_code: 0 },
+      tool_response: { stdout: 'clean\n', exit_code: 0 },
     };
     const result = await bashOutputMeasurerHook(input);
     expect(result.continue).toBe(true);
@@ -155,7 +155,7 @@ describe('bash-output-measurer hook', () => {
       tool_name: 'Bash',
       session_id: SESSION_ID,
       tool_input: { command: 'cat /nonexistent' },
-      tool_output: { stdout: '', stderr: 'cat: /nonexistent: No such file\n', exit_code: 1 },
+      tool_response: { stdout: '', stderr: 'cat: /nonexistent: No such file\n', exit_code: 1 },
     };
     await bashOutputMeasurerHook(input);
     const events = readMeasurements();

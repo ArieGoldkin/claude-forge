@@ -27,7 +27,16 @@ const HOOK_NAME = 'error-warner';
  * Extended hook input with tool output (PostToolUse context).
  */
 interface PostToolUseInput extends HookInput {
-  tool_output?: {
+  /**
+   * PostToolUse payload field. Captured live from CC 2.1.220 for a Bash call:
+   * `{ stdout, stderr, interrupted, isImage, noOutputExpected }`.
+   * `exit_code` / `output` were NOT observed for Bash — kept optional in case
+   * other tools supply them, but do not rely on them.
+   *
+   * NOTE: this field must also appear in `passThrough` in lib/input.ts, or
+   * normalizeInput deletes it before this handler runs (see ctk 2.9.0).
+   */
+  tool_response?: {
     stdout?: string;
     stderr?: string;
     exit_code?: number;
@@ -46,7 +55,7 @@ interface PostToolUseInput extends HookInput {
  * tips when it detects common error patterns. It runs asynchronously
  * (configured in hooks.json) to avoid blocking the user experience.
  *
- * @param input - Hook input from Claude Code (includes tool_output)
+ * @param input - Hook input from Claude Code (includes tool_response)
  * @returns HookResult with additionalContext if error detected
  */
 export async function errorWarner(input: HookInput): Promise<HookResult> {
@@ -58,7 +67,7 @@ export async function errorWarner(input: HookInput): Promise<HookResult> {
 
   // Get tool output from the extended input
   const extendedInput = input as PostToolUseInput;
-  const toolOutput = extendedInput.tool_output;
+  const toolOutput = extendedInput.tool_response;
 
   if (!toolOutput) {
     logDebug(HOOK_NAME, 'No tool output available');
