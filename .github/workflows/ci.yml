@@ -21,6 +21,35 @@ jobs:
       - run: npm test
         working-directory: shared/hooks-infra
 
+  # Maintainer-only sandbox launcher (ADR-0001 / issue #45). Lives outside the
+  # plugin trees on purpose — it carries the provider SDK, which must never
+  # reach an installer — but it still needs CI. Code that nothing runs is how
+  # the inert-handler class survived three releases.
+  sandbox-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/sandbox-launcher/package-lock.json
+      # The launcher imports the shared sandbox registry directly, so vitest and
+      # tsc both resolve shared/hooks-infra/tsconfig.json — which `extends`
+      # @tsconfig/node22 from *that* package's node_modules. Without this step
+      # the job fails on a missing module rather than anything real.
+      - name: Install shared hooks-infra deps
+        run: npm ci
+        working-directory: shared/hooks-infra
+      - run: npm ci
+        working-directory: tools/sandbox-launcher
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: tools/sandbox-launcher
+      - name: Test
+        run: npm test
+        working-directory: tools/sandbox-launcher
+
   # Per-plugin lint + typecheck + test. Each plugin's hooks depend on the
   # shared library via symlinks, so shared deps are installed first.
   plugins:
