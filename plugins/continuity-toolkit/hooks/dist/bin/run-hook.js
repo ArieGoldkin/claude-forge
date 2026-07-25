@@ -6,7 +6,7 @@ import { join } from 'path';
 import * as crypto from 'crypto';
 import * as os from 'os';
 import { tmpdir } from 'os';
-import { execSync, execFileSync } from 'child_process';
+import { spawn, execSync, execFileSync } from 'child_process';
 
 // src/lib/output.ts
 function outputSilentSuccess() {
@@ -1867,7 +1867,72 @@ async function sessionEnd(input) {
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME4 = "git-utils";
+
+// src/lib/sandbox/types.ts
+var STATUSES = ["provisioning", "running", "stopped"];
+function isSandboxRecord(value) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value;
+  return typeof v["sandbox_id"] === "string" && v["sandbox_id"].length > 0 && typeof v["provider"] === "string" && typeof v["created_at"] === "string" && typeof v["expires_at"] === "string" && typeof v["session_id"] === "string" && typeof v["status"] === "string" && STATUSES.includes(v["status"]);
+}
+
+// src/lib/sandbox/registry.ts
+var REGISTRY_FILE = "sandboxes.json";
+function registryPath(projectDir) {
+  return path2.join(projectDir, CONTINUITY_DIRS.base, REGISTRY_FILE);
+}
+function readRegistry(projectDir) {
+  try {
+    const raw = fs6.readFileSync(registryPath(projectDir), "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(isSandboxRecord);
+  } catch {
+    return [];
+  }
+}
+function hasRecords(projectDir) {
+  if (!fs6.existsSync(registryPath(projectDir))) {
+    return false;
+  }
+  return readRegistry(projectDir).length > 0;
+}
+
+// src/lifecycle/sandbox-reaper.ts
+var HOOK_NAME4 = "sandbox-reaper";
+var LAUNCHER_DIR = "tools/sandbox-launcher";
+var LAUNCHER_ENTRY = "src/reap.ts";
+var LAUNCHER_RUNNER = "node_modules/.bin/tsx";
+async function sandboxReaper(_input) {
+  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
+  if (!hasRecords(projectDir)) {
+    return outputSilentSuccess();
+  }
+  const launcherDir = path2.join(projectDir, LAUNCHER_DIR);
+  const entry = path2.join(launcherDir, LAUNCHER_ENTRY);
+  const runner = path2.join(launcherDir, LAUNCHER_RUNNER);
+  if (!fs6.existsSync(entry) || !fs6.existsSync(runner)) {
+    logDebug(HOOK_NAME4, "Sandbox records found but launcher is not installed; skipping reap");
+    return outputSilentSuccess();
+  }
+  try {
+    const child = spawn(runner, [entry, projectDir], {
+      cwd: launcherDir,
+      detached: true,
+      stdio: "ignore"
+    });
+    child.unref();
+    logInfo(HOOK_NAME4, "Detached sandbox reap started");
+  } catch (error) {
+    logError(HOOK_NAME4, `Failed to start sandbox reap: ${error}`);
+  }
+  return outputSilentSuccess();
+}
+var HOOK_NAME5 = "git-utils";
 var branchCache = /* @__PURE__ */ new Map();
 var CACHE_TTL_MS = 3e4;
 var PROTECTED_BRANCHES = /* @__PURE__ */ new Set([
@@ -1890,10 +1955,10 @@ function getCurrentBranch2(projectDir) {
       timeout: 5e3,
       stdio: ["pipe", "pipe", "pipe"]
     }).trim();
-    logDebug(HOOK_NAME4, `Current branch: ${branch}`);
+    logDebug(HOOK_NAME5, `Current branch: ${branch}`);
     return branch;
   } catch (error) {
-    logDebug(HOOK_NAME4, `Failed to get branch: ${error}`);
+    logDebug(HOOK_NAME5, `Failed to get branch: ${error}`);
     return "";
   }
 }
@@ -1902,7 +1967,7 @@ function getCachedBranch(projectDir) {
   const now = Date.now();
   const cached = branchCache.get(cwd);
   if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-    logDebug(HOOK_NAME4, `Using cached branch: ${cached.branch}`);
+    logDebug(HOOK_NAME5, `Using cached branch: ${cached.branch}`);
     return cached.branch;
   }
   const branch = getCurrentBranch2(cwd);
@@ -1927,26 +1992,26 @@ function isProtectedBranch(branch) {
 // src/lifecycle/pre-compact-saver.ts
 var BLOCK_THRESHOLD = 10;
 var RECENT_SAVE_MINUTES = 15;
-var HOOK_NAME5 = "pre-compact";
+var HOOK_NAME6 = "pre-compact";
 function formatTimestamp2() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 async function preCompactSaver(_input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"];
   if (!projectDir) {
-    logWarn(HOOK_NAME5, "CLAUDE_PROJECT_DIR not set");
+    logWarn(HOOK_NAME6, "CLAUDE_PROJECT_DIR not set");
     return outputWarning("Project directory not set - state not preserved before compaction");
   }
-  logDebug(HOOK_NAME5, `Hook fired for project: ${projectDir}`);
+  logDebug(HOOK_NAME6, `Hook fired for project: ${projectDir}`);
   const ledgerPath = getCurrentLedgerPath(projectDir);
   if (!ledgerPath || !fs6.existsSync(ledgerPath)) {
-    logWarn(HOOK_NAME5, `Ledger not found at ${ledgerPath ?? "unknown"}`);
+    logWarn(HOOK_NAME6, `Ledger not found at ${ledgerPath ?? "unknown"}`);
     return outputWarning("Ledger not found - state not preserved before compaction");
   }
   try {
     fs6.accessSync(ledgerPath, fs6.constants.W_OK);
   } catch {
-    logWarn(HOOK_NAME5, `Ledger not writable at ${ledgerPath}`);
+    logWarn(HOOK_NAME6, `Ledger not writable at ${ledgerPath}`);
     return outputWarning("Ledger not writable - state not preserved before compaction");
   }
   const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
@@ -1958,7 +2023,7 @@ async function preCompactSaver(_input) {
       const minutesSinceLastSave = (Date.now() - ledgerStat.mtimeMs) / 6e4;
       if (editCount >= BLOCK_THRESHOLD && minutesSinceLastSave > RECENT_SAVE_MINUTES) {
         logWarn(
-          HOOK_NAME5,
+          HOOK_NAME6,
           `Blocking compaction: ${editCount} files edited, ledger last saved ${Math.round(minutesSinceLastSave)}m ago. Run /save-state first.`
         );
         return {
@@ -1969,7 +2034,7 @@ async function preCompactSaver(_input) {
       }
     }
   } catch (error) {
-    logDebug(HOOK_NAME5, `Could not check dirty state: ${error}`);
+    logDebug(HOOK_NAME6, `Could not check dirty state: ${error}`);
   }
   const timestamp = formatTimestamp2();
   const marker = `
@@ -1978,9 +2043,9 @@ async function preCompactSaver(_input) {
 `;
   try {
     fs6.appendFileSync(ledgerPath, marker);
-    logInfo(HOOK_NAME5, "Timestamp added to ledger");
+    logInfo(HOOK_NAME6, "Timestamp added to ledger");
   } catch (error) {
-    logWarn(HOOK_NAME5, `Failed to write to ledger: ${error}`);
+    logWarn(HOOK_NAME6, `Failed to write to ledger: ${error}`);
     return outputWarning("Failed to write to ledger - state not preserved");
   }
   writeHandoffJson(projectDir, timestamp);
@@ -2021,9 +2086,9 @@ function writeHandoffJson(projectDir, timestamp) {
     fs6.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
 `);
     fs6.renameSync(tmpPath, outPath);
-    logInfo(HOOK_NAME5, `Handoff JSON written to ${outPath}`);
+    logInfo(HOOK_NAME6, `Handoff JSON written to ${outPath}`);
   } catch (error) {
-    logWarn(HOOK_NAME5, `Failed to write handoff.json: ${error}`);
+    logWarn(HOOK_NAME6, `Failed to write handoff.json: ${error}`);
   }
 }
 
@@ -2312,7 +2377,7 @@ function matchDangerousBash(command) {
 }
 
 // src/pretool/security-blocker.ts
-var HOOK_NAME6 = "pre-tool-use-security";
+var HOOK_NAME7 = "pre-tool-use-security";
 var FILE_WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit"]);
 FILESYSTEM_PATTERNS.map(
   (p) => p.regex
@@ -2501,7 +2566,7 @@ function validateBashCommand(command, sessionId, agentContext) {
     const match = matchDangerousBash(candidate);
     if (match) {
       const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}`;
-      logWarn(HOOK_NAME6, `Blocked: ${reason}`);
+      logWarn(HOOK_NAME7, `Blocked: ${reason}`);
       logPermission("deny", reason, "Bash", sessionId, agentContext);
       return outputDeny(
         `BLOCKED: Dangerous command detected.
@@ -2516,7 +2581,7 @@ Pattern matched: ${match.pattern.regex.source}`
     const envDumpMatch = matchesEnvDumpCommand(candidate);
     if (envDumpMatch.matched) {
       const reason = `Environment dump command detected. Pattern: ${envDumpMatch.pattern}`;
-      logWarn(HOOK_NAME6, `Blocked: ${reason}`);
+      logWarn(HOOK_NAME7, `Blocked: ${reason}`);
       logPermission("deny", reason, "Bash", sessionId, agentContext);
       return outputDeny(
         "BLOCKED: Environment dump command detected.\n\nThis command could expose secrets stored in environment variables.\nIf you need a specific variable, use: echo $VARIABLE_NAME"
@@ -2527,7 +2592,7 @@ Pattern matched: ${match.pattern.regex.source}`
     const sensitiveMatch = matchesBashSensitivePattern(candidate);
     if (sensitiveMatch.matched) {
       const reason = `Command references sensitive file or directory. Pattern: ${sensitiveMatch.pattern}`;
-      logWarn(HOOK_NAME6, `Blocked: ${reason}`);
+      logWarn(HOOK_NAME7, `Blocked: ${reason}`);
       logPermission("deny", reason, "Bash", sessionId, agentContext);
       return outputDeny(
         `BLOCKED: Command references protected resource.
@@ -2545,11 +2610,11 @@ function checkGitPushGate(candidates, sessionId, agentContext) {
   for (const candidate of candidates) {
     if (!matchesGitPush(candidate)) continue;
     if (process.env["CLAUDE_AUTO_APPROVE_PUSH"] === "1") {
-      logDebug(HOOK_NAME6, "git push auto-approved via CLAUDE_AUTO_APPROVE_PUSH=1");
+      logDebug(HOOK_NAME7, "git push auto-approved via CLAUDE_AUTO_APPROVE_PUSH=1");
       return null;
     }
     logDebug(
-      HOOK_NAME6,
+      HOOK_NAME7,
       `git push routed to user approval [session=${sessionId}, agent=${agentContext?.agentType ?? "none"}]`
     );
     return outputAsk();
@@ -2576,10 +2641,10 @@ function getCategoryFriendlyName(category) {
 }
 function validateFileOperation(filePath, toolName, sessionId, agentContext) {
   const normalizedPath = normalizePath(filePath);
-  logDebug(HOOK_NAME6, `Normalized path: ${normalizedPath}`);
+  logDebug(HOOK_NAME7, `Normalized path: ${normalizedPath}`);
   if (normalizedPath.includes("..")) {
     const reason = `Path traversal detected in: ${filePath}`;
-    logWarn(HOOK_NAME6, `Blocked: ${reason}`);
+    logWarn(HOOK_NAME7, `Blocked: ${reason}`);
     logPermission("deny", reason, toolName, sessionId, agentContext);
     return outputDeny(
       `BLOCKED: Path traversal detected.
@@ -2589,14 +2654,14 @@ Path: ${filePath}`
     );
   }
   const realPath = resolveRealPath(filePath);
-  logDebug(HOOK_NAME6, `Resolved path: ${realPath}`);
+  logDebug(HOOK_NAME7, `Resolved path: ${realPath}`);
   const pathsToCheck = [normalizedPath, realPath];
   for (const checkPath of pathsToCheck) {
     const match = matchesProtectedPath(checkPath);
     if (match.matched && match.category) {
       const friendlyName = getCategoryFriendlyName(match.category);
       const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath})`;
-      logWarn(HOOK_NAME6, `Blocked: ${reason}`);
+      logWarn(HOOK_NAME7, `Blocked: ${reason}`);
       logPermission("deny", reason, toolName, sessionId, agentContext);
       return outputDeny(
         `BLOCKED: ${friendlyName} modification blocked.
@@ -2624,11 +2689,11 @@ async function securityBlocker(input) {
   const toolName = getToolName(input);
   const sessionId = getSessionId(input);
   const agentCtx = extractAgentContext(input);
-  logDebug(HOOK_NAME6, formatAgentDebug(toolName, agentCtx));
+  logDebug(HOOK_NAME7, formatAgentDebug(toolName, agentCtx));
   if (toolName === "Bash") {
     if (input.tool_input.dangerouslyDisableSandbox === true) {
       logWarn(
-        HOOK_NAME6,
+        HOOK_NAME7,
         `Sandbox disabled via dangerouslyDisableSandbox flag [session=${sessionId}]`
       );
     }
@@ -2652,7 +2717,7 @@ async function securityBlocker(input) {
     }
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME6, `Tool ${toolName} allowed by default`);
+  logDebug(HOOK_NAME7, `Tool ${toolName} allowed by default`);
   return outputSilentSuccess();
 }
 
@@ -2695,7 +2760,7 @@ function guardHasFilePath(input) {
 }
 
 // src/permission/auto-approve-safe-bash.ts
-var HOOK_NAME7 = "auto-approve-safe-bash";
+var HOOK_NAME8 = "auto-approve-safe-bash";
 var SAFE_COMMANDS_EXACT = [
   "pwd",
   "whoami",
@@ -2963,43 +3028,43 @@ async function autoApproveSafeBash(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
   const command = getCommand(input);
-  logDebug(HOOK_NAME7, `Evaluating: ${command.slice(0, 80)}...`);
+  logDebug(HOOK_NAME8, `Evaluating: ${command.slice(0, 80)}...`);
   if (containsDangerousPattern(command)) {
-    logDebug(HOOK_NAME7, "Requires approval: contains dangerous pattern");
+    logDebug(HOOK_NAME8, "Requires approval: contains dangerous pattern");
     return outputSilentSuccess();
   }
   if (findHasUnsafeAction(command)) {
-    logDebug(HOOK_NAME7, "Requires approval: find with -exec/-delete (CC v2.1.113)");
+    logDebug(HOOK_NAME8, "Requires approval: find with -exec/-delete (CC v2.1.113)");
     return outputSilentSuccess();
   }
   if (hasEnvVarAssignment(command)) {
-    logDebug(HOOK_NAME7, "Requires approval: env-var assignment prefix (CC v2.1.145 analog)");
+    logDebug(HOOK_NAME8, "Requires approval: env-var assignment prefix (CC v2.1.145 analog)");
     return outputSilentSuccess();
   }
   const segments = splitIntoSegments(command);
   if (segments.length === 0) {
-    logDebug(HOOK_NAME7, "No parseable segment, deferring to standard flow");
+    logDebug(HOOK_NAME8, "No parseable segment, deferring to standard flow");
     return outputSilentSuccess();
   }
   for (const rawSegment of segments) {
     const segment = stripProxyPrefix(rawSegment);
     if (requiresApproval(segment)) {
-      logDebug(HOOK_NAME7, `Requires approval: segment '${segment.slice(0, 60)}'`);
+      logDebug(HOOK_NAME8, `Requires approval: segment '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();
     }
     if (!isSegmentSafe(segment)) {
-      logDebug(HOOK_NAME7, `Segment not on safe allowlist: '${segment.slice(0, 60)}'`);
+      logDebug(HOOK_NAME8, `Segment not on safe allowlist: '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();
     }
   }
   const sessionId = getSessionId(input);
-  logInfo(HOOK_NAME7, `Auto-approved: all ${segments.length} segment(s) safe`);
+  logInfo(HOOK_NAME8, `Auto-approved: all ${segments.length} segment(s) safe`);
   logPermission("allow", `auto-approved safe command: ${command.slice(0, 80)}`, "Bash", sessionId);
   return outputAllow();
 }
 
 // src/permission/auto-approve-project-writes.ts
-var HOOK_NAME8 = "auto-approve-project-writes";
+var HOOK_NAME9 = "auto-approve-project-writes";
 var PROTECTED_DIRS = [
   "node_modules/",
   ".git/",
@@ -3107,8 +3172,8 @@ var SAFE_EXTENSIONS = [
 ];
 function isProtectedDirectory(normalizedPath) {
   const lower = normalizedPath.toLowerCase();
-  const path28 = lower.endsWith("/") ? lower : `${lower}/`;
-  return PROTECTED_DIRS.some((dir) => path28.includes(`/${dir}`) || path28.startsWith(dir));
+  const path30 = lower.endsWith("/") ? lower : `${lower}/`;
+  return PROTECTED_DIRS.some((dir) => path30.includes(`/${dir}`) || path30.startsWith(dir));
 }
 function isProtectedFile(normalizedPath) {
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(normalizedPath));
@@ -3122,33 +3187,33 @@ async function autoApproveProjectWrites(input) {
   if (skipped) return skipped;
   const toolName = getToolName(input);
   const filePath = getFilePath(input);
-  logDebug(HOOK_NAME8, `Evaluating: ${filePath}`);
+  logDebug(HOOK_NAME9, `Evaluating: ${filePath}`);
   const normalizedPath = normalizePath(filePath);
   const realPath = resolveRealPath(filePath);
-  logDebug(HOOK_NAME8, `Normalized: ${normalizedPath}, Resolved: ${realPath}`);
+  logDebug(HOOK_NAME9, `Normalized: ${normalizedPath}, Resolved: ${realPath}`);
   if (!isWithinProject(realPath)) {
-    logDebug(HOOK_NAME8, "Outside project directory, deferring to standard flow");
+    logDebug(HOOK_NAME9, "Outside project directory, deferring to standard flow");
     return outputSilentSuccess();
   }
   const pathsToCheck = [normalizedPath, realPath];
   if (pathsToCheck.some(isProtectedDirectory)) {
-    logDebug(HOOK_NAME8, "Protected directory, deferring to standard flow");
+    logDebug(HOOK_NAME9, "Protected directory, deferring to standard flow");
     return outputSilentSuccess();
   }
   if (pathsToCheck.some(isProtectedFile)) {
-    logDebug(HOOK_NAME8, "Protected file pattern, deferring to standard flow");
+    logDebug(HOOK_NAME9, "Protected file pattern, deferring to standard flow");
     return outputSilentSuccess();
   }
   if (!hasSafeExtension(normalizedPath)) {
-    logDebug(HOOK_NAME8, "Unrecognized file type, deferring to standard flow");
+    logDebug(HOOK_NAME9, "Unrecognized file type, deferring to standard flow");
     return outputSilentSuccess();
   }
   const sessionId = getSessionId(input);
-  logInfo(HOOK_NAME8, `Auto-approved: safe file within project: ${filePath}`);
+  logInfo(HOOK_NAME9, `Auto-approved: safe file within project: ${filePath}`);
   logPermission("allow", `auto-approved project file: ${filePath}`, toolName, sessionId);
   return outputAllow();
 }
-var HOOK_NAME9 = "permission-profiles";
+var HOOK_NAME10 = "permission-profiles";
 var profileCache = /* @__PURE__ */ new Map();
 function getProfilePath(projectDir, profileName = "default") {
   return path2.join(projectDir, ".claude", "permissions", `${profileName}.json`);
@@ -3157,7 +3222,7 @@ async function loadPermissionProfile(projectDir, profileName = "default") {
   const cwd = projectDir;
   const cacheKey = `${cwd}:${profileName}`;
   if (profileCache.has(cacheKey)) {
-    logDebug(HOOK_NAME9, "Using cached permission profile");
+    logDebug(HOOK_NAME10, "Using cached permission profile");
     return profileCache.get(cacheKey) || null;
   }
   let profilePath = getProfilePath(cwd, profileName);
@@ -3166,27 +3231,27 @@ async function loadPermissionProfile(projectDir, profileName = "default") {
     if (pluginRoot) {
       const pluginProfilePath = getProfilePath(pluginRoot, profileName);
       if (fs6.existsSync(pluginProfilePath)) {
-        logDebug(HOOK_NAME9, "Using plugin default permission profile");
+        logDebug(HOOK_NAME10, "Using plugin default permission profile");
         profilePath = pluginProfilePath;
       }
     }
   }
   if (!fs6.existsSync(profilePath)) {
-    logDebug(HOOK_NAME9, `Permission profile not found: ${profilePath}`);
+    logDebug(HOOK_NAME10, `Permission profile not found: ${profilePath}`);
     return null;
   }
   try {
     const content = fs6.readFileSync(profilePath, "utf-8");
     const profile = JSON.parse(content);
     if (!profile.name) {
-      logError(HOOK_NAME9, "Invalid permission profile: missing name");
+      logError(HOOK_NAME10, "Invalid permission profile: missing name");
       return null;
     }
     profileCache.set(cacheKey, profile);
-    logDebug(HOOK_NAME9, `Loaded permission profile: ${profile.name}`);
+    logDebug(HOOK_NAME10, `Loaded permission profile: ${profile.name}`);
     return profile;
   } catch (error) {
-    logError(HOOK_NAME9, `Failed to load permission profile: ${error}`);
+    logError(HOOK_NAME10, `Failed to load permission profile: ${error}`);
     return null;
   }
 }
@@ -3205,7 +3270,7 @@ function matchesPathPattern(filePath, patterns, projectDir) {
   for (const pattern of patterns) {
     const regex = patternToRegex(pattern, projectDir);
     if (regex.test(normalizedPath)) {
-      logDebug(HOOK_NAME9, `Path '${filePath}' matches pattern '${pattern}'`);
+      logDebug(HOOK_NAME10, `Path '${filePath}' matches pattern '${pattern}'`);
       return true;
     }
   }
@@ -3218,7 +3283,7 @@ function matchesCommandPattern(command, prefixes) {
   const trimmedCommand = command.trim();
   for (const prefix of prefixes) {
     if (trimmedCommand.startsWith(prefix) || trimmedCommand.includes(` ${prefix}`)) {
-      logDebug(HOOK_NAME9, `Command matches prefix '${prefix}'`);
+      logDebug(HOOK_NAME10, `Command matches prefix '${prefix}'`);
       return true;
     }
   }
@@ -3248,23 +3313,23 @@ function checkRulesMatch(rules, toolName, filePath, command, project) {
 function evaluatePermission(profile, toolName, filePath, command, projectDir) {
   const project = projectDir;
   if (checkRulesMatch(profile.deny, toolName, filePath, command, project)) {
-    logDebug(HOOK_NAME9, "Permission denied: matches deny rule");
+    logDebug(HOOK_NAME10, "Permission denied: matches deny rule");
     return "deny";
   }
   if (checkRulesMatch(profile.require_approval, toolName, filePath, command, project)) {
-    logDebug(HOOK_NAME9, "Permission requires approval: matches require_approval rule");
+    logDebug(HOOK_NAME10, "Permission requires approval: matches require_approval rule");
     return "require_approval";
   }
   if (checkRulesMatch(profile.auto_approve, toolName, filePath, command, project)) {
-    logDebug(HOOK_NAME9, "Permission allowed: matches auto_approve rule");
+    logDebug(HOOK_NAME10, "Permission allowed: matches auto_approve rule");
     return "allow";
   }
-  logDebug(HOOK_NAME9, "No permission rule matched, deferring");
+  logDebug(HOOK_NAME10, "No permission rule matched, deferring");
   return null;
 }
 
 // src/permission/profile-evaluator.ts
-var HOOK_NAME10 = "profile-evaluator";
+var HOOK_NAME11 = "profile-evaluator";
 async function profileEvaluator(input) {
   const toolName = getToolName(input);
   const filePath = getFilePath(input);
@@ -3272,10 +3337,10 @@ async function profileEvaluator(input) {
   const command = rawCommand ? stripProxyPrefix(rawCommand) : rawCommand;
   const sessionId = getSessionId(input);
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME10, `Evaluating ${toolName} with profile`);
+  logDebug(HOOK_NAME11, `Evaluating ${toolName} with profile`);
   const profile = await loadPermissionProfile(projectDir);
   if (!profile) {
-    logDebug(HOOK_NAME10, "No permission profile found, deferring");
+    logDebug(HOOK_NAME11, "No permission profile found, deferring");
     return outputSilentSuccess();
   }
   const decision = evaluatePermission(profile, toolName, filePath, command, projectDir);
@@ -3283,27 +3348,27 @@ async function profileEvaluator(input) {
     case "deny": {
       const target = filePath || command || toolName;
       logPermission("deny", `Profile denied: ${target}`, toolName, sessionId);
-      logInfo(HOOK_NAME10, `Denied by profile: ${target}`);
+      logInfo(HOOK_NAME11, `Denied by profile: ${target}`);
       return outputDeny(`Operation denied by permission profile: ${target}`);
     }
     case "require_approval": {
-      logDebug(HOOK_NAME10, "Requires approval per profile, deferring to standard flow");
+      logDebug(HOOK_NAME11, "Requires approval per profile, deferring to standard flow");
       return outputSilentSuccess();
     }
     case "allow": {
       const target = filePath || command || toolName;
       logPermission("allow", `Profile approved: ${target}`, toolName, sessionId);
-      logInfo(HOOK_NAME10, `Allowed by profile: ${target}`);
+      logInfo(HOOK_NAME11, `Allowed by profile: ${target}`);
       return outputAllow();
     }
     default:
-      logDebug(HOOK_NAME10, "No profile rule matched, deferring");
+      logDebug(HOOK_NAME11, "No profile rule matched, deferring");
       return outputSilentSuccess();
   }
 }
 
 // src/permission/permission-request-combined.ts
-var HOOK_NAME11 = "permission-request-combined";
+var HOOK_NAME12 = "permission-request-combined";
 function patchHookEventName(result) {
   if (result.hookSpecificOutput?.hookEventName === "PreToolUse") {
     return {
@@ -3324,37 +3389,37 @@ function isDenyDecision(result) {
 }
 async function permissionRequestCombined(input) {
   const toolName = getToolName(input);
-  logDebug(HOOK_NAME11, `Evaluating permission request for ${toolName}`);
+  logDebug(HOOK_NAME12, `Evaluating permission request for ${toolName}`);
   if (toolName === "Bash") {
-    logDebug(HOOK_NAME11, "Running: auto-approve-safe-bash");
+    logDebug(HOOK_NAME12, "Running: auto-approve-safe-bash");
     const safeBashResult = await autoApproveSafeBash(input);
     if (isAllowDecision(safeBashResult)) {
-      logInfo(HOOK_NAME11, "Auto-approved by safe-bash check");
+      logInfo(HOOK_NAME12, "Auto-approved by safe-bash check");
       return patchHookEventName(safeBashResult);
     }
   }
   if (toolName === "Write" || toolName === "Edit" || toolName === "MultiEdit") {
-    logDebug(HOOK_NAME11, "Running: auto-approve-project-writes");
+    logDebug(HOOK_NAME12, "Running: auto-approve-project-writes");
     const writeResult = await autoApproveProjectWrites(input);
     if (isAllowDecision(writeResult)) {
-      logInfo(HOOK_NAME11, "Auto-approved by project-writes check");
+      logInfo(HOOK_NAME12, "Auto-approved by project-writes check");
       return patchHookEventName(writeResult);
     }
   }
-  logDebug(HOOK_NAME11, "Running: profile-evaluator");
+  logDebug(HOOK_NAME12, "Running: profile-evaluator");
   const profileResult = await profileEvaluator(input);
   if (isAllowDecision(profileResult)) {
-    logInfo(HOOK_NAME11, "Allowed by profile");
+    logInfo(HOOK_NAME12, "Allowed by profile");
     return patchHookEventName(profileResult);
   }
   if (isDenyDecision(profileResult)) {
-    logInfo(HOOK_NAME11, "Denied by profile");
+    logInfo(HOOK_NAME12, "Denied by profile");
     return patchHookEventName(profileResult);
   }
-  logDebug(HOOK_NAME11, "No decision, deferring to permission dialog");
+  logDebug(HOOK_NAME12, "No decision, deferring to permission dialog");
   return outputSilentSuccess();
 }
-var HOOK_NAME12 = "git-validators";
+var HOOK_NAME13 = "git-validators";
 var VALID_BRANCH_PATTERNS = [
   /^NAPP-\d{4,}-[\w-]+$/i,
   // Jira ticket format
@@ -3397,12 +3462,12 @@ function patternStringToRegex(pattern) {
 function loadBranchPatterns(projectDir) {
   const cwd = process.env["CLAUDE_PROJECT_DIR"] || ".";
   if (branchPatternsCache.has(cwd)) {
-    logDebug(HOOK_NAME12, "Using cached branch patterns");
+    logDebug(HOOK_NAME13, "Using cached branch patterns");
     return branchPatternsCache.get(cwd) || null;
   }
   const patternsPath = getBranchPatternsPath(cwd);
   if (!fs6.existsSync(patternsPath)) {
-    logDebug(HOOK_NAME12, `Branch patterns file not found: ${patternsPath}`);
+    logDebug(HOOK_NAME13, `Branch patterns file not found: ${patternsPath}`);
     return null;
   }
   try {
@@ -3410,12 +3475,12 @@ function loadBranchPatterns(projectDir) {
     const config = JSON.parse(content);
     branchPatternsCache.set(cwd, config);
     logDebug(
-      HOOK_NAME12,
+      HOOK_NAME13,
       `Loaded ${config.additional_patterns?.length ?? 0} additional branch patterns`
     );
     return config;
   } catch (error) {
-    logError(HOOK_NAME12, `Failed to load branch patterns: ${error}`);
+    logError(HOOK_NAME13, `Failed to load branch patterns: ${error}`);
     return null;
   }
 }
@@ -3466,13 +3531,13 @@ function validateBranchName(branch, projectDir) {
     try {
       additionalPatterns.push(patternStringToRegex(raw));
     } catch (error) {
-      logError(HOOK_NAME12, `Skipping invalid branch pattern: ${error}`);
+      logError(HOOK_NAME13, `Skipping invalid branch pattern: ${error}`);
     }
   }
   const allPatterns = [...VALID_BRANCH_PATTERNS, ...additionalPatterns];
   for (const pattern of allPatterns) {
     if (pattern.test(branch)) {
-      logDebug(HOOK_NAME12, `Branch '${branch}' matches pattern ${pattern}`);
+      logDebug(HOOK_NAME13, `Branch '${branch}' matches pattern ${pattern}`);
       return { valid: true };
     }
   }
@@ -3507,7 +3572,7 @@ function validateCommitMessage(message) {
     }
   }
   if (CONVENTIONAL_COMMIT_PATTERN.test(firstLine)) {
-    logDebug(HOOK_NAME12, "Commit message follows conventional format");
+    logDebug(HOOK_NAME13, "Commit message follows conventional format");
     return { valid: true };
   }
   if (firstLine.length < 10) {
@@ -3559,7 +3624,7 @@ function isAmendCommit(command) {
 }
 
 // src/pretool/git-validator.ts
-var HOOK_NAME13 = "git-validator";
+var HOOK_NAME14 = "git-validator";
 function validateMessage(command) {
   const message = extractCommitMessageFromCommand(command);
   if (!message) {
@@ -3569,7 +3634,7 @@ function validateMessage(command) {
   if (validation.valid) {
     return null;
   }
-  logInfo(HOOK_NAME13, `Invalid commit message: ${validation.error}`);
+  logInfo(HOOK_NAME14, `Invalid commit message: ${validation.error}`);
   const suggestion = validation.suggestion ? ` (${validation.suggestion})` : "";
   return `Commit message: ${validation.error}${suggestion}`;
 }
@@ -3580,7 +3645,7 @@ function checkBranch() {
     return warnings;
   }
   if (isProtectedBranch(currentBranch)) {
-    logWarn(HOOK_NAME13, `Committing to protected branch: ${currentBranch}`);
+    logWarn(HOOK_NAME14, `Committing to protected branch: ${currentBranch}`);
     warnings.push(
       `Committing directly to protected branch '${currentBranch}'. Consider using a feature branch.`
     );
@@ -3588,7 +3653,7 @@ function checkBranch() {
   }
   const validation = validateBranchName(currentBranch);
   if (!validation.valid) {
-    logInfo(HOOK_NAME13, `Invalid branch name: ${validation.error}`);
+    logInfo(HOOK_NAME14, `Invalid branch name: ${validation.error}`);
     const suggestion = validation.suggestion ? ` (${validation.suggestion})` : "";
     warnings.push(`Branch: ${validation.error}${suggestion}`);
   }
@@ -3601,7 +3666,7 @@ async function gitValidator(input) {
   if (!isGitCommitCommand(command)) {
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME13, `Validating git commit: ${command.slice(0, 80)}...`);
+  logDebug(HOOK_NAME14, `Validating git commit: ${command.slice(0, 80)}...`);
   const warnings = [];
   if (!isAmendCommit(command)) {
     const messageWarning = validateMessage(command);
@@ -3611,15 +3676,15 @@ async function gitValidator(input) {
   }
   warnings.push(...checkBranch());
   if (warnings.length > 0) {
-    logInfo(HOOK_NAME13, `Git validation warnings: ${warnings.length}`);
+    logInfo(HOOK_NAME14, `Git validation warnings: ${warnings.length}`);
     return outputWarning(warnings.join("\n"));
   }
-  logDebug(HOOK_NAME13, "Git commit validation passed");
+  logDebug(HOOK_NAME14, "Git commit validation passed");
   return outputSilentSuccess();
 }
 
 // src/pretool/bash-combined.ts
-var HOOK_NAME14 = "bash-combined";
+var HOOK_NAME15 = "bash-combined";
 function isAllowDecision2(result) {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === "allow";
 }
@@ -3636,18 +3701,18 @@ async function bashCombined(input) {
   const skipped = runGuards(input, guardBash);
   if (skipped) return skipped;
   if (input.tool_input?.dangerouslyDisableSandbox === true) {
-    logWarn(HOOK_NAME14, "Blocked: dangerouslyDisableSandbox=true");
+    logWarn(HOOK_NAME15, "Blocked: dangerouslyDisableSandbox=true");
     return outputDeny("Sandbox bypass is not allowed by plugin security policy");
   }
-  logDebug(HOOK_NAME14, "Starting combined Bash validation");
+  logDebug(HOOK_NAME15, "Starting combined Bash validation");
   const warnings = [];
-  logDebug(HOOK_NAME14, "Running: security-blocker");
+  logDebug(HOOK_NAME15, "Running: security-blocker");
   const securityResult = await securityBlocker(input);
   if (isBlockingDecision(securityResult)) {
-    logInfo(HOOK_NAME14, "Blocked/gated by security check");
+    logInfo(HOOK_NAME15, "Blocked/gated by security check");
     return securityResult;
   }
-  logDebug(HOOK_NAME14, "Running: git-validator");
+  logDebug(HOOK_NAME15, "Running: git-validator");
   const gitResult = await gitValidator(input);
   if (isWarning(gitResult)) {
     const warningMsg = gitResult.systemMessage?.replace(/^⚠ /, "") || "";
@@ -3655,20 +3720,20 @@ async function bashCombined(input) {
       warnings.push(warningMsg);
     }
   }
-  logDebug(HOOK_NAME14, "Running: auto-approve-safe-bash");
+  logDebug(HOOK_NAME15, "Running: auto-approve-safe-bash");
   const safeBashResult = await autoApproveSafeBash(input);
   if (isAllowDecision2(safeBashResult)) {
-    logInfo(HOOK_NAME14, "Auto-approved by safe-bash check");
+    logInfo(HOOK_NAME15, "Auto-approved by safe-bash check");
     return safeBashResult;
   }
-  logDebug(HOOK_NAME14, "Running: profile-evaluator");
+  logDebug(HOOK_NAME15, "Running: profile-evaluator");
   const profileResult = await profileEvaluator(input);
   if (isAllowDecision2(profileResult)) {
-    logInfo(HOOK_NAME14, "Allowed by profile");
+    logInfo(HOOK_NAME15, "Allowed by profile");
     return profileResult;
   }
   if (isDenyDecision2(profileResult)) {
-    logInfo(HOOK_NAME14, "Denied by profile");
+    logInfo(HOOK_NAME15, "Denied by profile");
     return profileResult;
   }
   const rawCommand = getCommand(input);
@@ -3677,18 +3742,18 @@ async function bashCombined(input) {
     warnings.push(
       "npm install detected \u2014 consider running `npm audit` after install to check for vulnerabilities."
     );
-    logDebug(HOOK_NAME14, "npm install detected, advisory added");
+    logDebug(HOOK_NAME15, "npm install detected, advisory added");
   }
   if (warnings.length > 0) {
-    logInfo(HOOK_NAME14, `Deferring with ${warnings.length} warning(s)`);
+    logInfo(HOOK_NAME15, `Deferring with ${warnings.length} warning(s)`);
     const userMsg = `\u26A0 ${warnings.length} git warning(s)`;
     const claudeCtx = warnings.join("\n");
     return outputWithNotification(userMsg, claudeCtx, "PreToolUse");
   }
-  logDebug(HOOK_NAME14, "No decision, deferring to standard flow");
+  logDebug(HOOK_NAME15, "No decision, deferring to standard flow");
   return outputSilentSuccess();
 }
-var HOOK_NAME15 = "preflight-context-injector";
+var HOOK_NAME16 = "preflight-context-injector";
 var DESTRUCTIVE_PATTERNS = [
   /\bgit\s+commit\b/,
   /\bgit\s+push\b/,
@@ -3757,10 +3822,10 @@ async function preflightContextInjector(input) {
   const command = getCommand(input);
   const context = buildPreflightContext(command);
   if (!context) {
-    logDebug(HOOK_NAME15, "Non-destructive command, no context injected");
+    logDebug(HOOK_NAME16, "Non-destructive command, no context injected");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME15, "Destructive command detected, injecting preflight context");
+  logDebug(HOOK_NAME16, "Destructive command detected, injecting preflight context");
   return {
     continue: true,
     suppressOutput: true,
@@ -3772,7 +3837,7 @@ async function preflightContextInjector(input) {
 }
 
 // src/posttool/secret-detector.ts
-var HOOK_NAME16 = "secret-detector";
+var HOOK_NAME17 = "secret-detector";
 var MAX_OUTPUT_SIZE = 50 * 1024;
 var SECRET_PATTERNS = [
   // AWS Access Key ID (starts with AKIA, exactly 20 chars)
@@ -3864,33 +3929,33 @@ async function secretDetector(input) {
   const extendedInput = input;
   const toolOutput = extendedInput.tool_response;
   if (!toolOutput) {
-    logDebug(HOOK_NAME16, "No tool output available");
+    logDebug(HOOK_NAME17, "No tool output available");
     return outputSilentSuccess();
   }
   const outputText = [toolOutput.stdout, toolOutput.stderr, toolOutput.output].filter(Boolean).join("\n");
   if (!outputText) {
-    logDebug(HOOK_NAME16, "Empty output, skipping");
+    logDebug(HOOK_NAME17, "Empty output, skipping");
     return outputSilentSuccess();
   }
   if (outputText.length > MAX_OUTPUT_SIZE) {
-    logDebug(HOOK_NAME16, `Output too large (${outputText.length} bytes), skipping`);
+    logDebug(HOOK_NAME17, `Output too large (${outputText.length} bytes), skipping`);
     return outputSilentSuccess();
   }
   const result = scanForSecrets(outputText);
   if (!result.detected) {
-    logDebug(HOOK_NAME16, "No secrets detected");
+    logDebug(HOOK_NAME17, "No secrets detected");
     return outputSilentSuccess();
   }
   const typesStr = result.secretTypes.join(", ");
-  logWarn(HOOK_NAME16, `Secrets detected in output: ${typesStr}`);
+  logWarn(HOOK_NAME17, `Secrets detected in output: ${typesStr}`);
   const userMsg = `\u26A0 Potential secrets detected in command output: ${typesStr}. Review output carefully before sharing.`;
   const claudeCtx = `SECURITY WARNING: The command output contains potential secrets (${typesStr}). DO NOT repeat, echo, or include these secret values in your responses. If you need to reference them, describe what they are without showing the actual values.`;
-  logInfo(HOOK_NAME16, `Warning issued for: ${typesStr}`);
+  logInfo(HOOK_NAME17, `Warning issued for: ${typesStr}`);
   return outputWithNotification(userMsg, claudeCtx);
 }
 
 // src/pretool/write-combined.ts
-var HOOK_NAME17 = "write-combined";
+var HOOK_NAME18 = "write-combined";
 var ARCHITECTURE_FILES = [
   { pattern: /tsconfig\.json$/, category: "TypeScript config" },
   { pattern: /package\.json$/, category: "package manifest" },
@@ -3929,46 +3994,46 @@ function gatherWriteContent(input) {
 async function writeCombined(input) {
   const skipped = runGuards(input, guardWriteEdit);
   if (skipped) return skipped;
-  logDebug(HOOK_NAME17, "Starting combined Write/Edit validation");
-  logDebug(HOOK_NAME17, "Running: security-blocker");
+  logDebug(HOOK_NAME18, "Starting combined Write/Edit validation");
+  logDebug(HOOK_NAME18, "Running: security-blocker");
   const securityResult = await securityBlocker(input);
   if (isDenyDecision3(securityResult)) {
-    logInfo(HOOK_NAME17, "Blocked by security check");
+    logInfo(HOOK_NAME18, "Blocked by security check");
     return securityResult;
   }
   const contentToScan = gatherWriteContent(input);
   if (contentToScan) {
-    logDebug(HOOK_NAME17, "Running: pre-write-secret-scan");
+    logDebug(HOOK_NAME18, "Running: pre-write-secret-scan");
     const scan = scanForSecrets(contentToScan);
     if (scan.detected) {
       const types = scan.secretTypes.join(", ");
-      logWarn(HOOK_NAME17, `BLOCKED: secrets detected in write content: ${types}`);
+      logWarn(HOOK_NAME18, `BLOCKED: secrets detected in write content: ${types}`);
       return outputDeny(
         `Blocked: content contains potential secrets (${types}). Use environment variables or a secrets manager instead of hardcoding credentials.`
       );
     }
   }
-  logDebug(HOOK_NAME17, "Running: auto-approve-project-writes");
+  logDebug(HOOK_NAME18, "Running: auto-approve-project-writes");
   const projectWriteResult = await autoApproveProjectWrites(input);
   if (isAllowDecision3(projectWriteResult)) {
-    logInfo(HOOK_NAME17, "Auto-approved by project-writes check");
+    logInfo(HOOK_NAME18, "Auto-approved by project-writes check");
     return projectWriteResult;
   }
-  logDebug(HOOK_NAME17, "Running: profile-evaluator");
+  logDebug(HOOK_NAME18, "Running: profile-evaluator");
   const profileResult = await profileEvaluator(input);
   if (isAllowDecision3(profileResult)) {
-    logInfo(HOOK_NAME17, "Allowed by profile");
+    logInfo(HOOK_NAME18, "Allowed by profile");
     return profileResult;
   }
   if (isDenyDecision3(profileResult)) {
-    logInfo(HOOK_NAME17, "Denied by profile");
+    logInfo(HOOK_NAME18, "Denied by profile");
     return profileResult;
   }
   const filePath = getFilePath(input);
   if (filePath) {
     for (const { pattern, category } of ARCHITECTURE_FILES) {
       if (pattern.test(filePath)) {
-        logInfo(HOOK_NAME17, `Architecture file edit: ${category} (${filePath})`);
+        logInfo(HOOK_NAME18, `Architecture file edit: ${category} (${filePath})`);
         const fileName = filePath.split("/").pop();
         return outputWithNotification(
           `\u26A0 Editing ${category}: ${fileName}`,
@@ -3978,10 +4043,10 @@ async function writeCombined(input) {
       }
     }
   }
-  logDebug(HOOK_NAME17, "No decision, deferring to standard flow");
+  logDebug(HOOK_NAME18, "No decision, deferring to standard flow");
   return outputSilentSuccess();
 }
-var HOOK_NAME18 = "post-tool-use";
+var HOOK_NAME19 = "post-tool-use";
 async function acquireLock2(lockPath, maxAttempts = 50) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -4072,31 +4137,31 @@ async function dirtyStateTracker(input) {
   if (skipped) return skipped;
   const filePaths = getEditedFilePaths(input);
   if (filePaths.length === 0) {
-    logDebug(HOOK_NAME18, "No file paths found in input");
+    logDebug(HOOK_NAME19, "No file paths found in input");
     return outputSilentSuccess();
   }
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const contextFile = getContextFilePath(projectDir);
   const lockDir = `${contextFile}.lock`;
   if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME18, `Context file not found: ${contextFile}`);
+    logDebug(HOOK_NAME19, `Context file not found: ${contextFile}`);
     return outputSilentSuccess();
   }
   try {
     fs6.accessSync(contextFile, fs6.constants.W_OK);
   } catch {
-    logWarn(HOOK_NAME18, "Context file not writable");
+    logWarn(HOOK_NAME19, "Context file not writable");
     return outputSilentSuccess();
   }
   const lockAcquired = await acquireLock2(lockDir);
   if (!lockAcquired) {
-    logWarn(HOOK_NAME18, "Failed to acquire lock after 5s, skipping");
+    logWarn(HOOK_NAME19, "Failed to acquire lock after 5s, skipping");
     return outputSilentSuccess();
   }
   try {
     const context = readContextFile(contextFile);
     if (!context) {
-      logError(HOOK_NAME18, "Failed to parse context file");
+      logError(HOOK_NAME19, "Failed to parse context file");
       return outputSilentSuccess();
     }
     let updatedContext = context;
@@ -4107,16 +4172,16 @@ async function dirtyStateTracker(input) {
     const count = updatedContext.dirty_tracking.files_edited_count;
     const thresholdWarning = updatedContext.dirty_tracking.threshold_warning || 15;
     const thresholdAuto = updatedContext.dirty_tracking.threshold_auto_suggest || 25;
-    logDebug(HOOK_NAME18, `Count=${count} (unique files)`);
+    logDebug(HOOK_NAME19, `Count=${count} (unique files)`);
     return getThresholdResponse(count, thresholdWarning, thresholdAuto);
   } catch (error) {
-    logError(HOOK_NAME18, `Error updating context: ${error}`);
+    logError(HOOK_NAME19, `Error updating context: ${error}`);
     return outputSilentSuccess();
   } finally {
     releaseLock2(lockDir);
   }
 }
-var HOOK_NAME19 = "context-monitor";
+var HOOK_NAME20 = "context-monitor";
 var TEMP_PREFIX = "claude-context-pct-";
 var WARN_PREFIX = "claude-context-last-warn-";
 function getTier(pct) {
@@ -4198,19 +4263,19 @@ async function contextMonitor(input) {
   const sessionId = getSessionId2(input);
   const pct = readPercentage(sessionId);
   if (pct === null) {
-    logDebug(HOOK_NAME19, "No context percentage file found (StatusLine not configured?)");
+    logDebug(HOOK_NAME20, "No context percentage file found (StatusLine not configured?)");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME19, `Context at ${pct}%`);
+  logDebug(HOOK_NAME20, `Context at ${pct}%`);
   const currentTier = getTier(pct);
   const lastTier = readLastTier(sessionId);
   if (currentTier === 0 && lastTier > 0) {
-    logDebug(HOOK_NAME19, "Context dropped below 70%, resetting rate-limit state");
+    logDebug(HOOK_NAME20, "Context dropped below 70%, resetting rate-limit state");
     writeLastTier(sessionId, 0);
     return outputSilentSuccess();
   }
   if (!shouldWarn(currentTier, lastTier)) {
-    logDebug(HOOK_NAME19, `Tier ${currentTier} <= last tier ${lastTier}, skipping`);
+    logDebug(HOOK_NAME20, `Tier ${currentTier} <= last tier ${lastTier}, skipping`);
     return outputSilentSuccess();
   }
   const suggestedName = currentTier >= 2 ? getSuggestedHandoffName(getCachedBranch() || void 0) : void 0;
@@ -4220,13 +4285,13 @@ async function contextMonitor(input) {
   }
   writeLastTier(sessionId, currentTier);
   if (currentTier >= 3) {
-    logWarn(HOOK_NAME19, `CRITICAL: Context at ${pct}%`);
+    logWarn(HOOK_NAME20, `CRITICAL: Context at ${pct}%`);
   } else {
-    logInfo(HOOK_NAME19, `Context warning tier ${currentTier}: ${pct}%`);
+    logInfo(HOOK_NAME20, `Context warning tier ${currentTier}: ${pct}%`);
   }
   return outputPromptContext(message);
 }
-var HOOK_NAME20 = "error-rules";
+var HOOK_NAME21 = "error-rules";
 var rulesCache = /* @__PURE__ */ new Map();
 function getErrorRulesPath(projectDir) {
   return path2.join(projectDir, ".claude", "rules", "error_rules.json");
@@ -4234,7 +4299,7 @@ function getErrorRulesPath(projectDir) {
 async function loadErrorRules(projectDir) {
   const cwd = projectDir;
   if (rulesCache.has(cwd)) {
-    logDebug(HOOK_NAME20, "Using cached error rules");
+    logDebug(HOOK_NAME21, "Using cached error rules");
     return rulesCache.get(cwd) || null;
   }
   let rulesPath = getErrorRulesPath(cwd);
@@ -4243,27 +4308,27 @@ async function loadErrorRules(projectDir) {
     if (pluginRoot) {
       const pluginRulesPath = getErrorRulesPath(pluginRoot);
       if (fs6.existsSync(pluginRulesPath)) {
-        logDebug(HOOK_NAME20, "Using plugin default error rules");
+        logDebug(HOOK_NAME21, "Using plugin default error rules");
         rulesPath = pluginRulesPath;
       }
     }
   }
   if (!fs6.existsSync(rulesPath)) {
-    logDebug(HOOK_NAME20, `Error rules file not found: ${rulesPath}`);
+    logDebug(HOOK_NAME21, `Error rules file not found: ${rulesPath}`);
     return null;
   }
   try {
     const content = fs6.readFileSync(rulesPath, "utf-8");
     const config = JSON.parse(content);
     if (!config.rules || !Array.isArray(config.rules)) {
-      logError(HOOK_NAME20, "Invalid error rules: missing rules array");
+      logError(HOOK_NAME21, "Invalid error rules: missing rules array");
       return null;
     }
     rulesCache.set(cwd, config);
-    logDebug(HOOK_NAME20, `Loaded ${config.rules.length} error rules`);
+    logDebug(HOOK_NAME21, `Loaded ${config.rules.length} error rules`);
     return config;
   } catch (error) {
-    logError(HOOK_NAME20, `Failed to load error rules: ${error}`);
+    logError(HOOK_NAME21, `Failed to load error rules: ${error}`);
     return null;
   }
 }
@@ -4276,7 +4341,7 @@ function matchError(output, rules) {
       continue;
     }
     if (output.includes(rule.pattern)) {
-      logDebug(HOOK_NAME20, `Matched error rule: ${rule.id}`);
+      logDebug(HOOK_NAME21, `Matched error rule: ${rule.id}`);
       return {
         matched: true,
         rule,
@@ -4288,7 +4353,7 @@ function matchError(output, rules) {
 }
 
 // src/posttool/error-warner.ts
-var HOOK_NAME21 = "error-warner";
+var HOOK_NAME22 = "error-warner";
 async function errorWarner(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
@@ -4296,37 +4361,37 @@ async function errorWarner(input) {
   const extendedInput = input;
   const toolOutput = extendedInput.tool_response;
   if (!toolOutput) {
-    logDebug(HOOK_NAME21, "No tool output available");
+    logDebug(HOOK_NAME22, "No tool output available");
     return outputSilentSuccess();
   }
   const outputText = [toolOutput.stdout, toolOutput.stderr, toolOutput.output].filter(Boolean).join("\n");
   if (!outputText) {
-    logDebug(HOOK_NAME21, "Empty output, skipping");
+    logDebug(HOOK_NAME22, "Empty output, skipping");
     return outputSilentSuccess();
   }
   const hasError = toolOutput.exit_code !== void 0 && toolOutput.exit_code !== 0 || outputText.includes("Error") || outputText.includes("error") || outputText.includes("FAIL") || outputText.includes("failed") || outputText.includes("Cannot") || outputText.includes("cannot") || outputText.includes("stream abort") || outputText.includes("STREAM_ABORT");
   if (!hasError) {
-    logDebug(HOOK_NAME21, "No error indicators found");
+    logDebug(HOOK_NAME22, "No error indicators found");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME21, `Analyzing error output for: ${command.slice(0, 50)}...`);
+  logDebug(HOOK_NAME22, `Analyzing error output for: ${command.slice(0, 50)}...`);
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const config = await loadErrorRules(projectDir);
   if (!config || config.rules.length === 0) {
-    logDebug(HOOK_NAME21, "No error rules configured");
+    logDebug(HOOK_NAME22, "No error rules configured");
     return outputSilentSuccess();
   }
   const matchResult = matchError(outputText, config.rules);
   if (!matchResult.matched || !matchResult.rule) {
-    logDebug(HOOK_NAME21, "No matching error pattern found");
+    logDebug(HOOK_NAME22, "No matching error pattern found");
     return outputSilentSuccess();
   }
-  logInfo(HOOK_NAME21, `Matched error rule: ${matchResult.rule.id}`);
+  logInfo(HOOK_NAME22, `Matched error rule: ${matchResult.rule.id}`);
   return outputWithContext(`\u{1F4A1} Tip: ${matchResult.rule.message}`);
 }
 
 // src/posttool/failure-logger.ts
-var HOOK_NAME22 = "failure-logger";
+var HOOK_NAME23 = "failure-logger";
 var KNOWN_PATTERNS = [
   // Specific patterns before generic ones (order matters — first match wins)
   {
@@ -4374,16 +4439,16 @@ async function failureLogger(input) {
   const filePath = getFilePath(input);
   const target = command ? `cmd=${command.slice(0, 100)}` : filePath ? `file=${filePath}` : "";
   const logMsg = `FAILURE tool=${toolName} session=${sessionId} ${target} error=${error.slice(0, 200)}`;
-  logWarn(HOOK_NAME22, logMsg);
+  logWarn(HOOK_NAME23, logMsg);
   for (const { pattern, hint } of KNOWN_PATTERNS) {
     if (pattern.test(error)) {
-      logInfo(HOOK_NAME22, `Matched pattern: ${pattern.source}`);
+      logInfo(HOOK_NAME23, `Matched pattern: ${pattern.source}`);
       return outputWithContext(hint);
     }
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME23 = "lint-checker";
+var HOOK_NAME24 = "lint-checker";
 var PYTHON_EXTENSIONS = /* @__PURE__ */ new Set([".py", ".pyi"]);
 var JS_EXTENSIONS = /* @__PURE__ */ new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 var BIOME_SECURITY_PREFIX = "lint/security/";
@@ -4399,14 +4464,14 @@ function findLinter(projectDir) {
   const venvRuff = path2.join(projectDir, ".venv", "bin", "ruff");
   if (fs6.existsSync(venvRuff)) {
     cachedLinterPath = venvRuff;
-    logDebug(HOOK_NAME23, `Found ruff in venv: ${venvRuff}`);
+    logDebug(HOOK_NAME24, `Found ruff in venv: ${venvRuff}`);
     return venvRuff;
   }
   const homeDir = process.env["HOME"] || "/tmp";
   const miseRuff = path2.join(homeDir, ".local", "share", "mise", "shims", "ruff");
   if (fs6.existsSync(miseRuff)) {
     cachedLinterPath = miseRuff;
-    logDebug(HOOK_NAME23, `Found ruff in mise shims: ${miseRuff}`);
+    logDebug(HOOK_NAME24, `Found ruff in mise shims: ${miseRuff}`);
     return miseRuff;
   }
   try {
@@ -4416,13 +4481,13 @@ function findLinter(projectDir) {
     }).trim();
     if (whichResult) {
       cachedLinterPath = whichResult;
-      logDebug(HOOK_NAME23, `Found ruff in PATH: ${whichResult}`);
+      logDebug(HOOK_NAME24, `Found ruff in PATH: ${whichResult}`);
       return whichResult;
     }
   } catch {
   }
   cachedLinterPath = void 0;
-  logDebug(HOOK_NAME23, "ruff not found");
+  logDebug(HOOK_NAME24, "ruff not found");
   return void 0;
 }
 function runRuffCheck(linterPath, filePaths) {
@@ -4443,15 +4508,15 @@ function runRuffCheck(linterPath, filePaths) {
         }
         return [];
       } catch {
-        logWarn(HOOK_NAME23, "Failed to parse ruff JSON output, skipping");
+        logWarn(HOOK_NAME24, "Failed to parse ruff JSON output, skipping");
         return [];
       }
     }
     if (execError.status === 2) {
-      logWarn(HOOK_NAME23, `ruff config error: ${execError.stderr || "unknown"}`);
+      logWarn(HOOK_NAME24, `ruff config error: ${execError.stderr || "unknown"}`);
       return [];
     }
-    logWarn(HOOK_NAME23, `ruff execution error: ${String(err)}`);
+    logWarn(HOOK_NAME24, `ruff execution error: ${String(err)}`);
     return [];
   }
 }
@@ -4480,7 +4545,7 @@ function findBiome(projectDir) {
   const localBiome = path2.join(projectDir, "node_modules", ".bin", "biome");
   if (fs6.existsSync(localBiome)) {
     cachedBiomePath = localBiome;
-    logDebug(HOOK_NAME23, `Found biome in node_modules: ${localBiome}`);
+    logDebug(HOOK_NAME24, `Found biome in node_modules: ${localBiome}`);
     return localBiome;
   }
   try {
@@ -4490,13 +4555,13 @@ function findBiome(projectDir) {
     }).trim();
     if (whichResult) {
       cachedBiomePath = whichResult;
-      logDebug(HOOK_NAME23, `Found biome in PATH: ${whichResult}`);
+      logDebug(HOOK_NAME24, `Found biome in PATH: ${whichResult}`);
       return whichResult;
     }
   } catch {
   }
   cachedBiomePath = void 0;
-  logDebug(HOOK_NAME23, "biome not found");
+  logDebug(HOOK_NAME24, "biome not found");
   return void 0;
 }
 function offsetToRowCol(content, byteOffset) {
@@ -4544,7 +4609,7 @@ function execBiomeJson(biomePath, filePaths) {
     if (execError.status === 1 && execError.stdout) {
       return execError.stdout;
     }
-    logWarn(HOOK_NAME23, `biome execution error: ${String(err)}`);
+    logWarn(HOOK_NAME24, `biome execution error: ${String(err)}`);
     return null;
   }
 }
@@ -4553,7 +4618,7 @@ function parseBiomeDiagnostics(stdout) {
     const parsed = JSON.parse(stdout);
     return Array.isArray(parsed.diagnostics) ? parsed.diagnostics : [];
   } catch {
-    logWarn(HOOK_NAME23, "Failed to parse biome JSON output, skipping");
+    logWarn(HOOK_NAME24, "Failed to parse biome JSON output, skipping");
     return [];
   }
 }
@@ -4714,7 +4779,7 @@ function collectLintableFiles(input, toolName) {
 function filterExisting(filePaths) {
   return filePaths.filter((fp) => {
     if (!fs6.existsSync(fp)) {
-      logDebug(HOOK_NAME23, `File not found: ${fp}`);
+      logDebug(HOOK_NAME24, `File not found: ${fp}`);
       return false;
     }
     return true;
@@ -4725,7 +4790,7 @@ function lintPythonFiles(files, projectDir) {
   if (files.length === 0) return EMPTY_RUN;
   const ruffPath = findLinter(projectDir);
   if (!ruffPath) {
-    logDebug(HOOK_NAME23, "ruff not available, skipping Python files");
+    logDebug(HOOK_NAME24, "ruff not available, skipping Python files");
     return EMPTY_RUN;
   }
   return {
@@ -4738,7 +4803,7 @@ function lintJsFiles(files, projectDir) {
   if (files.length === 0) return EMPTY_RUN;
   const biomePath = findBiome(projectDir);
   if (!biomePath) {
-    logDebug(HOOK_NAME23, "biome not available, skipping JS/TS files");
+    logDebug(HOOK_NAME24, "biome not available, skipping JS/TS files");
     return EMPTY_RUN;
   }
   const { violations, formatIssueFiles } = runBiomeCheck(biomePath, files);
@@ -4774,10 +4839,10 @@ async function lintChecker(input) {
   const classified = classifyViolations([...ruffRun.violations, ...biomeRun.violations]);
   const message = formatMessage({ violations: classified, formatIssueFiles }, checkedCount);
   if (!message) {
-    logDebug(HOOK_NAME23, `Lint clean: ${[...existingPython, ...existingJs].join(", ")}`);
+    logDebug(HOOK_NAME24, `Lint clean: ${[...existingPython, ...existingJs].join(", ")}`);
     return outputSilentSuccess();
   }
-  logInfo(HOOK_NAME23, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
+  logInfo(HOOK_NAME24, `Found ${classified.totalCount} lint issues in ${checkedCount} file(s)`);
   const label = linterLabelFor(ruffRun.checkedCount, biomeRun.checkedCount);
   return outputWithNotification(
     buildUserSummary(label, classified, formatIssueFiles.length, checkedCount),
@@ -4789,29 +4854,29 @@ ${message}
 }
 
 // src/lifecycle/instructions-loaded.ts
-var HOOK_NAME24 = "instructions-loaded";
+var HOOK_NAME25 = "instructions-loaded";
 async function instructionsLoaded(input) {
   const source = input.source || "unknown";
   const cwd = input.cwd || process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME24, `Instructions loaded event fired, source: ${source}, cwd: ${cwd}`);
-  logInfo(HOOK_NAME24, `Instructions loaded: ${source}`);
+  logDebug(HOOK_NAME25, `Instructions loaded event fired, source: ${source}, cwd: ${cwd}`);
+  logInfo(HOOK_NAME25, `Instructions loaded: ${source}`);
   return outputSilentSuccess();
 }
-var HOOK_NAME25 = "teammate-idle-saver";
+var HOOK_NAME26 = "teammate-idle-saver";
 var MAX_LOCK_ATTEMPTS2 = 20;
 async function teammateIdleSaver(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const teammateName = input.teammate_name || "unknown";
   const teamName = input.team_name || "unknown";
-  logDebug(HOOK_NAME25, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
+  logDebug(HOOK_NAME26, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME25, "No context file found, nothing to update");
+    logDebug(HOOK_NAME26, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
   const lockDir = `${contextFile}.lock`;
   if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS2)) {
-    logError(HOOK_NAME25, "Failed to acquire lock, skipping context update");
+    logError(HOOK_NAME26, "Failed to acquire lock, skipping context update");
     return outputSilentSuccess();
   }
   try {
@@ -4820,7 +4885,7 @@ async function teammateIdleSaver(input) {
     try {
       context = JSON.parse(raw);
     } catch {
-      logError(HOOK_NAME25, "Context file contains invalid JSON, skipping update");
+      logError(HOOK_NAME26, "Context file contains invalid JSON, skipping update");
       return outputSilentSuccess();
     }
     const timestamp = formatTimestamp();
@@ -4836,22 +4901,22 @@ async function teammateIdleSaver(input) {
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME25, `Heartbeat updated on teammate idle (teammate: ${teammateName})`);
+    logInfo(HOOK_NAME26, `Heartbeat updated on teammate idle (teammate: ${teammateName})`);
   } catch (error) {
-    logError(HOOK_NAME25, `Failed to update context file: ${error}`);
+    logError(HOOK_NAME26, `Failed to update context file: ${error}`);
   } finally {
     releaseLock(lockDir);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME26 = "task-completed-logger";
+var HOOK_NAME27 = "task-completed-logger";
 var METRICS_DIR = ".claude/continuity/metrics";
 var METRICS_FILE = "tasks.jsonl";
 async function taskCompletedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
-  logDebug(HOOK_NAME26, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
+  logDebug(HOOK_NAME27, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR);
   const metricsFile = path2.join(metricsDir, METRICS_FILE);
   try {
@@ -4870,20 +4935,20 @@ async function taskCompletedLogger(input) {
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME26, `Task completion logged for task ${taskId}`);
+    logInfo(HOOK_NAME27, `Task completion logged for task ${taskId}`);
   } catch (error) {
-    logError(HOOK_NAME26, `Failed to log task completion: ${error}`);
+    logError(HOOK_NAME27, `Failed to log task completion: ${error}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME27 = "task-created-logger";
+var HOOK_NAME28 = "task-created-logger";
 var METRICS_DIR2 = ".claude/continuity/metrics";
 var METRICS_FILE2 = "tasks.jsonl";
 async function taskCreatedLogger(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
-  logDebug(HOOK_NAME27, `Task created: task_id=${taskId}, session_id=${sessionId}`);
+  logDebug(HOOK_NAME28, `Task created: task_id=${taskId}, session_id=${sessionId}`);
   const metricsDir = path2.join(projectDir, METRICS_DIR2);
   const metricsFile = path2.join(metricsDir, METRICS_FILE2);
   try {
@@ -4902,18 +4967,18 @@ async function taskCreatedLogger(input) {
     };
     fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME27, `Task creation logged for task ${taskId}`);
+    logInfo(HOOK_NAME28, `Task creation logged for task ${taskId}`);
   } catch (error) {
-    logError(HOOK_NAME27, `Failed to log task creation: ${error}`);
+    logError(HOOK_NAME28, `Failed to log task creation: ${error}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME28 = "worktree-create";
+var HOOK_NAME29 = "worktree-create";
 async function worktreeCreate(input) {
   const worktreePath = input.worktree_path || input.cwd || ".";
   const worktreeBranch = input.worktree_branch || "unknown";
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME28, `Worktree created: path=${worktreePath}, branch=${worktreeBranch}`);
+  logDebug(HOOK_NAME29, `Worktree created: path=${worktreePath}, branch=${worktreeBranch}`);
   try {
     const contextDir = path2.join(worktreePath, CONTINUITY_DIRS.context);
     if (!fs6.existsSync(contextDir)) {
@@ -4945,73 +5010,28 @@ async function worktreeCreate(input) {
       };
       fs6.writeFileSync(contextFile, `${JSON.stringify(worktreeContext, null, 2)}
 `);
-      logInfo(HOOK_NAME28, `Initialized continuity context for worktree: ${worktreeBranch}`);
+      logInfo(HOOK_NAME29, `Initialized continuity context for worktree: ${worktreeBranch}`);
     } else {
-      logDebug(HOOK_NAME28, "Worktree context already exists, skipping initialization");
+      logDebug(HOOK_NAME29, "Worktree context already exists, skipping initialization");
     }
   } catch (error) {
-    logError(HOOK_NAME28, `Failed to initialize worktree context: ${error}`);
+    logError(HOOK_NAME29, `Failed to initialize worktree context: ${error}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME29 = "worktree-remove";
+var HOOK_NAME30 = "worktree-remove";
 var MAX_LOCK_ATTEMPTS3 = 20;
 async function worktreeRemove(input) {
   const worktreePath = input.worktree_path || "unknown";
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME29, `Worktree removed: path=${worktreePath}`);
+  logDebug(HOOK_NAME30, `Worktree removed: path=${worktreePath}`);
   const contextFile = path2.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME29, "No main context file found, nothing to update");
+    logDebug(HOOK_NAME30, "No main context file found, nothing to update");
     return outputSilentSuccess();
   }
   const lockDir = `${contextFile}.lock`;
   if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS3)) {
-    logError(HOOK_NAME29, "Failed to acquire lock, skipping context update");
-    return outputSilentSuccess();
-  }
-  try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
-    let context;
-    try {
-      context = JSON.parse(raw);
-    } catch {
-      logError(HOOK_NAME29, "Context file contains invalid JSON, skipping update");
-      return outputSilentSuccess();
-    }
-    const timestamp = formatTimestamp();
-    const archivedWorktrees = context["archived_worktrees"] || [];
-    archivedWorktrees.push({
-      path: worktreePath,
-      removed_at: timestamp
-    });
-    context["archived_worktrees"] = archivedWorktrees;
-    const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
-`);
-    fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME29, `Worktree removal recorded: ${worktreePath}`);
-  } catch (error) {
-    logError(HOOK_NAME29, `Failed to update context file: ${error}`);
-  } finally {
-    releaseLock(lockDir);
-  }
-  return outputSilentSuccess();
-}
-var HOOK_NAME30 = "stop-state-saver";
-var MAX_LOCK_ATTEMPTS4 = 20;
-async function stopStateSaver(input) {
-  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const lastMessage = input.last_assistant_message || "";
-  const source = input.source || "unknown";
-  logDebug(HOOK_NAME30, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME30, "No context file found, nothing to update");
-    return outputSilentSuccess();
-  }
-  const lockDir = `${contextFile}.lock`;
-  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS4)) {
     logError(HOOK_NAME30, "Failed to acquire lock, skipping context update");
     return outputSilentSuccess();
   }
@@ -5025,19 +5045,17 @@ async function stopStateSaver(input) {
       return outputSilentSuccess();
     }
     const timestamp = formatTimestamp();
-    const heartbeat = context["session_heartbeat"] || {};
-    heartbeat["last_activity"] = timestamp;
-    context["session_heartbeat"] = heartbeat;
-    context["last_stop"] = {
-      source,
-      last_message: lastMessage ? truncateForLLM(lastMessage, { maxChars: 500 }) : "",
-      timestamp
-    };
+    const archivedWorktrees = context["archived_worktrees"] || [];
+    archivedWorktrees.push({
+      path: worktreePath,
+      removed_at: timestamp
+    });
+    context["archived_worktrees"] = archivedWorktrees;
     const tempFile = `${contextFile}.tmp`;
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME30, `Stop state captured (reason: ${source})`);
+    logInfo(HOOK_NAME30, `Worktree removal recorded: ${worktreePath}`);
   } catch (error) {
     logError(HOOK_NAME30, `Failed to update context file: ${error}`);
   } finally {
@@ -5045,20 +5063,20 @@ async function stopStateSaver(input) {
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME31 = "stop-failure-handler";
-var MAX_LOCK_ATTEMPTS5 = 20;
-async function stopFailureHandler(input) {
+var HOOK_NAME31 = "stop-state-saver";
+var MAX_LOCK_ATTEMPTS4 = 20;
+async function stopStateSaver(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const sessionId = input.session_id || "unknown";
-  const errorType = input.source || "unknown";
-  logWarn(HOOK_NAME31, `API failure: type=${errorType}, session=${sessionId}`);
+  const lastMessage = input.last_assistant_message || "";
+  const source = input.source || "unknown";
+  logDebug(HOOK_NAME31, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
-    logInfo(HOOK_NAME31, "No context file found, logging failure without context update");
+    logDebug(HOOK_NAME31, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
   const lockDir = `${contextFile}.lock`;
-  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS5)) {
+  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS4)) {
     logError(HOOK_NAME31, "Failed to acquire lock, skipping context update");
     return outputSilentSuccess();
   }
@@ -5075,6 +5093,53 @@ async function stopFailureHandler(input) {
     const heartbeat = context["session_heartbeat"] || {};
     heartbeat["last_activity"] = timestamp;
     context["session_heartbeat"] = heartbeat;
+    context["last_stop"] = {
+      source,
+      last_message: lastMessage ? truncateForLLM(lastMessage, { maxChars: 500 }) : "",
+      timestamp
+    };
+    const tempFile = `${contextFile}.tmp`;
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+`);
+    fs6.renameSync(tempFile, contextFile);
+    logInfo(HOOK_NAME31, `Stop state captured (reason: ${source})`);
+  } catch (error) {
+    logError(HOOK_NAME31, `Failed to update context file: ${error}`);
+  } finally {
+    releaseLock(lockDir);
+  }
+  return outputSilentSuccess();
+}
+var HOOK_NAME32 = "stop-failure-handler";
+var MAX_LOCK_ATTEMPTS5 = 20;
+async function stopFailureHandler(input) {
+  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
+  const sessionId = input.session_id || "unknown";
+  const errorType = input.source || "unknown";
+  logWarn(HOOK_NAME32, `API failure: type=${errorType}, session=${sessionId}`);
+  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs6.existsSync(contextFile)) {
+    logInfo(HOOK_NAME32, "No context file found, logging failure without context update");
+    return outputSilentSuccess();
+  }
+  const lockDir = `${contextFile}.lock`;
+  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS5)) {
+    logError(HOOK_NAME32, "Failed to acquire lock, skipping context update");
+    return outputSilentSuccess();
+  }
+  try {
+    const raw = fs6.readFileSync(contextFile, "utf8");
+    let context;
+    try {
+      context = JSON.parse(raw);
+    } catch {
+      logError(HOOK_NAME32, "Context file contains invalid JSON, skipping update");
+      return outputSilentSuccess();
+    }
+    const timestamp = formatTimestamp();
+    const heartbeat = context["session_heartbeat"] || {};
+    heartbeat["last_activity"] = timestamp;
+    context["session_heartbeat"] = heartbeat;
     context["last_api_error"] = {
       error_type: errorType,
       session_id: sessionId,
@@ -5084,15 +5149,15 @@ async function stopFailureHandler(input) {
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME31, `API failure recorded (type: ${errorType})`);
+    logInfo(HOOK_NAME32, `API failure recorded (type: ${errorType})`);
   } catch (error) {
-    logError(HOOK_NAME31, `Failed to update context file: ${error}`);
+    logError(HOOK_NAME32, `Failed to update context file: ${error}`);
   } finally {
     releaseLock(lockDir);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME32 = "review-logger";
+var HOOK_NAME33 = "review-logger";
 var MAX_LOG_SIZE = 200 * 1024;
 var REVIEW_COMMAND_PATTERN = /glab\s+mr\s+(note|approve)\s+(\d+)/;
 var DISCUSSION_COMMAND_PATTERN = /glab\s+api\b[\s\S]*?merge_requests\/(\d+)\/discussions/;
@@ -5145,13 +5210,13 @@ async function reviewLogger(input) {
     const logPath = getReviewLogPath();
     rotateIfNeeded(logPath);
     appendReviewEntry(logPath, entry);
-    logDebug(HOOK_NAME32, `Logged review: MR !${mrNumber} (${commandType})`);
+    logDebug(HOOK_NAME33, `Logged review: MR !${mrNumber} (${commandType})`);
   } catch (error) {
-    logError(HOOK_NAME32, `Failed to log review: ${error}`);
+    logError(HOOK_NAME33, `Failed to log review: ${error}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME33 = "denial-logger";
+var HOOK_NAME34 = "denial-logger";
 async function denialLogger(input) {
   try {
     const projectDir = getProjectDir();
@@ -5167,13 +5232,13 @@ async function denialLogger(input) {
     const logFile = path2.join(feedbackDir, "denials.jsonl");
     fs6.appendFileSync(logFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME33, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
+    logInfo(HOOK_NAME34, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
   } catch (err) {
-    logError(HOOK_NAME33, `Failed to log denial: ${err}`);
+    logError(HOOK_NAME34, `Failed to log denial: ${err}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME34 = "denial-notification";
+var HOOK_NAME35 = "denial-notification";
 var DENIAL_THRESHOLD = 3;
 var WINDOW_MS = 6e4;
 var COOLDOWN_MS = 3e5;
@@ -5188,7 +5253,7 @@ function sendNotification(title, message) {
       { timeout: 3e3 }
     );
   } catch {
-    logWarn(HOOK_NAME34, "Failed to send desktop notification");
+    logWarn(HOOK_NAME35, "Failed to send desktop notification");
   }
 }
 async function denialNotification(input) {
@@ -5197,12 +5262,12 @@ async function denialNotification(input) {
   while (denialTimestamps.length > 0 && (denialTimestamps[0] ?? 0) < now - WINDOW_MS) {
     denialTimestamps.shift();
   }
-  logDebug(HOOK_NAME34, `Denials in window: ${denialTimestamps.length}/${DENIAL_THRESHOLD}`);
+  logDebug(HOOK_NAME35, `Denials in window: ${denialTimestamps.length}/${DENIAL_THRESHOLD}`);
   if (denialTimestamps.length < DENIAL_THRESHOLD) {
     return outputSilentSuccess();
   }
   if (now - lastNotificationTime < COOLDOWN_MS) {
-    logDebug(HOOK_NAME34, "Notification cooldown active, skipping");
+    logDebug(HOOK_NAME35, "Notification cooldown active, skipping");
     return outputSilentSuccess();
   }
   const toolName = input.tool_name || "unknown";
@@ -5212,12 +5277,12 @@ async function denialNotification(input) {
     `${denialTimestamps.length} denials in 60s. Latest: ${toolName} ${detail}. Check /permissions.`
   );
   lastNotificationTime = now;
-  logInfo(HOOK_NAME34, `Notification sent: ${denialTimestamps.length} denials in window`);
+  logInfo(HOOK_NAME35, `Notification sent: ${denialTimestamps.length} denials in window`);
   return outputSilentSuccess();
 }
 
 // src/permissiondenied/project-write-retry.ts
-var HOOK_NAME35 = "project-write-retry";
+var HOOK_NAME36 = "project-write-retry";
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit"]);
 async function projectWriteRetry(input) {
   if (!WRITE_TOOLS.has(input.tool_name)) {
@@ -5225,24 +5290,24 @@ async function projectWriteRetry(input) {
   }
   const filePath = getFilePath(input);
   if (!filePath) {
-    logDebug(HOOK_NAME35, "No file_path in input, skipping");
+    logDebug(HOOK_NAME36, "No file_path in input, skipping");
     return outputSilentSuccess();
   }
   if (!isWithinProject(filePath)) {
-    logDebug(HOOK_NAME35, `Outside project: ${filePath}`);
+    logDebug(HOOK_NAME36, `Outside project: ${filePath}`);
     return outputSilentSuccess();
   }
   const protectedResult = isProtectedPath(filePath);
   if (protectedResult.isProtected) {
-    logDebug(HOOK_NAME35, `Protected file (${protectedResult.category}): ${filePath}`);
+    logDebug(HOOK_NAME36, `Protected file (${protectedResult.category}): ${filePath}`);
     return outputSilentSuccess();
   }
-  logInfo(HOOK_NAME35, `Retrying in-project write: ${filePath}`);
+  logInfo(HOOK_NAME36, `Retrying in-project write: ${filePath}`);
   return outputRetry();
 }
 
 // src/permissiondenied/safe-command-retry.ts
-var HOOK_NAME36 = "safe-command-retry";
+var HOOK_NAME37 = "safe-command-retry";
 var MAX_RETRIES_PER_PREFIX = 3;
 var SAFE_RETRY_PREFIXES = [
   "ls ",
@@ -5318,40 +5383,40 @@ async function safeCommandRetry(input) {
   }
   const { safe, prefix } = isSafeToRetry(command);
   if (!safe) {
-    logDebug(HOOK_NAME36, `Not a safe command, skipping retry: ${command.slice(0, 60)}`);
+    logDebug(HOOK_NAME37, `Not a safe command, skipping retry: ${command.slice(0, 60)}`);
     return outputSilentSuccess();
   }
   const currentCount = retryCounters.get(prefix) || 0;
   if (currentCount >= MAX_RETRIES_PER_PREFIX) {
     logWarn(
-      HOOK_NAME36,
+      HOOK_NAME37,
       `Rate limit reached for prefix "${prefix.trim()}" (${MAX_RETRIES_PER_PREFIX} retries)`
     );
     return outputSilentSuccess();
   }
   retryCounters.set(prefix, currentCount + 1);
   logInfo(
-    HOOK_NAME36,
+    HOOK_NAME37,
     `Retrying safe command (${currentCount + 1}/${MAX_RETRIES_PER_PREFIX}): ${command.slice(0, 80)}`
   );
   return outputRetry();
 }
 
 // src/permissiondenied/permissiondenied-combined.ts
-var HOOK_NAME37 = "permissiondenied-combined";
+var HOOK_NAME38 = "permissiondenied-combined";
 function isRetryDecision(result) {
   return result.hookSpecificOutput?.retry === true;
 }
 async function permissionDeniedCombined(input) {
   logDebug(
-    HOOK_NAME37,
+    HOOK_NAME38,
     `Denial event: ${input.tool_name} \u2014 ${(input.tool_input?.command || input.tool_input?.file_path || "").slice(0, 80)}`
   );
   const retryHooks = [safeCommandRetry, projectWriteRetry];
   for (const hook of retryHooks) {
     const result = await hook(input);
     if (isRetryDecision(result)) {
-      logInfo(HOOK_NAME37, `Retry granted by ${hook.name}`);
+      logInfo(HOOK_NAME38, `Retry granted by ${hook.name}`);
       Promise.all([denialNotification(input).catch(() => {
       }), denialLogger(input).catch(() => {
       })]);
@@ -5364,12 +5429,12 @@ async function permissionDeniedCombined(input) {
     denialLogger(input).catch(() => {
     })
   ]);
-  logDebug(HOOK_NAME37, "No retry \u2014 denial logged");
+  logDebug(HOOK_NAME38, "No retry \u2014 denial logged");
   return outputSilentSuccess();
 }
 
 // src/prompt/hipaa-context-injector.ts
-var HOOK_NAME38 = "hipaa-context-injector";
+var HOOK_NAME39 = "hipaa-context-injector";
 var MAX_RULES_PER_PROMPT = 3;
 var CONTEXT_RULES = [
   {
@@ -5476,17 +5541,17 @@ function findMatchingRules(prompt) {
 async function hipaaContextInjector(input) {
   const prompt = extractPrompt(input);
   if (!prompt) {
-    logDebug(HOOK_NAME38, "No prompt text found, skipping");
+    logDebug(HOOK_NAME39, "No prompt text found, skipping");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME38, `Scanning prompt (${prompt.length} chars)`);
+  logDebug(HOOK_NAME39, `Scanning prompt (${prompt.length} chars)`);
   const matchedRules = findMatchingRules(prompt);
   if (matchedRules.length === 0) {
-    logDebug(HOOK_NAME38, "No keyword matches");
+    logDebug(HOOK_NAME39, "No keyword matches");
     return outputSilentSuccess();
   }
   const ruleIds = matchedRules.map((r) => r.id);
-  logInfo(HOOK_NAME38, `Matched ${matchedRules.length} rule(s): ${ruleIds.join(", ")}`);
+  logInfo(HOOK_NAME39, `Matched ${matchedRules.length} rule(s): ${ruleIds.join(", ")}`);
   const context = matchedRules.map((r) => r.context).join("\n");
   return outputPromptContext(context);
 }
@@ -5540,7 +5605,7 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
 }
 
 // src/messagedisplay/phi-output-redactor.ts
-var HOOK_NAME39 = "phi-output-redactor";
+var HOOK_NAME40 = "phi-output-redactor";
 var OPT_IN_ENV_VAR = "CONTINUITY_PHI_OUTPUT_REDACT";
 function extractAssistantMessage(input) {
   const record = input;
@@ -5560,26 +5625,26 @@ function extractAssistantMessage(input) {
 }
 async function phiOutputRedactor(input) {
   if (process.env[OPT_IN_ENV_VAR] !== "1") {
-    logDebug(HOOK_NAME39, "Opt-in not set, skipping");
+    logDebug(HOOK_NAME40, "Opt-in not set, skipping");
     return outputSilentSuccess();
   }
   const message = extractAssistantMessage(input);
   if (!message) {
-    logDebug(HOOK_NAME39, "No assistant message text found, skipping");
+    logDebug(HOOK_NAME40, "No assistant message text found, skipping");
     return outputSilentSuccess();
   }
   const result = redactPhi(message);
   if (result.totalSubstitutions === 0) {
-    logDebug(HOOK_NAME39, `No PHI patterns matched in ${message.length}-char message`);
+    logDebug(HOOK_NAME40, `No PHI patterns matched in ${message.length}-char message`);
     return outputSilentSuccess();
   }
   logInfo(
-    HOOK_NAME39,
+    HOOK_NAME40,
     `Redacted ${result.totalSubstitutions} match(es) across ${result.matchedPatterns.length} pattern(s): ${result.matchedPatterns.join(", ")}`
   );
   return outputMessageDisplay(result.text);
 }
-var HOOK_NAME40 = "session-title";
+var HOOK_NAME41 = "session-title";
 function getGitBranch(cwd) {
   try {
     const branch = execSync("git rev-parse --abbrev-ref HEAD", {
@@ -5599,10 +5664,10 @@ function getGitBranch(cwd) {
 function sessionTitle(input) {
   const branch = getGitBranch(input.cwd);
   if (!branch) {
-    logDebug(HOOK_NAME40, "No git branch detected, skipping session title");
+    logDebug(HOOK_NAME41, "No git branch detected, skipping session title");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME40, `Setting session title to branch: ${branch}`);
+  logDebug(HOOK_NAME41, `Setting session title to branch: ${branch}`);
   return outputSessionTitle(branch);
 }
 var MEASUREMENTS_FILE = "measurements.jsonl";
@@ -5698,7 +5763,7 @@ function recordBashEvent(sessionId, command, output, durationMs) {
 }
 
 // src/pretool/read-cache.ts
-var HOOK_NAME41 = "read-cache";
+var HOOK_NAME42 = "read-cache";
 async function readCacheHook(input) {
   const skipped = runGuards(input, (i) => guardTool(i, "Read"));
   if (skipped) return skipped;
@@ -5715,7 +5780,7 @@ async function readCacheHook(input) {
   try {
     stat = fs6.statSync(absPath);
   } catch (e) {
-    logDebug(HOOK_NAME41, `stat failed for ${absPath}: ${e}`);
+    logDebug(HOOK_NAME42, `stat failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
   }
   if (!stat.isFile()) {
@@ -5725,7 +5790,7 @@ async function readCacheHook(input) {
   try {
     cached = await readEntry(sessionId, absPath);
   } catch (e) {
-    logWarn(HOOK_NAME41, `cache lookup failed: ${e}`);
+    logWarn(HOOK_NAME42, `cache lookup failed: ${e}`);
     return outputSilentSuccess();
   }
   if (!cached) {
@@ -5735,26 +5800,26 @@ async function readCacheHook(input) {
   try {
     currentContent = fs6.readFileSync(absPath, "utf8");
   } catch (e) {
-    logWarn(HOOK_NAME41, `read failed for ${absPath}: ${e}`);
+    logWarn(HOOK_NAME42, `read failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
   }
   const currentHash = computeContentHash(currentContent);
   if (currentHash === cached.contentHash) {
-    logDebug(HOOK_NAME41, `unchanged via hash check: ${absPath}`);
+    logDebug(HOOK_NAME42, `unchanged via hash check: ${absPath}`);
     return outputSilentSuccess();
   }
   const delta = computeDelta(cached.cachedContent, currentContent);
   if (delta.kind !== "delta") {
     if (delta.kind === "too-large") {
       logInfo(
-        HOOK_NAME41,
+        HOOK_NAME42,
         `delta exceeds ${delta.reason} budget for ${absPath}; falling through to full read`
       );
     }
     return outputSilentSuccess();
   }
   const savedChars = Math.max(0, cached.cachedContent.length - delta.diff.length);
-  logInfo(HOOK_NAME41, `injecting delta for ${absPath} (saved ~${savedChars} chars)`);
+  logInfo(HOOK_NAME42, `injecting delta for ${absPath} (saved ~${savedChars} chars)`);
   try {
     recordReadEvent(
       sessionId,
@@ -5764,7 +5829,7 @@ async function readCacheHook(input) {
       delta.diff.length
     );
   } catch (e) {
-    logDebug(HOOK_NAME41, `measurement record failed: ${e}`);
+    logDebug(HOOK_NAME42, `measurement record failed: ${e}`);
   }
   await snapshotFileToCache(sessionId, absPath);
   const message = [
@@ -5784,7 +5849,7 @@ async function readCacheHook(input) {
     }
   };
 }
-var HOOK_NAME42 = "read-cache-writer";
+var HOOK_NAME43 = "read-cache-writer";
 async function readCacheWriterHook(input) {
   try {
     const skipped = runGuards(input, (i) => guardTool(i, "Read"));
@@ -5800,28 +5865,28 @@ async function readCacheWriterHook(input) {
       const prior = await readEntry(sessionId, absPath);
       wasMiss = !prior;
     } catch (e) {
-      logDebug(HOOK_NAME42, `measurement probe failed: ${e}`);
+      logDebug(HOOK_NAME43, `measurement probe failed: ${e}`);
     }
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
-      logDebug(HOOK_NAME42, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
+      logDebug(HOOK_NAME43, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
       return outputSilentSuccess();
     }
     if (wasMiss) {
       try {
         recordReadEvent(sessionId, absPath, "cache_miss", size);
       } catch (e) {
-        logDebug(HOOK_NAME42, `measurement record failed: ${e}`);
+        logDebug(HOOK_NAME43, `measurement record failed: ${e}`);
       }
     }
-    logDebug(HOOK_NAME42, `cached read of ${absPath} (${size} bytes)`);
+    logDebug(HOOK_NAME43, `cached read of ${absPath} (${size} bytes)`);
     return outputSilentSuccess();
   } catch (e) {
-    logWarn(HOOK_NAME42, `unexpected error: ${e}`);
+    logWarn(HOOK_NAME43, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
-var HOOK_NAME43 = "read-cache-invalidator";
+var HOOK_NAME44 = "read-cache-invalidator";
 async function readCacheInvalidatorHook(input) {
   try {
     const skipped = runGuards(input, (i) => guardTool(i, "Write", "Edit", "MultiEdit"));
@@ -5834,19 +5899,19 @@ async function readCacheInvalidatorHook(input) {
     const absPath = path2.resolve(filePath);
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
-      logDebug(HOOK_NAME43, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
+      logDebug(HOOK_NAME44, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
       return outputSilentSuccess();
     }
-    logDebug(HOOK_NAME43, `refreshed cache base for ${absPath} (${size} bytes) after mutation`);
+    logDebug(HOOK_NAME44, `refreshed cache base for ${absPath} (${size} bytes) after mutation`);
     return outputSilentSuccess();
   } catch (e) {
-    logWarn(HOOK_NAME43, `unexpected error: ${e}`);
+    logWarn(HOOK_NAME44, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
 
 // src/posttool/bash-output-measurer.ts
-var HOOK_NAME44 = "bash-output-measurer";
+var HOOK_NAME45 = "bash-output-measurer";
 function combineOutput(input) {
   const out = input.tool_response;
   if (!out) return "";
@@ -5864,10 +5929,10 @@ async function bashOutputMeasurerHook(input) {
     const output = combineOutput(input);
     const durationMs = getDurationMs(input);
     recordBashEvent(sessionId, command, output, durationMs);
-    logDebug(HOOK_NAME44, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
+    logDebug(HOOK_NAME45, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
     return outputSilentSuccess();
   } catch (e) {
-    logDebug(HOOK_NAME44, `unexpected error: ${e}`);
+    logDebug(HOOK_NAME45, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
@@ -5882,6 +5947,11 @@ function getHook(name) {
 }
 registerHook("lifecycle/session-loader", "Load continuity context at session start", sessionLoader);
 registerHook("lifecycle/session-end", "Mark session as cleanly ended", sessionEnd);
+registerHook(
+  "lifecycle/sandbox-reaper",
+  "Reap orphaned sandboxes (inert unless the maintainer launcher is installed)",
+  sandboxReaper
+);
 registerHook(
   "lifecycle/pre-compact-saver",
   "Save state before context compaction",

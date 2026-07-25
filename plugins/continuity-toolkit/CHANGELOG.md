@@ -2,6 +2,57 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.10.0] - 2026-07-25 — sandbox registry + a reaper hook that is inert for everyone who is not the maintainer
+
+`dist` is rebuilt (shared library + hook source changed).
+
+Groundwork for milestone #1's sandboxed-ADW dispatch (issue #45 / T2). The half that
+lands in this plugin is deliberately the smallest possible: a zero-dependency registry
+and a SessionEnd hook that can clean up after a crashed session.
+
+### Added
+
+- **`lib/sandbox/registry.ts`** — a dependency-free reader/writer for
+  `.claude/continuity/sandboxes.json`, using the existing atomic mkdir lock. Every read
+  degrades to `[]`; a truncated or hand-edited file can never throw into a hook.
+  **Not barrel-exported**, so it is bundled into ctk alone rather than all five plugins.
+- **`lifecycle/sandbox-reaper` hook (SessionEnd)** — destroys sandboxes that an
+  interrupted session left running.
+
+### What this hook will not do
+
+ADR-0001 §3 settles the identity question: sandboxed-ADW dispatch is **maintainer
+tooling, not a shipped plugin feature.** ctk installs on machines whose owners hold no
+cloud account and want none, so the hook may **observe and reap, never create**. Three
+gates, cheapest first:
+
+1. No `sandboxes.json` → return. One `existsSync`. This is the state of every installer
+   who has never provisioned a sandbox.
+2. Registry empty or corrupt → return.
+3. `tools/sandbox-launcher/` not installed → return. So even a hand-crafted registry
+   file cannot start a subprocess.
+
+Because provisioning is *structurally absent* from this hook, the worst a bug in it can
+do is fail to clean something up. It cannot bill anyone. The provider SDK
+(`@vercel/sandbox`, 11 transitive dependencies) lives in `tools/sandbox-launcher/`,
+outside every plugin — enforced by a test, not by a comment.
+
+The spawn is detached and `unref`'d because SessionEnd allows 5 seconds and a reap needs
+network I/O; awaiting it would get the hook killed mid-cleanup.
+
+### Honest limits
+
+**The reaper is best-effort, not a guarantee.** It needs a reachable provider and working
+credentials, and it races session shutdown. The actual guarantee that a sandbox stops
+costing money is the **provider-side creation timeout**, which auto-terminates with no
+cooperation from this process — the only mechanism that survives the
+zero-turns-after-termination behaviour R1 (#51) measured. 2.9.0 shipped an overclaimed
+guard and a reviewer took it apart; this one states its limits up front.
+
+**Nothing here has run against a real provider.** The Vercel implementation typechecks
+against the published SDK types and has never been executed. Live proof is T4/Gate 1's
+job, deferred because the SDK requires a Vercel *project*, not merely a token.
+
 ## [2.9.0] - 2026-07-25 — four more handlers were inert, including a security control; plus a structural guard so the class stops recurring
 
 `dist` is rebuilt (shared library + hook source changed).
