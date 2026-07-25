@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Engineering — Gap Analysis vs claude-forge</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root{
+  --pg-bg:hsl(232 26% 7%);
+  --pg-panel:hsl(230 22% 10%);
+  --pg-ink:hsl(220 18% 93%);
+  --pg-muted:hsl(220 14% 64%);
+  --pg-faint:hsl(220 12% 46%);
+  --pg-glass:hsl(0 0% 100% / .05);
+  --pg-glass-edge:hsl(0 0% 100% / .16);
+  --pg-accent:hsl(248 84% 68%);
+  --pg-accent-deep:hsl(248 70% 56%);
+  --pg-teal:hsl(168 72% 52%);
+  --pg-warm:hsl(38 95% 60%);
+  --pg-red:hsl(4 78% 63%);
+  --pg-blue:hsl(212 88% 62%);
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:48px;
+  --r-sm:9px;--r-md:16px;--r-lg:24px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;font-family:var(--sans);color:var(--pg-ink);
+  background:
+    radial-gradient(1100px 700px at 12% -8%, hsl(248 60% 22% / .5), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, hsl(168 55% 20% / .35), transparent 55%),
+    var(--pg-bg);
+  background-attachment:fixed;
+  line-height:1.55;font-size:15px;
+}
+a{color:var(--pg-teal);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{display:grid;grid-template-columns:232px minmax(0,1fr);gap:var(--sp-6);max-width:1180px;margin:0 auto;padding:var(--sp-6) var(--sp-5)}
+
+/* nav */
+nav{position:sticky;top:var(--sp-5);align-self:start;font-size:13px}
+nav .navtitle{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--pg-faint);margin:0 0 var(--sp-3) var(--sp-3)}
+nav a{display:block;color:var(--pg-muted);padding:7px var(--sp-3);border-radius:var(--r-sm);border-left:2px solid transparent;margin-bottom:2px}
+nav a:hover{color:var(--pg-ink);background:var(--pg-glass);text-decoration:none}
+nav a.active{color:var(--pg-ink);border-left-color:var(--pg-accent);background:var(--pg-glass)}
+nav a .an{font-family:var(--mono);color:var(--pg-faint);margin-right:8px;font-size:11px}
+
+/* header */
+header{margin-bottom:var(--sp-6)}
+.badges{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-bottom:var(--sp-4)}
+.pill{font-family:var(--mono);font-size:11px;letter-spacing:.03em;color:var(--pg-muted);background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:999px;padding:4px 11px}
+.pill b{color:var(--pg-ink);font-weight:600}
+h1{font-size:34px;line-height:1.12;margin:0 0 var(--sp-3);letter-spacing:-.02em;
+  background:linear-gradient(96deg,var(--pg-ink),hsl(248 84% 80%) 55%,var(--pg-teal));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lede{font-size:16px;color:var(--pg-muted);max-width:70ch;margin:0 0 var(--sp-5)}
+.lede b{color:var(--pg-ink);font-weight:600}
+
+.callout{border-left:3px solid var(--pg-teal);background:hsl(168 60% 40% / .08);padding:var(--sp-4) var(--sp-5);border-radius:0 var(--r-md) var(--r-md) 0;margin:var(--sp-4) 0}
+.callout.warn{border-left-color:var(--pg-warm);background:hsl(38 80% 50% / .09)}
+.callout.red{border-left-color:var(--pg-red);background:hsl(4 70% 50% / .09)}
+.callout h4{margin:0 0 var(--sp-2);font-size:13px;letter-spacing:.02em;text-transform:uppercase;color:var(--pg-muted)}
+.callout p{margin:0;font-size:15px}
+
+/* kpi */
+.kpi{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--sp-3);margin-top:var(--sp-5)}
+.k{background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-4);text-align:center}
+.k .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.k .l{font-size:11px;color:var(--pg-faint);margin-top:6px;letter-spacing:.02em}
+.k.have .v{color:var(--pg-teal)} .k.part .v{color:var(--pg-warm)} .k.gap .v{color:var(--pg-red)} .k.edge .v{color:var(--pg-accent)}
+
+/* sections */
+section{margin:0 0 var(--sp-6);scroll-margin-top:var(--sp-5)}
+h2{font-size:21px;margin:0 0 var(--sp-4);display:flex;align-items:center;gap:var(--sp-3);letter-spacing:-.01em}
+h2 .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--pg-accent-deep);color:#fff;font-family:var(--mono);font-size:13px;font-weight:600}
+.sub{color:var(--pg-muted);margin:-6px 0 var(--sp-4);font-size:14px}
+h3{font-size:15px;margin:var(--sp-5) 0 var(--sp-1);display:flex;align-items:center;gap:9px;letter-spacing:-.01em}
+h3 .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.dcap{color:var(--pg-muted);font-size:13px;margin:0 0 var(--sp-3);max-width:74ch}
+.panel{background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-5)}
+
+/* vs */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)}
+.vs .col{border-radius:var(--r-md);padding:var(--sp-4) var(--sp-5);border:1px solid}
+.vs .before{background:hsl(4 60% 45% / .08);border-color:hsl(4 60% 55% / .28)}
+.vs .after{background:hsl(168 55% 42% / .08);border-color:hsl(168 55% 55% / .3)}
+.vs h4{margin:0 0 var(--sp-2);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+.vs .before h4{color:var(--pg-red)} .vs .after h4{color:var(--pg-teal)}
+.vs p{margin:0;font-size:14px;color:var(--pg-ink)}
+
+/* actors */
+.actors{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-3)}
+.actor{background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-4)}
+.actor .h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:var(--sp-2)}
+.actor .t{font-weight:700;font-size:15px}
+.actor .rank{font-family:var(--mono);font-size:11px;color:var(--pg-faint)}
+.actor p{margin:0;font-size:13px;color:var(--pg-muted)}
+.actor.code{border-color:hsl(168 55% 55% / .4)} .actor.code .t{color:var(--pg-teal)}
+.two-con{display:flex;gap:var(--sp-3);margin-top:var(--sp-4);flex-wrap:wrap}
+.con{flex:1;min-width:200px;background:hsl(248 60% 60% / .08);border:1px solid hsl(248 70% 70% / .25);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4)}
+.con b{color:hsl(248 84% 80%)}
+
+/* ladder */
+.ladder{display:grid;gap:var(--sp-2)}
+.rung{display:grid;grid-template-columns:34px 1fr auto;gap:var(--sp-3);align-items:center;background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-4)}
+.rung .lv{font-family:var(--mono);font-size:12px;color:var(--pg-faint);font-weight:600}
+.rung .txt{font-size:14px}
+.rung .txt b{color:var(--pg-ink)}
+.rung .ts{font-family:var(--mono);font-size:11px;color:var(--pg-faint)}
+.rung.hi{border-color:hsl(168 55% 55% / .35);background:hsl(168 55% 42% / .06)}
+
+/* matrix */
+.controls{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-bottom:var(--sp-4);align-items:center}
+.chip{font-family:var(--mono);font-size:12px;color:var(--pg-muted);background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:999px;padding:5px 13px;cursor:pointer;user-select:none}
+.chip:hover{color:var(--pg-ink)}
+.chip.on{color:var(--pg-ink);border-color:var(--pg-accent);background:hsl(248 60% 60% / .14)}
+.chip .c{font-size:10px;opacity:.7;margin-left:5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:10px var(--sp-3);border-bottom:1px solid hsl(0 0% 100% / .07);vertical-align:top}
+th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--pg-faint);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--pg-muted)}
+th .ar{opacity:.5;font-size:10px}
+td .cn{font-weight:600;color:var(--pg-ink)}
+td .ev{font-family:var(--mono);font-size:11.5px;color:var(--pg-muted)}
+td .note{color:var(--pg-muted);font-size:12.5px}
+.vb{font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-block}
+.v-have{color:var(--pg-teal);background:hsl(168 55% 45% / .14);border:1px solid hsl(168 55% 55% / .35)}
+.v-part{color:var(--pg-warm);background:hsl(38 85% 55% / .13);border:1px solid hsl(38 85% 60% / .35)}
+.v-gap{color:var(--pg-red);background:hsl(4 70% 55% / .14);border:1px solid hsl(4 70% 60% / .38)}
+
+/* grids */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-3)}
+.card{background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-4)}
+.card .ct{font-weight:600;font-size:14px;margin-bottom:6px;display:flex;justify-content:space-between;gap:var(--sp-2);align-items:baseline}
+.card p{margin:0;font-size:13px;color:var(--pg-muted)}
+.card .ev{font-family:var(--mono);font-size:11px;color:var(--pg-faint);margin-top:8px}
+.tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.t-p1{color:var(--pg-red);background:hsl(4 70% 55% / .15)}
+.t-p2{color:var(--pg-warm);background:hsl(38 85% 55% / .14)}
+.t-p3{color:var(--pg-blue);background:hsl(212 80% 60% / .15)}
+.t-new{color:var(--pg-teal);background:hsl(168 55% 45% / .14)}
+.t-edit{color:var(--pg-warm);background:hsl(38 85% 55% / .14)}
+
+/* mermaid */
+.mermaid{background:hsl(230 24% 9% / .6);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-4);overflow-x:auto;text-align:center}
+.legend{font-size:12px;color:var(--pg-muted);margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-3)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* decision form */
+.qf{background:var(--pg-glass);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);padding:var(--sp-4);margin-bottom:var(--sp-3)}
+.qf h4{margin:0 0 var(--sp-3);font-size:14px}
+.opts{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.opt{position:relative;font-size:13px;color:var(--pg-muted);background:hsl(0 0% 100% / .04);border:1px solid var(--pg-glass-edge);border-radius:var(--r-sm);padding:8px 13px;cursor:pointer}
+.opt:hover{color:var(--pg-ink)}
+.opt.sel{color:var(--pg-ink);border-color:var(--pg-accent);background:hsl(248 60% 60% / .16)}
+.opt .rec{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--pg-teal);margin-right:7px}
+textarea{width:100%;min-height:64px;background:hsl(0 0% 0% / .25);border:1px solid var(--pg-glass-edge);border-radius:var(--r-sm);color:var(--pg-ink);font-family:var(--sans);font-size:13px;padding:var(--sp-3);resize:vertical}
+.reply{margin-top:var(--sp-4);border:1px solid var(--pg-glass-edge);border-radius:var(--r-md);overflow:hidden}
+.reply .bar{display:flex;justify-content:space-between;align-items:center;background:hsl(0 0% 100% / .04);padding:var(--sp-2) var(--sp-4);font-size:12px;color:var(--pg-muted)}
+.reply pre{margin:0;padding:var(--sp-4);font-family:var(--mono);font-size:12.5px;color:var(--pg-ink);white-space:pre-wrap;background:hsl(0 0% 0% / .22)}
+button.copy{font-family:var(--mono);font-size:12px;color:var(--pg-ink);background:var(--pg-accent-deep);border:none;border-radius:var(--r-sm);padding:6px 14px;cursor:pointer}
+button.copy:hover{background:var(--pg-accent)}
+
+footer{border-top:1px solid var(--pg-glass-edge);margin-top:var(--sp-6);padding-top:var(--sp-4);font-size:12.5px;color:var(--pg-faint)}
+footer b{color:var(--pg-muted)}
+
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;padding:var(--sp-4)}
+  nav{position:static;display:flex;flex-wrap:wrap;gap:4px;margin-bottom:var(--sp-4)}
+  nav .navtitle{display:none} nav a{border-left:none;border:1px solid transparent}
+  .kpi{grid-template-columns:repeat(3,1fr)} .actors,.grid3{grid-template-columns:1fr} .vs,.grid2{grid-template-columns:1fr}
+  h1{font-size:27px}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav aria-label="Sections">
+  <p class="navtitle">Contents</p>
+  <a href="#thesis"><span class="an">00</span>Thesis</a>
+  <a href="#actors"><span class="an">01</span>3 Actors · 2 Constraints</a>
+  <a href="#ladder"><span class="an">02</span>Scaling Ladder</a>
+  <a href="#gap"><span class="an">03</span>Gap Map</a>
+  <a href="#edge"><span class="an">04</span>Our Edge</a>
+  <a href="#build"><span class="an">05</span>Build Next</a>
+  <a href="#factory"><span class="an">06</span>Have → Add → Target</a>
+  <a href="#plan"><span class="an">07</span>The Plan</a>
+  <a href="#leftovers"><span class="an">08</span>Leftovers Ledger</a>
+  <a href="#decide"><span class="an">09</span>Decisions</a>
+</nav>
+
+<main>
+<header>
+  <div class="badges">
+    <span class="pill">source · <b>IndyDevDan</b></span>
+    <span class="pill">"FORGET Loop Engineering"</span>
+    <span class="pill"><b>34:18</b> · 2026-07-13</span>
+    <span class="pill">mapped vs <b>claude-forge</b></span>
+    <span class="pill">18 concepts · <b>ground-truthed</b></span>
+  </div>
+  <h1>Agentic Engineering, and where our stack already lives it</h1>
+  <p class="lede">The video's argument, extracted from the full transcript, then <b>diffed against our actual repo</b> — file-cited, not from memory. The unit of work is the <b>AI Developer Workflow (ADW)</b>: prompts in → a workflow of <b>code + agents</b> runs → results out. You scale ADWs into a <b>software factory</b> and move your effort to the <b>agentic layer</b> — building the system that builds the system.</p>
+
+  <div class="callout">
+    <h4>So what</h4>
+    <p>We are <b>much closer to this vision than the framing suggests.</b> 12 of 18 concepts are already shipped — often <em>more disciplined</em> than the talk (a benchmarked router, a dedicated refutation agent, enforceable cost governance). The real work is a <b>handful of substrate gaps</b> that stand between "a toolkit of skills" and "a command center that runs ADWs for us."</p>
+  </div>
+  <div class="callout warn">
+    <h4>The recommendation</h4>
+    <p>Close <b>one substrate gap (agent sandboxes)</b> and make <b>one upgrade (router → dispatch full sandboxed ADWs, not just pick a skill)</b>. Our router (<code>auto-research</code>) is already benchmarked; wiring it to launch isolated plan→build→test→review pipelines is the shortest path to the command center.</p>
+  </div>
+
+  <div class="kpi">
+    <div class="k have"><div class="v">12</div><div class="l">HAVE — shipped</div></div>
+    <div class="k part"><div class="v">5</div><div class="l">PARTIAL</div></div>
+    <div class="k gap"><div class="v">1</div><div class="l">GAP — no analog</div></div>
+    <div class="k edge"><div class="v">6</div><div class="l">stronger than video</div></div>
+    <div class="k"><div class="v">6</div><div class="l">build-next items</div></div>
+    <div class="k"><div class="v">2</div><div class="l">P1 to command center</div></div>
+  </div>
+</header>
+
+<section id="thesis">
+  <h2><span class="n">0</span>The thesis: it was never a loop</h2>
+  <p class="sub">"Loop engineering is a terrible rebrand of the software development life cycle." [0:20] If we call it loop engineering, we'd need condition-, function-, and exception-engineering too. [8:55]</p>
+  <div class="vs">
+    <div class="col before">
+      <h4>Loop engineering (the framing he rejects)</h4>
+      <p>Fixate on the <b>loop</b> — an agent + a pass/fail check that routes back. Treats the loop as the whole game. Imprecise, hype-filled, and it hides the real system: it's just one control-flow construct inside the SDLC.</p>
+    </div>
+    <div class="col after">
+      <h4>Agentic engineering (the frame he offers)</h4>
+      <p>The unit is the <b>AI Developer Workflow</b> — plan→build→test→review→ship, composed from three actors. The loop is one node. You compose ADWs into a <b>software factory</b> and work the <b>agentic layer</b>, not the app. [1:03, 17:57]</p>
+    </div>
+  </div>
+</section>
+
+<section id="actors">
+  <h2><span class="n">1</span>Three actors, two constraints</h2>
+  <p class="sub">"Knowing when and where to place each of these is the name of the game." [3:46] Reliability order: <b>code &gt; engineers &gt; agents</b>. [4:32]</p>
+  <div class="actors">
+    <div class="actor code">
+      <div class="h"><span class="t">Code</span><span class="rank">#1 reliable</span></div>
+      <p>The "unsung hero." Deterministic, <b>zero token cost</b>, no hallucination, runs at light speed. Linters, formatters, type-checkers, tests, hooks. [4:05, 30:28]</p>
+    </div>
+    <div class="actor">
+      <div class="h"><span class="t">Engineers</span><span class="rank">#2</span></div>
+      <p>You. Show up at the <b>two constraints</b> — planning and reviewing — and build the system in between. Move up a layer to meta-work. [7:05]</p>
+    </div>
+    <div class="actor">
+      <div class="h"><span class="t">Agents</span><span class="rank">#3</span></div>
+      <p>Powerful but least reliable and token-costly. "Don't over-leverage on agents." Pair them with code; specialize them into experts. [30:34]</p>
+    </div>
+  </div>
+  <div class="two-con">
+    <div class="con"><b>Constraint A — Planning</b> (the start). The engineer prompts / architects the workflow.</div>
+    <div class="con"><b>Constraint B — Reviewing</b> (the end). The engineer validates the result. The system handles everything between. [7:18]</div>
+  </div>
+</section>
+
+<section id="ladder">
+  <h2><span class="n">2</span>The scaling ladder</h2>
+  <p class="sub">One simple workflow, scaled to a software factory. "Add compute to add confidence." [7:47] Rungs tinted teal are where our repo already operates.</p>
+  <div class="ladder">
+    <div class="rung hi"><span class="lv">L0</span><span class="txt"><b>Engineer prompts agent</b>, reviews result — the atom of every workflow.</span><span class="ts">4:50</span></div>
+    <div class="rung hi"><span class="lv">L1</span><span class="txt">Add <b>deterministic code</b>: linter with pass/fail routing back to the build agent — the "first loop."</span><span class="ts">5:31</span></div>
+    <div class="rung hi"><span class="lv">L2</span><span class="txt">Add formatter, type-checker, <b>tests</b> — each a gate routing back.</span><span class="ts">6:03</span></div>
+    <div class="rung hi"><span class="lv">L3</span><span class="txt">Collapse validation into a dedicated <b>test agent</b>.</span><span class="ts">7:40</span></div>
+    <div class="rung hi"><span class="lv">L4</span><span class="txt">Add <b>planning</b> to the front → plan·build·test·review·ship.</span><span class="ts">8:21</span></div>
+    <div class="rung hi"><span class="lv">L5</span><span class="txt"><b>Git worktrees</b> for isolation + parallelism (a script spins them up).</span><span class="ts">9:07</span></div>
+    <div class="rung"><span class="lv">L6</span><span class="txt"><b>Agent sandboxes</b> — each agent its own computer. "The majority of computers in the world."</span><span class="ts">10:34</span></div>
+    <div class="rung"><span class="lv">L7</span><span class="txt"><b>Kanban queue</b> → scout · plan · build · test agents, each sandboxed.</span><span class="ts">12:02</span></div>
+    <div class="rung hi"><span class="lv">L8</span><span class="txt"><b>Factory router agent</b> — reads the goal/codebase, picks the right ADW at best price/perf/speed.</span><span class="ts">13:17</span></div>
+    <div class="rung"><span class="lv">L9</span><span class="txt"><b>Software factory</b> — many specialized ADWs behind a router; runs the app better than any actor alone.</span><span class="ts">17:57</span></div>
+  </div>
+</section>
+
+<section id="gap">
+  <h2><span class="n">3</span>The gap map</h2>
+  <p class="sub">Every concept in the talk, mapped to a real artifact in our repo. Sort any column; filter by verdict. Evidence paths are from a read-only repo inventory.</p>
+  <div class="controls" id="chips">
+    <span class="chip on" data-f="all">All <span class="c">18</span></span>
+    <span class="chip" data-f="have">HAVE <span class="c">12</span></span>
+    <span class="chip" data-f="part">PARTIAL <span class="c">5</span></span>
+    <span class="chip" data-f="gap">GAP <span class="c">1</span></span>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto">
+  <table>
+    <thead><tr>
+      <th data-k="concept">Concept <span class="ar">↕</span></th>
+      <th data-k="verdict">Verdict <span class="ar">↕</span></th>
+      <th data-k="evidence">Where it lives in our repo <span class="ar">↕</span></th>
+      <th data-k="note">What the video wants / what's missing <span class="ar">↕</span></th>
+    </tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+  </div>
+</section>
+
+<section id="edge">
+  <h2><span class="n">4</span>Where we're already stronger than the talk</h2>
+  <p class="sub">The diff runs both ways. Six places our stack is more disciplined than the ADW as described.</p>
+  <div class="grid3">
+    <div class="card"><div class="ct">Benchmarked router</div><p><code>auto-research</code> ships a 50+ case intent benchmark + explicit collision rules — not vibes-based routing.</p><div class="ev">auto-research/references/intent-benchmark.json</div></div>
+    <div class="card"><div class="ct">Dedicated refuter</div><p>An adversarial-verifier agent whose job is to <em>refute</em> before ship, plus evidence gating + streak gates. The ADW has no independent-refutation actor.</p><div class="ev">etk/agents/adversarial-verifier.md</div></div>
+    <div class="card"><div class="ct">Anti-rationalization</div><p>Iron-Laws / Red-Flags / Rationalizations tables in every long-horizon skill — a guardrail layer the talk doesn't describe.</p><div class="ev">skills/{develop,cover,verify,fix-bug}</div></div>
+    <div class="card"><div class="ct">Code-actor maturity</div><p>A dual-linter (ruff+biome) hook with byte-offset conversion and a feed-back-to-agent channel — well past "run a linter."</p><div class="ev">shared/hooks-infra/…/lint-checker.ts</div></div>
+    <div class="card"><div class="ct">Enforceable cost governance</div><p><code>enforceAvailableModels</code> + hard/soft-deny — stronger than the video's advisory "use cheaper models."</p><div class="ev">root CLAUDE.md · managed settings</div></div>
+    <div class="card"><div class="ct">Propose-don't-apply rail</div><p>Unattended loops default to proposing, not applying — a safety rail for autonomy the talk doesn't cover.</p><div class="ev">auto-research/references/unattended-governance.md</div></div>
+  </div>
+</section>
+
+<section id="build">
+  <h2><span class="n">5</span>What to build next</h2>
+  <p class="sub">Prioritized by leverage × how close we already are. P1 items are the two steps to a real command center.</p>
+  <div class="grid2">
+    <div class="card">
+      <div class="ct">Agent sandbox substrate <span class="tag t-p1">P1</span></div>
+      <p>The one true GAP. Worktrees are our isolation ceiling; the factory vision wants a computer per agent. Adopt vercel-sandbox / Bedrock agentcore (already referenced by agent-browser) or a container-per-agent harness.</p>
+      <div class="ev">enables L6–L9 · <span class="tag t-new">net-new</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">Router → sandboxed ADW dispatch <span class="tag t-p1">P1</span></div>
+      <p>Highest leverage. <code>auto-research</code> already routes goal→skill and is benchmarked. Upgrade it to kick off a full plan→build→test→review ADW in isolation, not just pick a skill.</p>
+      <div class="ev">auto-research + sandbox substrate · <span class="tag t-edit">upgrade</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">Flip model routing <span class="tag t-p2">P2</span></div>
+      <p>Run the pilot the repo keeps deferring: workhorse model for build, state-of-the-art for scout/planner "so nothing gets missed." [20:43] Documented + governable today; every agent is still <code>model: inherit</code>.</p>
+      <div class="ev">agent frontmatter · <span class="tag t-edit">edit</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">Fuse the test-agent node <span class="tag t-p2">P2</span></div>
+      <p>We have verify + cover + tdd-implementer; the talk wants them collapsed into one callable validation agent any ADW routes to. [7:40]</p>
+      <div class="ev">etk skills → shared node · <span class="tag t-edit">consolidate</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">Kanban multi-lane intake <span class="tag t-p3">P3</span></div>
+      <p>Generalize <code>fix-bug</code> (single Jira→fix) into ticket-landing → factory kickoff across support / product / eng lanes, skipping manual prompt translation. [13:17]</p>
+      <div class="ev">fix-bug + atlassian · <span class="tag t-new">net-new</span></div>
+    </div>
+    <div class="card">
+      <div class="ct">Production-down ADW w/ racing <span class="tag t-p3">P3</span></div>
+      <p>Extend <code>investigate-sentry</code> into a full incident ADW: specialized hotfix agent (agent-expert) + human gate + parallel-attempt race for the fastest correct fix. [15:21]</p>
+      <div class="ev">investigate-sentry + sandboxes · <span class="tag t-edit">extend</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="factory">
+  <h2><span class="n">6</span>The architecture — have → add → target</h2>
+  <p class="sub">Three views of one system: what runs today, the deltas to add, and the composite we're aiming at.</p>
+
+  <h3><span class="dot" style="background:var(--pg-blue)"></span>A · What we have today</h3>
+  <p class="dcap">Every node here is already shipped. The ADW is a <b>skill</b> run mostly in the main session, and isolation tops out at <b>git worktrees</b> — that's the ceiling we're pushing past.</p>
+  <div class="mermaid">
+flowchart LR
+  E["Engineer<br/>plan · constraint A"]:::edit
+  R{"auto-research<br/>router"}:::reuse
+  SK["Skill ADW<br/>develop · fix-bug · cover"]:::reuse
+  WT["Git worktree<br/>isolation"]:::reuse
+  H["Code gates<br/>lint · types · security · tests"]:::reuse
+  AV["Adversarial<br/>verifier"]:::reuse
+  RV["Engineer review<br/>constraint B"]:::edit
+  SH["Ship / PR"]:::reuse
+  E --> R --> SK --> WT --> H --> AV
+  AV -->|fail| SK
+  AV -->|pass| RV --> SH
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:2px
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:2px
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#388bfd"></span>shipped — we have it</span>
+    <span><span class="sw" style="background:#d29922"></span>human constraint — keep</span>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-red)"></span>B · What we should add</h3>
+  <p class="dcap">The deltas, colored by priority. The <b>red P1 chain</b> — wire the router to dispatch a full ADW that runs inside a real <b>agent sandbox</b> — is the path to the command center. Dotted links = enhances an existing node.</p>
+  <div class="mermaid">
+flowchart LR
+  R{"auto-research router<br/>have · benchmarked"}:::have
+  D["Router dispatches a<br/>full sandboxed ADW"]:::p1
+  S["Agent sandbox<br/>substrate"]:::p1
+  PB["Scout · Plan · Build · Test<br/>each in its own sandbox"]:::p1
+  M["Model routing on<br/>workhorse vs SOTA"]:::p2
+  T["Fused test-agent<br/>node"]:::p2
+  K["Kanban multi-lane<br/>intake"]:::p3
+  HF["Racing hotfix<br/>ADW"]:::p3
+  K -.-> R
+  R --> D --> PB
+  S --> PB
+  M -.-> PB
+  T -.-> PB
+  HF -.-> S
+  classDef have fill:#1b2333,stroke:#6b7a99,color:#c7d0e0,stroke-width:2px
+  classDef p1 fill:#2a1416,stroke:#f0655e,color:#ffd9d6,stroke-width:2px
+  classDef p2 fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:2px
+  classDef p3 fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:2px
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#f0655e"></span>P1 · to the command center</span>
+    <span><span class="sw" style="background:#d29922"></span>P2</span>
+    <span><span class="sw" style="background:#388bfd"></span>P3</span>
+    <span><span class="sw" style="background:#6b7a99"></span>existing anchor</span>
+    <span>· · · dotted = enhances</span>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-accent)"></span>C · The composite target</h3>
+  <p class="dcap">Have + add, assembled into the software factory. Everything blue exists; the one dashed-purple box is the sandboxed pipeline to build.</p>
+  <div class="mermaid">
+flowchart LR
+  T["Ticket / goal<br/>(support · product · eng)"]:::edit
+  R{"Factory router<br/>auto-research"}:::reuse
+  subgraph SB["Sandboxed ADW — to build"]
+    direction LR
+    SC["Scout agent"]:::gate
+    PL["Plan agent"]:::gate
+    BD["Build agent"]:::gate
+    TS["Test agent"]:::gate
+  end
+  H1["Code gates<br/>lint · types · tests · hooks"]:::reuse
+  AV["Adversarial verify"]:::reuse
+  RV["Engineer review<br/>(constraint B)"]:::edit
+  SH["Ship"]:::reuse
+  T --> R --> SB
+  SC --> PL --> BD --> TS
+  TS --> H1 --> AV
+  AV -->|fail| BD
+  AV -->|pass| RV --> SH
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:2px
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:2px
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-width:2px,stroke-dasharray:4 3
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#388bfd"></span>reuse — shipped in our repo</span>
+    <span><span class="sw" style="background:#d29922"></span>human constraint — keep</span>
+    <span><span class="sw" style="background:#a371f7"></span>the sandboxed ADW — P1 to build</span>
+  </div>
+  <div class="callout" style="margin-top:var(--sp-4)">
+    <h4>The command center, decomposed</h4>
+    <p>Everything blue already exists. The router (blue) exists and is benchmarked. The single dashed box — <b>a sandboxed scout→plan→build→test pipeline</b> — is what stands between our toolkit and the command center you described. Build that box, wire the router to launch it, and the engineer's job collapses to the two amber constraints.</p>
+  </div>
+</section>
+
+<section id="plan">
+  <h2><span class="n">7</span>The plan — tasks to the command center</h2>
+  <p class="sub">Three phases, each ending at a human gate. Every phase ships something usable on its own — no big-bang. Task IDs are referenced in the roadmap below.</p>
+
+  <div class="mermaid">
+flowchart LR
+  subgraph P1["Phase 1 · Substrate + Dispatch"]
+    direction LR
+    T1["T1 · Pick sandbox<br/>substrate (spike)"]:::p1
+    T2["T2 · Sandbox launcher<br/>lib + lifecycle hooks"]:::p1
+    T3["T3 · auto-research:<br/>dispatch route"]:::p1
+    T4["T4 · One ADW end-to-end<br/>(fix-bug, sandboxed)"]:::p1
+  end
+  G1{"Gate 1<br/>review the pilot"}:::gate
+  subgraph P2["Phase 2 · Quality + Economics"]
+    direction LR
+    T5["T5 · Fused test-agent<br/>node"]:::p2
+    T6["T6 · Model-routing<br/>pilot on scan agents"]:::p2
+    T7["T7 · Report recovery<br/>(ctk 2.9.0 detector)"]:::p2
+  end
+  G2{"Gate 2<br/>trust the outputs?"}:::gate
+  subgraph P3["Phase 3 · Intake + Factory"]
+    direction LR
+    T8["T8 · Ticket-landing<br/>kickoff (Kanban lanes)"]:::p3
+    T9["T9 · Racing hotfix<br/>ADW"]:::p3
+    T10["T10 · Command-center<br/>dashboard"]:::p3
+  end
+  T1 --> T2 --> T3 --> T4 --> G1
+  G1 --> T5
+  G1 --> T6
+  G1 --> T7
+  T5 --> G2
+  T6 --> G2
+  T7 --> G2
+  G2 --> T8 --> T10
+  G2 --> T9 --> T10
+  classDef p1 fill:#2a1416,stroke:#f0655e,color:#ffd9d6,stroke-width:2px
+  classDef p2 fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:2px
+  classDef p3 fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:2px
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-width:2px,stroke-dasharray:4 3
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#f0655e"></span>Phase 1 — substrate + dispatch</span>
+    <span><span class="sw" style="background:#d29922"></span>Phase 2 — quality + economics</span>
+    <span><span class="sw" style="background:#388bfd"></span>Phase 3 — intake + factory</span>
+    <span><span class="sw" style="background:#a371f7"></span>human gate</span>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-red)"></span>Phase 1 · Substrate + dispatch — the P1 chain</h3>
+  <p class="dcap">Ends with one real ticket flowing through a sandboxed ADW. Everything else builds on this.</p>
+  <div class="grid2">
+    <div class="card"><div class="ct">T1 · Sandbox substrate spike <span class="tag t-p1">P1</span></div>
+      <p>Time-boxed comparison: vercel-sandbox / Bedrock agentcore (already referenced by ftk:agent-browser) vs a local container-per-agent harness. Output: a one-page ADR — cost, startup latency, repo access, teardown.</p>
+      <div class="ev">deliverable: docs/adrs/ · unblocks T2</div></div>
+    <div class="card"><div class="ct">T2 · Sandbox launcher lib <span class="tag t-p1">P1</span></div>
+      <p>A shared lib that provisions a sandbox, seeds the repo + continuity context, and tears down. Wire spawn/idle/teardown into ctk lifecycle hooks (the same three fixed in 2.8.4 — the field names are now correct).</p>
+      <div class="ev">shared/hooks-infra + new lib · ctk minor bump</div></div>
+    <div class="card"><div class="ct">T3 · Router dispatch route <span class="tag t-p1">P1</span></div>
+      <p>New auto-research route: instead of picking a skill, classify → provision sandbox (T2) → launch scout→plan→build→test → report back. Keep propose-don't-apply as the default rail; extend the intent benchmark with dispatch cases.</p>
+      <div class="ev">etk:auto-research · intent-benchmark.json</div></div>
+    <div class="card"><div class="ct">T4 · One ADW end-to-end <span class="tag t-p1">P1</span></div>
+      <p>Run a real Jira ticket through /etk:fix-bug inside the sandbox, hands-off between the two constraints. Measure: wall-clock, tokens, human touches. This is the pilot Gate 1 reviews — do the work by hand first, then encode [29:02].</p>
+      <div class="ev">exit: engineer touches only plan + review</div></div>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-warm)"></span>Phase 2 · Quality + economics — trust the outputs</h3>
+  <p class="dcap">Make the dispatched work cheap and verifiable before scaling volume.</p>
+  <div class="grid3">
+    <div class="card"><div class="ct">T5 · Fused test-agent node <span class="tag t-p2">P2</span></div>
+      <p>Collapse verify + cover + tdd checks into one callable validation node any ADW routes to; failures feed back to the build agent with the same session.</p>
+      <div class="ev">etk skills → shared node</div></div>
+    <div class="card"><div class="ct">T6 · Model-routing pilot <span class="tag t-p2">P2</span></div>
+      <p>The deferred pilot: sonnet on scan/scout agents in one review-mr or brainstorm wave, compare findings vs inherit baseline, then flip frontmatter where it holds.</p>
+      <div class="ev">CLAUDE.md model-economics · agents' model:</div></div>
+    <div class="card"><div class="ct">T7 · Report recovery <span class="tag t-p2">P2</span></div>
+      <p>The ctk 2.9.0 detector (designed, unblocked by 2.8.4): capture at teammate idle, surface on next prompt. Without it, factory-scale dispatch silently loses reports — we proved this class of loss by hand.</p>
+      <div class="ev">ctk lifecycle hooks · 2 hooks, capture→surface</div></div>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-blue)"></span>Phase 3 · Intake + factory — the command center</h3>
+  <p class="dcap">Only after Gates 1–2: volume without trust is how factories ship garbage faster.</p>
+  <div class="grid3">
+    <div class="card"><div class="ct">T8 · Ticket-landing kickoff <span class="tag t-p3">P3</span></div>
+      <p>Generalize fix-bug intake: a ticket landing in a watched lane (support/product/eng) kicks off the factory router without manual prompt translation [13:17].</p>
+      <div class="ev">atlassian MCP · scope-check as AC gate</div></div>
+    <div class="card"><div class="ct">T9 · Racing hotfix ADW <span class="tag t-p3">P3</span></div>
+      <p>Extend investigate-sentry: specialized hotfix agent-expert + human approve gate + N sandboxed attempts racing for the fastest passing fix [15:21].</p>
+      <div class="ev">investigate-sentry + T2 sandboxes</div></div>
+    <div class="card"><div class="ct">T10 · Command-center dashboard <span class="tag t-p3">P3</span></div>
+      <p>The visible layer: live view of running ADWs, their phase, sandbox, cost, and pending human gates. Builds on ctk:dashboard's session monitor.</p>
+      <div class="ev">ctk:dashboard as the base</div></div>
+  </div>
+
+  <div class="callout warn" style="margin-top:var(--sp-4)">
+    <h4>Sequencing rule</h4>
+    <p>Phases 2 and 3 are ordered by a principle from this repo's own history: <b>verification before volume.</b> A silent reviewer froze L3 promotions once already — scaling dispatch (Phase 3) before report recovery and fused validation (Phase 2) would rebuild that failure at factory scale.</p>
+  </div>
+</section>
+
+<section id="leftovers">
+  <h2><span class="n">8</span>Leftovers ledger — consolidated from 13 retired artifacts</h2>
+  <p class="sub">A 4-agent audit verified every prior artifact in docs/artifacts/ against CHANGELOGs, commits, and live files (2026-07-19). Everything shipped or deliberately dropped is retired; this ledger is now the single carrier of what remains.</p>
+
+  <h3><span class="dot" style="background:var(--pg-red)"></span>Live — act on these</h3>
+  <div class="grid2">
+    <div class="card"><div class="ct">Secret output-redaction hook <span class="tag t-p1">live</span></div>
+      <p>Judged build-worthy in the 2026-06-20 orchestkit verdict and never built: secret-detector recognizes 16 secret types but only <em>warns</em>, while the PHI hooks already <em>redact</em>. Wire redaction into the output path.</p>
+      <div class="ev">from: orchestkit brief · posttool/secret-detector.ts:224</div></div>
+    <div class="card"><div class="ct">Root CLAUDE.md crossed the ~40k cliff <span class="tag t-p1">live</span></div>
+      <p>The orchestkit brief warned at 34,339 chars; root CLAUDE.md is now <b>41,015</b> — past the auto-load cliff it predicted. Path-scoped rule files (.claude/rules/) was the brief's sole ADOPT and is still unbuilt.</p>
+      <div class="ev">from: orchestkit brief · warning has come true</div></div>
+    <div class="card"><div class="ct">Fork-terminal-deny fix <span class="tag t-p2">live</span></div>
+      <p>A PreToolUse deny is terminal inside a fork — it killed every /etk:review-mr run to date. Diagnosed in the 2026-07-19 RCA, unfixed. Mitigation (literals in files, git commit -F) is convention, not code.</p>
+      <div class="ev">from: workflow-explainer §9 · re-test after detector</div></div>
+    <div class="card"><div class="ct">mcp-audit CI job (append-only) <span class="tag t-p2">live</span></div>
+      <p>The one unwired delta in ci-mcp-audit-job.pending.yml: an advisory npm-audit job for ftk's MCP workspace. <b>Never apply that file wholesale</b> — it predates the versions gate. Append the one job, then delete the .pending.yml.</p>
+      <div class="ev">from: pending.yml · kept until wired</div></div>
+    <div class="card"><div class="ct">rtk savings measurement <span class="tag t-p3">live</span></div>
+      <p>rtk is installed and hooks are proxy-aware (ctk 2.7.2) — but real savings were never measured. Run rtk gain after a /verify + /review-mr session; the dtk companion doc is gated on that number.</p>
+      <div class="ev">from: rtk analysis · chained pair</div></div>
+    <div class="card"><div class="ct">Target-state route wiring <span class="tag t-p3">live</span></div>
+      <p>The dispatch-ladder target rows never wired: /fix-bug pre-MR at L1, /cover per-module at L2. Folded from the explainer's open list.</p>
+      <div class="ev">from: workflow-explainer · dispatch-policy.md</div></div>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-teal)"></span>Covered — already tasks in the plan above</h3>
+  <div class="grid2">
+    <div class="card"><div class="ct">Subagent-visibility detector → T7</div><p>The explainer's Q2. ctk 2.8.4 shipped the prerequisite (correct field names); the detector is Phase 2, T7.</p></div>
+    <div class="card"><div class="ct">Cheap-tier model pilot → T6</div><p>The dispatch-policy brief's Phase D standing deferral — now scheduled as Phase 2, T6.</p></div>
+  </div>
+
+  <h3><span class="dot" style="background:var(--pg-faint)"></span>Parked — deliberate, revisit only on trigger</h3>
+  <div class="grid3">
+    <div class="card"><p><b>Egress deniedDomains posture</b> (security audit #4) — parked in ledger; CLAUDE.md note only.</p></div>
+    <div class="card"><p><b>scan-skill / SkillSpector wrap</b> (security audit #10) — re-scoped, parked in ledger.</p></div>
+    <div class="card"><p><b>Conditional router routes</b> (ADR + scope-check) — low-priority, parked since 07-18.</p></div>
+    <div class="card"><p><b>/etk:route rename</b> — breaking, lowest value; "skip unless wanted."</p></div>
+    <div class="card"><p><b>Omnigent ideas</b> (boot-vs-task retry, runbook shape, dispatch enum, dated claims) — 06-20 decision was "no builds."</p></div>
+    <div class="card"><p><b>Name the deterministic-first principle</b> in docs — cosmetic; §1 here covers the ground.</p></div>
+  </div>
+</section>
+
+<section id="decide">
+  <h2><span class="n">9</span>Your call</h2>
+  <p class="sub">Pick a direction and paste the reply back to continue. Recommended options are pre-selected.</p>
+
+  <div class="qf" data-q="First move">
+    <h4>Q1 · Which do we start on first?</h4>
+    <div class="opts">
+      <span class="opt sel" data-v="Router → sandboxed ADW dispatch (upgrade auto-research)"><span class="rec">rec</span>Router → sandboxed ADW dispatch</span>
+      <span class="opt" data-v="Agent sandbox substrate first">Sandbox substrate first</span>
+      <span class="opt" data-v="Flip model routing (cheap quick win)">Flip model routing (quick win)</span>
+      <span class="opt" data-v="Fuse the test-agent node">Fuse the test-agent node</span>
+    </div>
+  </div>
+
+  <div class="qf" data-q="Sandbox approach">
+    <h4>Q2 · Sandbox substrate — which way?</h4>
+    <div class="opts">
+      <span class="opt sel" data-v="Adopt an existing sandbox (vercel-sandbox / Bedrock agentcore)"><span class="rec">rec</span>Adopt existing (agent-browser's)</span>
+      <span class="opt" data-v="Container-per-agent harness we build">Build container-per-agent</span>
+      <span class="opt" data-v="Stay on worktrees for now">Stay on worktrees for now</span>
+    </div>
+  </div>
+
+  <div class="qf" data-q="Scope">
+    <h4>Q3 · How far this pass?</h4>
+    <div class="opts">
+      <span class="opt sel" data-v="Prototype one end-to-end sandboxed ADW, then decide"><span class="rec">rec</span>Prototype one ADW end-to-end</span>
+      <span class="opt" data-v="Just the two P1 items">Both P1 items</span>
+      <span class="opt" data-v="Full roadmap, all 6 build-next items">All 6 items</span>
+    </div>
+  </div>
+
+  <div class="qf" data-q="Notes"><h4>Anything to add</h4><textarea id="notes" placeholder="constraints, preferences, the command-center shape you have in mind…"></textarea></div>
+
+  <div class="reply">
+    <div class="bar"><span>Decision reply — paste back to Claude</span><button class="copy" id="copyBtn">Copy</button></div>
+    <pre id="reply"></pre>
+  </div>
+</section>
+
+<footer>
+  <p><b>How this brief was made.</b> Transcript (333 segments, full 34:18) captured from the YouTube video via browser automation; description + chapters via page extract; timestamps are direct citations. The 18-concept map was ground-truthed against <b>claude-forge</b> by a read-only repo-inventory pass citing real files. Verdicts (HAVE / PARTIAL / GAP) reflect the repo at <code>main</code>, ctk&nbsp;2.8.4.</p>
+  <p>Source · <a href="https://www.youtube.com/watch?v=VQy50fuxI34">IndyDevDan — "FORGET Loop Engineering. Agentic Engineering is about THIS"</a> · companion resources: agenticengineer.com (Tactical Agentic Coding). Any item marked <em>inferred</em> would be labeled inline; none required.</p>
+</footer>
+</main>
+</div>
+
+<script>
+const DATA=[
+ {concept:"AI Developer Workflow (ADW)",verdict:"have",evidence:"etk: develop · fix-bug · auto-research",note:"Named, repeatable, human-gated plan→build→test→review workflows — multiple."},
+ {concept:"Code as a separate actor",verdict:"have",evidence:"shared/hooks-infra: lint · security · git-validate · secret",note:"Deterministic code validates independently of agents. verify runs real commands."},
+ {concept:"Validation routes back to build agent",verdict:"have",evidence:"lint-checker feedback · cover 'heal' · failure-logger",note:"Pass/fail from checks is injected back for the agent to fix."},
+ {concept:"Dedicated test agent",verdict:"part",evidence:"tdd-implementer · cover · verify",note:"Pieces exist but validation is distributed, not fused into one test-agent node."},
+ {concept:"Git worktrees for isolation",verdict:"have",evidence:"worktree-create/remove hooks · start-parallel",note:"Worktree-per-agent is the enforced isolation boundary for parallel work."},
+ {concept:"Agent sandboxes (a computer per agent)",verdict:"gap",evidence:"only an agent-browser external pointer",note:"No repo sandbox. Worktrees are the ceiling — weaker than a per-agent computer."},
+ {concept:"Kanban / ticket intake pipeline",verdict:"part",evidence:"fix-bug (single Jira) · scope-check · atlassian",note:"Single-ticket→fix intake; no support/product/eng board feeding scout→plan→build."},
+ {concept:"Scout agent → plan agent split",verdict:"part",evidence:"web-research-analyst · brainstorming --deep",note:"Analysis→synthesis + web scouting; no codebase scout feeding a separate planner."},
+ {concept:"Factory router agent",verdict:"have",evidence:"auto-research + intent-benchmark.json",note:"Reads goal, picks the right skill w/ collision rules. Benchmarked (50+ cases)."},
+ {concept:"Production-down / hot-fix ADW",verdict:"part",evidence:"investigate-sentry · dtk observability",note:"Triage → assessment → route to fix. No specialized hotfix agent, no fix-race."},
+ {concept:"Agentic layer / build-the-system",verdict:"have",evidence:"whole repo · audit-skill · improve-skill route",note:"Explicit meta-work — skills that build/audit software, not the product itself."},
+ {concept:"Templating expertise into workflows",verdict:"have",evidence:"generate-agents-md · skill + template files",note:"Every skill is templated expertise; concrete reusable templates throughout."},
+ {concept:"Agent experts / specialization",verdict:"have",evidence:"13 agents, each w/ a 'Do NOT use for' boundary",note:"Refuter, tdd, quality-reviewer, ui-developer, ai-ml-engineer, …"},
+ {concept:"Separate code from agents (no mega-skill)",verdict:"have",evidence:"hooks + scripts vs prompt logic; shared/lib",note:"Deterministic steps live in real code, not buried in one agent prompt."},
+ {concept:"Model routing by cost/role",verdict:"part",evidence:"CLAUDE.md model-economics · enforceAvailableModels",note:"Documented + governable, but all 13 agents still model:inherit. Pilot never run."},
+ {concept:"Mermaid to design workflows",verdict:"have",evidence:"prepare-pr sequence · playground · ascii-visualizer",note:"Mermaid diagrams generated per PR and in strategy briefs."},
+ {concept:"Multi-agent orchestration",verdict:"have",evidence:"atk multi-agent-orchestration · langgraph-* · review-mr",note:"Fan-out/fan-in, supervisor, synthesis, parallel domain agents."},
+ {concept:"Adversarial / independent verification",verdict:"have",evidence:"adversarial-verifier · evidence-verification · review-mr",note:"Refute-first agent + exit-code evidence gating + streak defense."}
+];
+const LABEL={have:"HAVE",part:"PARTIAL",gap:"GAP"};
+const ORD={have:0,part:1,gap:2};
+let sortKey="verdict",sortDir=1,filter="all";
+const tb=document.getElementById("tb");
+function render(){
+  let rows=DATA.filter(d=>filter==="all"||d.verdict===filter);
+  rows.sort((a,b)=>{
+    let x,y;
+    if(sortKey==="verdict"){x=ORD[a.verdict];y=ORD[b.verdict];return sortDir*(x-y);}
+    x=a[sortKey];y=b[sortKey];return sortDir*String(x).localeCompare(String(y));
+  });
+  tb.innerHTML=rows.map(d=>`<tr>
+    <td><span class="cn">${d.concept}</span></td>
+    <td><span class="vb v-${d.verdict}">${LABEL[d.verdict]}</span></td>
+    <td><span class="ev">${d.evidence}</span></td>
+    <td><span class="note">${d.note}</span></td></tr>`).join("");
+}
+document.querySelectorAll("th").forEach(th=>th.addEventListener("click",()=>{
+  const k=th.dataset.k; if(k===sortKey){sortDir*=-1;}else{sortKey=k;sortDir=1;} render();
+}));
+document.querySelectorAll("#chips .chip").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll("#chips .chip").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on"); filter=c.dataset.f; render();
+}));
+render();
+
+// decision form
+function updateReply(){
+  const lines=["Decisions on the agentic-engineering gap analysis:"];
+  document.querySelectorAll(".qf[data-q]").forEach(qf=>{
+    if(qf.dataset.q==="Notes")return;
+    const sel=qf.querySelector(".opt.sel");
+    if(sel)lines.push(`- ${qf.dataset.q}: ${sel.dataset.v}`);
+  });
+  const n=document.getElementById("notes").value.trim();
+  if(n)lines.push(`- Notes: ${n}`);
+  document.getElementById("reply").textContent=lines.join("\n");
+}
+document.querySelectorAll(".qf .opt").forEach(o=>o.addEventListener("click",()=>{
+  o.parentElement.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));
+  o.classList.add("sel"); updateReply();
+}));
+document.getElementById("notes").addEventListener("input",updateReply);
+document.getElementById("copyBtn").addEventListener("click",()=>{
+  navigator.clipboard.writeText(document.getElementById("reply").textContent).then(()=>{
+    const b=document.getElementById("copyBtn");const t=b.textContent;b.textContent="Copied!";setTimeout(()=>b.textContent=t,1400);
+  });
+});
+updateReply();
+
+// scroll-spy
+const navLinks=[...document.querySelectorAll("nav a")];
+const secs=navLinks.map(a=>document.querySelector(a.getAttribute("href")));
+function spy(){let i=secs.length-1;
+  for(let j=0;j<secs.length;j++){if(secs[j]&&secs[j].getBoundingClientRect().top>120){i=j-1;break;}}
+  navLinks.forEach(a=>a.classList.remove("active"));if(i>=0)navLinks[i].classList.add("active");}
+document.addEventListener("scroll",spy,{passive:true});spy();
+
+// mermaid + offline fallback
+if(window.mermaid){
+  mermaid.initialize({startOnLoad:true,theme:"dark",securityLevel:"loose",
+    themeVariables:{fontSize:"13px",fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif"}});
+}else{
+  document.querySelectorAll(".mermaid").forEach(d=>{
+    d.style.whiteSpace="pre";d.style.fontFamily="monospace";
+    d.insertAdjacentHTML("afterbegin","<div style='color:#d29922;font-size:12px'>⚠ offline — showing diagram source</div>");
+  });
+}
+</script>
+</body>
+</html>
