@@ -5417,7 +5417,7 @@ var CONTEXT_RULES = [
   }
 ];
 function extractPrompt(input) {
-  const topLevel = input["prompt"];
+  const topLevel = input.prompt;
   if (typeof topLevel === "string" && topLevel.length > 0) {
     return topLevel;
   }

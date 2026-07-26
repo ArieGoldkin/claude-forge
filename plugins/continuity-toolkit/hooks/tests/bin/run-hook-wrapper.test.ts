@@ -252,14 +252,30 @@ describe('run-hook-wrapper.sh', () => {
     it('does not gate hooks that are not opt-in', () => {
       // The gate is a named allowlist, not a blanket env check. A hook absent
       // from the `case` must run regardless of that variable.
-      const { stdout, exitCode } = runWrapper(
-        'pretool/security-blocker',
-        JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }),
-        { CONTINUITY_PHI_OUTPUT_REDACT: '' }
-      );
+      //
+      // My first version asserted only `continue === true`, which the GATED
+      // path also returns — so widening the case label to include
+      // pretool/security-blocker left the whole suite green while ctk's
+      // security pre-tool hook was short-circuited for every user who has not
+      // opted into PHI redaction. Exactly the risk the wrapper's own comment
+      // names. Found by adversarial review of #56, round 2.
+      //
+      // Inverting the observable used above makes over-gating detectable: with
+      // no compiled bundle, an UNGATED hook must still reach the dist/ check
+      // and report it. A gated one never gets there.
+      const noBundle = fs.mkdtempSync(path.join(os.tmpdir(), 'ctk-nobundle-'));
+      try {
+        const { stdout, exitCode } = runWrapper(
+          'pretool/security-blocker',
+          JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }),
+          { CONTINUITY_PHI_OUTPUT_REDACT: '', CLAUDE_PLUGIN_ROOT: noBundle }
+        );
 
-      expect(exitCode).toBe(0);
-      expect(JSON.parse(stdout).continue).toBe(true);
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(stdout).systemMessage).toContain('compiled hooks not found');
+      } finally {
+        fs.rmSync(noBundle, { recursive: true, force: true });
+      }
     });
   });
 });

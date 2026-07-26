@@ -362,6 +362,18 @@ export interface HookInput {
 
   /** Identifier of the user prompt that started this turn. */
   prompt_id?: string;
+
+  /**
+   * The user's prompt text, sent at the top level by UserPromptSubmit.
+   *
+   * Declared here as well as on `UserPromptInput` so handlers can read
+   * `input.prompt` directly. hipaa-context-injector previously reached it with
+   * `(input as unknown as Record<string, unknown>)['prompt']` — a cast that
+   * type-checks for ANY name, so a typo would have been silently inert with no
+   * gate able to see it. Adversarial review of #56 found it as the live example
+   * of that shape.
+   */
+  prompt?: string;
 }
 
 /**

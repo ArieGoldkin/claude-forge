@@ -29,25 +29,26 @@
  *   5. a `__proto__` payload cannot inject fields via the prototype chain
  *
  * MUST-FAIL CONTROLS — each mutation applied one at a time and RUN, counts
- * measured not predicted (2026-07-25):
- *   - restore a STRIPPED allowlist (source/model/hook_event_name) -> 5 fail,
- *     every forwarding test; prototype + normalization suites stay green. This
- *     is the control that isolates forwarding.
- *   - restore main's FAITHFUL 21-name allowlist    -> 4 fail, not 5. The
- *     live-capture regression pin passes, because the 8 names it pins were all
- *     on main's allowlist — correctly, since a faithful revert removes nothing.
- *     Recorded because an earlier revision quoted only the 5 and described the
- *     mutation as "restore an allowlist loop", which reads as the faithful
- *     revert and overstates that pin's independent detection power.
- *   - remove the safeJsonParse `__proto__` reviver  -> exactly 1 fails, the
- *     every-depth test. This is now the ONLY prototype gate.
- *   - drop the Array.isArray payload guard          -> exactly 2 fail, both
- *     array cases.
- *   - drop the three normalized-field assignments   -> 6 fail: the normalization
- *     test directly, plus all 5 forwarding tests by cascade — without a string
- *     `tool_name`, isUsableInput rejects and parseHookInput returns the default
- *     input, so nothing is forwarded at all. Read control A, not this one, as
- *     evidence that the forwarding assertions bite.
+ * MEASURED (re-measured 2026-07-26, and see the warning below):
+ *   - restore a STRIPPED allowlist (source/model/hook_event_name)  -> 6
+ *   - restore main's FAITHFUL 21-name allowlist                    -> 5
+ *   - remove the safeJsonParse `__proto__` reviver                 -> 2
+ *   - drop the top-level Array.isArray payload guard               -> 2
+ *   - drop the three normalized-field assignments                  -> 7
+ *
+ * The faithful-revert number is lower than the stripped one because the
+ * live-capture regression pin passes under it — correctly, since a faithful
+ * revert removes none of the 8 names it pins. Read the stripped control, not
+ * the faithful one, as evidence that forwarding is isolated.
+ *
+ * ⚠ THESE NUMBERS GO STALE WHENEVER THIS FILE GAINS A TEST, AND THAT HAS
+ * ALREADY HAPPENED ONCE. The first set was measured honestly, then four of the
+ * five silently became wrong when the every-depth `__proto__`, array and
+ * `getField` tests landed — every allowlist-shaped mutant also breaks the
+ * every-depth test, because its payload carries fields no allowlist names.
+ * Adversarial review caught it, and the whole point of round 1 was that a wrong
+ * control count misrepresents detection power. RE-MEASURE, do not adjust by
+ * reasoning, and do not add a test here without re-running all five.
  *
  * TWO CONTROLS WERE RETIRED, AND WHY THAT MATTERS. An earlier revision claimed
  * "swap the spread for a per-key assignment loop -> exactly 1 fails" and "remove
@@ -294,9 +295,41 @@ describe('no hook re-declares HookInput locally', () => {
   //
   // MUST-FAIL CONTROL: adding `interface Probe extends HookInput { x?: string }`
   // to a hook source fails this test (verified 2026-07-25).
-  const DECL = /(?:interface\s+\w+\s+extends\s+[^{]*\bHookInput\b|type\s+\w+\s*=\s*[^;]*\bHookInput\b\s*&)/;
+  // Round 2 of the review defeated the first version of this regex with two of
+  // the very six syntaxes the PR cites as the old guard's failure:
+  //   type P = { f?: string } & HookInput     HookInput LAST in the intersection
+  //   type Base = HookInput; interface P extends Base
+  // The original required `&` to FOLLOW HookInput, so putting it last, or
+  // aliasing it, walked straight past. Matching any `type X = … HookInput …`
+  // covers both, including the bare alias that enables the indirect base.
+  // Only INTERSECTIONS and bare ALIASES — not every mention. `type Guard =
+  // (input: HookInput) => HookResult` is ordinary and must not trip this.
+  const DECL = new RegExp(
+    [
+      String.raw`interface\s+\w+\s+extends\s+[^{]*\bHookInput\b`,
+      String.raw`type\s+\w+\s*=[^;]*\bHookInput\b[^;]*&`,
+      String.raw`type\s+\w+\s*=[^;]*&[^;]*\bHookInput\b`,
+      String.raw`type\s+\w+\s*=\s*HookInput\s*;`,
+    ].join('|')
+  );
 
-  it('has no local HookInput extension in any hook source', async () => {
+  // The third shape needs no declaration at all: casting the input to an index
+  // signature makes ANY key type-check, so a typo is silently inert and neither
+  // tsc nor the declaration rule above can see it. One instance was live in the
+  // tree — hipaa-context-injector reached `prompt` this way, and `prompt` was
+  // not on HookInput — which is why `prompt` is now declared there and the read
+  // is `input.prompt`. Reaching a hook input through Record<string, unknown> is
+  // now the thing to avoid; add the field to HookInput instead.
+  // Any cast of `input` to an ad-hoc shape, not just Record<string, unknown>.
+  // While re-running the reviewer's five shapes I mistyped one and accidentally
+  // found a SIXTH that neither gate caught:
+  //   (input as unknown as { tool_output?: string }).tool_output
+  // An inline object literal is the same hole as an index signature — it makes
+  // an arbitrary name type-check with no declaration to find — so both forms
+  // are matched here.
+  const CAST = /\binput\s+as\s+(?:unknown\s+as\s+)?(?:Record\s*<|\{)/;
+
+  it('has no local HookInput declaration or index-signature cast in any hook source', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const url = await import('node:url');
@@ -334,6 +367,17 @@ describe('no hook re-declares HookInput locally', () => {
         const real = fs.realpathSync(file);
         if (seen.has(real)) continue;
         seen.add(real);
+        // The rule is about HANDLERS. `src/lib/**` and `src/types.ts` are the
+        // definitions those handlers import — types.ts declares HookInput, and
+        // guards.ts aliases function types over it. Both are reached here only
+        // because every plugin symlinks them into its hook tree.
+        const rel = real.slice(repo.length + 1);
+        if (
+          rel.startsWith('shared/hooks-infra/src/lib/') ||
+          rel === 'shared/hooks-infra/src/types.ts'
+        ) {
+          continue;
+        }
         // Strip comments first. Several files — including this rule's own
         // rationale in lib/input.ts and types.ts — quote the forbidden syntax
         // while explaining why it is forbidden. Matching prose would make the
@@ -344,7 +388,10 @@ describe('no hook re-declares HookInput locally', () => {
           .replace(/\/\*[\s\S]*?\*\//g, '')
           .replace(/\/\/.*$/gm, '');
         if (DECL.test(src)) {
-          violations.push(path.relative(repo, file));
+          violations.push(`${path.relative(repo, file)} (local HookInput declaration)`);
+        }
+        if (CAST.test(src)) {
+          violations.push(`${path.relative(repo, file)} (input cast to an index signature)`);
         }
       }
     }

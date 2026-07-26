@@ -137,7 +137,7 @@ const CONTEXT_RULES: readonly ContextRule[] = [
  */
 function extractPrompt(input: HookInput): string | null {
   // Primary: top-level prompt field (from UserPromptSubmit passthrough)
-  const topLevel = (input as unknown as Record<string, unknown>)['prompt'];
+  const topLevel = input.prompt;
   if (typeof topLevel === 'string' && topLevel.length > 0) {
     return topLevel;
   }
