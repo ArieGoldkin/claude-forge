@@ -4,13 +4,15 @@
  * These tests verify the logging functions produce the correct log format,
  * respect log levels, handle file rotation, and create proper audit trails.
  *
- * Note: The logging module uses constants computed at module load time for
- * log paths, so tests work with the actual log directory rather than mocking it.
+ * Note: these tests exercise real file I/O rather than mocking it, but against a
+ * per-test temp HOME — never the developer's actual ~/.claude/logs. See the
+ * beforeEach for why that isolation is load-bearing rather than tidiness.
  *
  * @module tests/lib/logging
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -26,6 +28,7 @@ import {
   logPermission,
   logPermissionEntry,
   logWarn,
+  resetLogDir,
   resetLogLevel,
 } from '../../src/lib/logging.js';
 import type { PermissionLogEntry } from '../../src/types.js';
@@ -73,9 +76,27 @@ describe('logging module', () => {
   const originalEnv = { ...process.env };
   let _initialHookLogLines: number;
   let _initialPermissionLogLines: number;
+  let tmpHome: string;
 
   beforeEach(() => {
-    // Reset log level cache before each test
+    // Redirect logging at a temp HOME so this file writes to a log nobody else
+    // can touch.
+    //
+    // Previously these tests read and wrote the REAL ~/.claude/logs/<plugin>/
+    // hooks.log and asserted on line-count deltas, so any other worker that
+    // logged during the assertion window corrupted the count — including the
+    // log's own rotation, which yields a NEGATIVE delta (seen in CI as
+    // "expected -3258 to be 100"). The shared copy and ctk's were made hermetic
+    // when the flake was root-caused; these four were not, because they belong
+    // to the plugins that do not own the shared hooks.
+    //
+    // The path assertions below are structural (contains `.claude`, contains
+    // `logs`, ends with the plugin name), so a temp HOME satisfies them.
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-logs-'));
+    process.env['HOME'] = tmpHome;
+    delete process.env['CLAUDE_PLUGIN_DATA'];
+
+    resetLogDir();
     resetLogLevel();
 
     // Record initial line counts to track new entries
@@ -87,8 +108,11 @@ describe('logging module', () => {
     // Restore original environment
     process.env = { ...originalEnv };
 
-    // Reset log level cache
+    // Reset caches so the next file/test recomputes against the restored env
+    resetLogDir();
     resetLogLevel();
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   });
 
   // ===========================================================================
