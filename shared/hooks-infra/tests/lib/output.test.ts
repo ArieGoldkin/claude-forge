@@ -7,7 +7,7 @@
  * @module tests/lib/output
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   outputAllow,
   outputAllowWithContext,
@@ -16,10 +16,13 @@ import {
   outputContextBudgeted,
   outputDefer,
   outputDeny,
+  outputMessageDisplay,
+  outputMessageDisplayHide,
   outputPromptContext,
   outputRetry,
   outputSessionTitle,
   outputSilentSuccess,
+  outputStderrWarning,
   outputStopContext,
   outputSuccess,
   outputWarning,
@@ -1579,11 +1582,266 @@ describe('outputAnswerQuestion', () => {
   });
 
   it('should produce valid JSON when stringified', () => {
-    const result = outputAnswerQuestion({ answer: 'confirmed' });
-    const json = JSON.stringify(result);
+    const json = JSON.stringify(outputAnswerQuestion({ answer: 'confirmed' }));
     expect(() => JSON.parse(json)).not.toThrow();
     const parsed = JSON.parse(json);
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(parsed.hookSpecificOutput.updatedInput.answer).toBe('confirmed');
+  });
+});
+
+// =============================================================================
+// outputMessageDisplay TESTS (CC v2.1.152+ MessageDisplay event)
+//
+// SCOPE LIMIT — read before trusting these tests.
+//
+// Everything below pins what we EMIT. Nothing here can verify what Claude Code
+// CONSUMES. `transformedMessage` was wrong for a year precisely because no
+// emitted-shape test could contradict it; the key was settled by reading the CC
+// binary (see the reproduction in output.ts). Payload capture remains the only
+// ground truth for consumption. These tests exist so the key cannot drift
+// SILENTLY, not so it can be declared correct.
+//
+// Before #64 the key was pinned only through phi-output-redactor.test.ts, in
+// ctk. Re-point or delete that one hook and the pin vanished with it. The pin is
+// intentional and lives in shared/ now.
+// =============================================================================
+
+describe('outputMessageDisplay', () => {
+  it('should emit the exact MessageDisplay payload', () => {
+    // Literal expectation on purpose. Deriving it from the implementation
+    // would assert the code against itself and pass no matter what it emits.
+    expect(outputMessageDisplay('SSN: [REDACTED]')).toEqual({
+      continue: true,
+      suppressOutput: true,
+      hookSpecificOutput: {
+        hookEventName: 'MessageDisplay',
+        displayContent: 'SSN: [REDACTED]',
+      },
+    });
+  });
+
+  it('should name the replacement key displayContent, not transformedMessage', () => {
+    const emitted = outputMessageDisplay('redacted') as {
+      hookSpecificOutput: Record<string, unknown>;
+    };
+    expect(Object.keys(emitted.hookSpecificOutput).sort()).toEqual([
+      'displayContent',
+      'hookEventName',
+    ]);
+    expect('transformedMessage' in emitted.hookSpecificOutput).toBe(false);
+  });
+
+  it('should pass the text through unmodified', () => {
+    const text = 'line one\nline two\ttabbed  — em-dash "quoted" \\backslash\\';
+    expect(outputMessageDisplay(text).hookSpecificOutput?.displayContent).toBe(text);
+  });
+
+  it('should preserve an empty string rather than dropping the key', () => {
+    const emitted = outputMessageDisplay('') as {
+      hookSpecificOutput: Record<string, unknown>;
+    };
+    expect(emitted.hookSpecificOutput.displayContent).toBe('');
+    expect('displayContent' in emitted.hookSpecificOutput).toBe(true);
+  });
+
+  it('should preserve unicode and emoji without mangling', () => {
+    const text = 'patient 🏥 données médicales 日本語 🔒';
+    expect(outputMessageDisplay(text).hookSpecificOutput?.displayContent).toBe(text);
+  });
+
+  it('should not truncate long content', () => {
+    const text = 'x'.repeat(50_000);
+    const out = outputMessageDisplay(text).hookSpecificOutput?.displayContent as string;
+    expect(out).toHaveLength(50_000);
+    expect(out).toBe(text);
+  });
+
+  it('should satisfy HookResult interface', () => {
+    const result: HookResult = outputMessageDisplay('test');
+    expect(result).toBeDefined();
+  });
+
+  it('should produce valid JSON when stringified', () => {
+    const json = JSON.stringify(outputMessageDisplay('SSN: [REDACTED]'));
+    expect(() => JSON.parse(json)).not.toThrow();
+    const parsed = JSON.parse(json);
+    expect(parsed.hookSpecificOutput.hookEventName).toBe('MessageDisplay');
+    expect(parsed.hookSpecificOutput.displayContent).toBe('SSN: [REDACTED]');
+  });
+});
+
+// =============================================================================
+// outputMessageDisplayHide TESTS
+//
+// This helper has ZERO callers in the repo. That is exactly why it needs tests:
+// its previous implementation returned `{ hide: true }`, a field that occurs
+// nowhere in the CC binary, so any caller believing it had suppressed a message
+// would have displayed that message in full. Nothing exercised it, so nothing
+// caught it — an adversarial review of #56 did.
+//
+// The absence of `hide` is therefore the regression that matters most here, and
+// it is asserted with `in` rather than a truthiness check: a resurrected
+// `hide: false` would satisfy `toBeFalsy()` while re-introducing the key.
+// =============================================================================
+
+describe('outputMessageDisplayHide', () => {
+  it('should emit an empty displayContent as the suppression signal', () => {
+    expect(outputMessageDisplayHide()).toEqual({
+      continue: true,
+      suppressOutput: true,
+      hookSpecificOutput: {
+        hookEventName: 'MessageDisplay',
+        displayContent: '',
+      },
+    });
+  });
+
+  it('should NOT emit a hide field', () => {
+    const emitted = outputMessageDisplayHide() as {
+      hookSpecificOutput: Record<string, unknown>;
+    };
+    expect('hide' in emitted.hookSpecificOutput).toBe(false);
+    expect('hide' in emitted).toBe(false);
+  });
+
+  it('should carry exactly the two MessageDisplay keys and no others', () => {
+    const emitted = outputMessageDisplayHide() as {
+      hookSpecificOutput: Record<string, unknown>;
+    };
+    expect(Object.keys(emitted.hookSpecificOutput).sort()).toEqual([
+      'displayContent',
+      'hookEventName',
+    ]);
+  });
+
+  it('should be indistinguishable from outputMessageDisplay with an empty string', () => {
+    expect(outputMessageDisplayHide()).toEqual(outputMessageDisplay(''));
+  });
+
+  it('should satisfy HookResult interface', () => {
+    const result: HookResult = outputMessageDisplayHide();
+    expect(result).toBeDefined();
+  });
+
+  it('should produce valid JSON when stringified', () => {
+    const json = JSON.stringify(outputMessageDisplayHide());
+    expect(() => JSON.parse(json)).not.toThrow();
+    const parsed = JSON.parse(json);
+    expect(parsed.hookSpecificOutput.displayContent).toBe('');
+    expect(parsed.hookSpecificOutput.hide).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// outputStderrWarning TESTS
+//
+// Unlike every other helper in this file, this one returns `never`: it writes to
+// stderr and calls process.exit(2). Called from all five plugins' index.ts.
+//
+// The stub for process.exit deliberately THROWS. A no-op stub was measured
+// during Phase 2 of #64 and lets execution continue past a call typed `never` —
+// the function then RETURNS, and assertions written after it pass while
+// modelling a state that cannot occur at runtime. Throwing keeps the control
+// flow faithful: nothing after the exit call is reachable.
+// =============================================================================
+
+class ProcessExitCalled extends Error {
+  constructor(readonly code: number | string | null | undefined) {
+    super(`process.exit(${String(code)})`);
+    this.name = 'ProcessExitCalled';
+  }
+}
+
+/** Stub process.exit/stderr.write. Both spies are restored in afterEach. */
+function stubExitAndStderr() {
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    throw new ProcessExitCalled(code);
+  }) as never);
+  const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  return { exitSpy, writeSpy };
+}
+
+describe('outputStderrWarning', () => {
+  // Non-negotiable: this file is symlinked into all five plugins and shares a
+  // worker with ~220 other tests. A leaked process.exit stub would corrupt them.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should exit with code 2', () => {
+    const { exitSpy } = stubExitAndStderr();
+    let thrown: unknown;
+    try {
+      outputStderrWarning('disk almost full');
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ProcessExitCalled);
+    expect((thrown as ProcessExitCalled).code).toBe(2);
+    expect(exitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should write the message to stderr with a trailing newline', () => {
+    const { writeSpy } = stubExitAndStderr();
+    try {
+      outputStderrWarning('disk almost full');
+    } catch {
+      /* expected: the exit stub throws */
+    }
+    expect(writeSpy).toHaveBeenCalledWith('disk almost full\n');
+  });
+
+  it('should write to stderr BEFORE exiting', () => {
+    // Ordering is the contract: exiting first would discard the message.
+    const order: string[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => {
+      order.push('write');
+      return true;
+    });
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      order.push('exit');
+      throw new ProcessExitCalled(code);
+    }) as never);
+
+    try {
+      outputStderrWarning('ordered');
+    } catch {
+      /* expected */
+    }
+    expect(order).toEqual(['write', 'exit']);
+  });
+
+  it('should not swallow an empty message', () => {
+    const { writeSpy } = stubExitAndStderr();
+    try {
+      outputStderrWarning('');
+    } catch {
+      /* expected */
+    }
+    expect(writeSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should write multi-line and unicode messages verbatim', () => {
+    const { writeSpy } = stubExitAndStderr();
+    const message = 'line one\nline two 🔒 日本語';
+    try {
+      outputStderrWarning(message);
+    } catch {
+      /* expected */
+    }
+    expect(writeSpy).toHaveBeenCalledWith(`${message}\n`);
+  });
+
+  it('should not return — execution stops at the exit call', () => {
+    stubExitAndStderr();
+    const reached: string[] = [];
+    try {
+      outputStderrWarning('halt here');
+      reached.push('after-call');
+    } catch {
+      /* expected */
+    }
+    expect(reached).toEqual([]);
   });
 });
