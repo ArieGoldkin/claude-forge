@@ -1602,9 +1602,11 @@ describe('outputAnswerQuestion', () => {
 // ground truth for consumption. These tests exist so the key cannot drift
 // SILENTLY, not so it can be declared correct.
 //
-// Before #64 the key was pinned only through phi-output-redactor.test.ts, in
-// ctk. Re-point or delete that one hook and the pin vanished with it. The pin is
-// intentional and lives in shared/ now.
+// Before #64 the key was pinned only through the phi-output-redactor hook — two
+// ctk test files (phi-output-redactor.test.ts, and the wrapper e2e in
+// tests/bin/run-hook-wrapper.test.ts). Both run through that one hook, so
+// re-pointing or deleting it took the pin with it. The pin is intentional and
+// lives in shared/ now.
 // =============================================================================
 
 describe('outputMessageDisplay', () => {
@@ -1715,7 +1717,12 @@ describe('outputMessageDisplayHide', () => {
     ]);
   });
 
-  it('should be indistinguishable from outputMessageDisplay with an empty string', () => {
+  // Pins DELEGATION, not shape. The implementation is literally
+  // `return outputMessageDisplay('')`, so both sides of this equality move
+  // together — a change to the emitted payload passes it green. The shape is
+  // pinned by the two literal assertions above; this one fires only if Hide
+  // stops delegating. Named for what it checks so the coverage is not oversold.
+  it('should delegate to outputMessageDisplay', () => {
     expect(outputMessageDisplayHide()).toEqual(outputMessageDisplay(''));
   });
 
@@ -1737,7 +1744,15 @@ describe('outputMessageDisplayHide', () => {
 // outputStderrWarning TESTS
 //
 // Unlike every other helper in this file, this one returns `never`: it writes to
-// stderr and calls process.exit(2). Called from all five plugins' index.ts.
+// stderr and calls process.exit(2).
+//
+// It is RE-EXPORTED from all five plugins' index.ts, and called from none of
+// them — `grep -n 'outputStderrWarning('` over tracked .ts outside dist/ returns
+// only this file and the definition itself. So it carries the same zero-caller
+// status as outputMessageDisplayHide below, and is tested for the same reason:
+// nothing exercises it, so nothing would catch a change to it. (An earlier
+// version of this comment claimed it was "called from all five plugins" —
+// false, corrected after adversarial review of #66.)
 //
 // The stub for process.exit deliberately THROWS. A no-op stub was measured
 // during Phase 2 of #64 and lets execution continue past a call typed `never` —
@@ -1763,8 +1778,12 @@ function stubExitAndStderr() {
 }
 
 describe('outputStderrWarning', () => {
-  // Non-negotiable: this file is symlinked into all five plugins and shares a
-  // worker with ~220 other tests. A leaked process.exit stub would corrupt them.
+  // Protects any describe added BELOW this one. Cross-FILE leakage is already
+  // impossible: no vitest.config.ts here sets `pool` or `isolate`, so vitest 2.x
+  // defaults apply (pool=forks, isolate=true) and each file gets a fresh
+  // environment. This hook is currently the last line of defence only for
+  // in-file ordering — it is not what keeps the other ~220 tests safe, which an
+  // earlier version of this comment incorrectly claimed.
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -1836,12 +1855,17 @@ describe('outputStderrWarning', () => {
   it('should not return — execution stops at the exit call', () => {
     stubExitAndStderr();
     const reached: string[] = [];
+    let thrown: unknown;
     try {
       outputStderrWarning('halt here');
       reached.push('after-call');
-    } catch {
-      /* expected */
+    } catch (error) {
+      thrown = error;
     }
     expect(reached).toEqual([]);
+    // Both halves matter. Without the second assertion this passes when the
+    // helper throws for ANY reason, so it would report "did not fall through"
+    // for a function that never reached process.exit at all.
+    expect(thrown).toBeInstanceOf(ProcessExitCalled);
   });
 });
