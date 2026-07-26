@@ -43,6 +43,36 @@ if [ -z "$HOOK_NAME" ]; then
   exit 0
 fi
 
+# --- Opt-in gate: decline BEFORE paying for a Node process -------------------
+#
+# For hooks that are opt-in and default OFF, checking the env var inside the
+# handler is too late — the process spawn has already happened. Measured cost of
+# the in-handler check for messagedisplay/phi-output-redactor, opt-in OFF:
+#
+#   bare node startup          25.3 ms
+#   + bundle load & handler     8.6 ms
+#   + this wrapper             13.5 ms
+#   = per invocation           47.4 ms   (116 ms with 7 cores busy)
+#   actual redaction work       0.4 ms
+#
+# Claude Code fires MessageDisplay once per MARKDOWN BLOCK, so a ten-paragraph
+# answer cost ~480 ms of added display latency — on every ctk install, opted in
+# or not, because hooks.json registers the hook unconditionally and `if`
+# conditions are tool-pattern matchers (`Bash(...)`, `Write(...)`) with no tool
+# to match on this event. Gating here costs 4.3 ms instead of 47.4 ms.
+#
+# Keep this list SHORT and only for hooks that are genuinely default-OFF. A hook
+# gated here never runs when its variable is unset, so a gate on a hook that
+# should always run makes it inert — the defect class ctk 2.10.0 exists to end.
+case "$HOOK_NAME" in
+  messagedisplay/phi-output-redactor)
+    if [ "${CONTINUITY_PHI_OUTPUT_REDACT:-}" != "1" ]; then
+      echo "$SAFE_JSON"
+      exit 0
+    fi
+    ;;
+esac
+
 # Check compiled bundle exists
 HOOK_RUNNER="$CLAUDE_PLUGIN_ROOT/hooks/dist/bin/run-hook.js"
 if [ ! -f "$HOOK_RUNNER" ]; then

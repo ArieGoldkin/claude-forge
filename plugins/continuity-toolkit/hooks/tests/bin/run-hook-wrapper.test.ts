@@ -12,11 +12,22 @@
 
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
-const WRAPPER_PATH = path.join(PLUGIN_ROOT, 'bin', 'run-hook-wrapper.sh');
+// `hooks/` — where the wrapper script lives.
+const HOOKS_DIR = path.resolve(__dirname, '..', '..');
+const WRAPPER_PATH = path.join(HOOKS_DIR, 'bin', 'run-hook-wrapper.sh');
+
+// The PLUGIN root, i.e. the PARENT of hooks/. The wrapper resolves its runner as
+// `$CLAUDE_PLUGIN_ROOT/hooks/dist/bin/run-hook.js`, so passing hooks/ here makes
+// it look for `hooks/hooks/dist/...`, which does not exist — every test in this
+// file was then asserting the "compiled hooks not found" fallback branch rather
+// than a real hook execution, and passing, because they only checked
+// `continue`. Caught while adding the opt-in gate tests below, which are the
+// first here to assert actual handler output.
+const PLUGIN_ROOT = path.resolve(HOOKS_DIR, '..');
 
 /**
  * Run the wrapper script with given args and input.
@@ -140,5 +151,115 @@ describe('run-hook-wrapper.sh', () => {
     const { exitCode } = runWrapper('lifecycle/session-loader', 'not json at all');
 
     expect(exitCode).toBe(0);
+  });
+
+  describe('opt-in gate (pre-Node short circuit)', () => {
+    // WHY THE GATE IS IN THE SHELL AND NOT IN THE HANDLER.
+    //
+    // phi-output-redactor checked its env var inside the handler, which is
+    // after the process spawn. Measured, opt-in OFF: 25.3ms bare node startup +
+    // 8.6ms bundle load + 13.5ms wrapper = 47.4ms per invocation (116ms with 7
+    // cores busy), of which the redaction itself is 0.4ms. Claude Code fires
+    // MessageDisplay once per MARKDOWN BLOCK, so a ten-paragraph answer cost
+    // ~480ms of added display latency on every ctk install, opted in or not.
+    // Gating in the shell: 7.1ms. Found by adversarial review of #56.
+    //
+    // HOW THESE TESTS OBSERVE THE GATE AT ALL. My first attempt asserted that a
+    // declined invocation has no `hookSpecificOutput` — and that is VACUOUS,
+    // because the handler's own env check produces the identical output when it
+    // runs. Deleting the whole `case` block left all 10 tests green (measured).
+    // Same defect r1 found in the prototype suite one commit earlier, and I
+    // wrote "verified" in this comment before running it.
+    //
+    // The gate sits BEFORE the wrapper checks that dist/ exists, so pointing
+    // CLAUDE_PLUGIN_ROOT at a tree with no compiled bundle separates them
+    // deterministically, with no timing assertion:
+    //   gate fires  -> plain SAFE_JSON, the runner is never consulted
+    //   gate absent -> the "compiled hooks not found" systemMessage
+    //
+    // MUST-FAIL CONTROL: delete the `case` block and `short-circuits before the
+    // wrapper looks for the compiled bundle` fails (measured 2026-07-26).
+    const MESSAGE_DISPLAY = JSON.stringify({
+      hook_event_name: 'MessageDisplay',
+      session_id: 'test',
+      index: 0,
+      final: true,
+      delta: 'Patient SSN 123-45-6789 admitted.',
+    });
+
+    it('short-circuits before the wrapper looks for the compiled bundle', () => {
+      // The observable that only the gate changes. With no dist/ under the
+      // given root, an ungated hook reports "compiled hooks not found"; the
+      // gated one never gets that far.
+      const noBundle = fs.mkdtempSync(path.join(os.tmpdir(), 'ctk-nobundle-'));
+      try {
+        const gated = runWrapper('messagedisplay/phi-output-redactor', MESSAGE_DISPLAY, {
+          CONTINUITY_PHI_OUTPUT_REDACT: '',
+          CLAUDE_PLUGIN_ROOT: noBundle,
+        });
+        const ungated = runWrapper('lifecycle/session-loader', MESSAGE_DISPLAY, {
+          CLAUDE_PLUGIN_ROOT: noBundle,
+        });
+
+        expect(JSON.parse(gated.stdout)).toEqual({ continue: true, suppressOutput: true });
+        expect(JSON.parse(gated.stdout).systemMessage).toBeUndefined();
+        // Sanity: the same missing bundle IS reported for a hook with no gate,
+        // so the assertion above is about the gate and not about the fixture.
+        expect(JSON.parse(ungated.stdout).systemMessage).toContain('compiled hooks not found');
+      } finally {
+        fs.rmSync(noBundle, { recursive: true, force: true });
+      }
+    });
+
+    it('declines without producing a MessageDisplay payload when the opt-in is unset', () => {
+      const { stdout, exitCode } = runWrapper(
+        'messagedisplay/phi-output-redactor',
+        MESSAGE_DISPLAY,
+        { CONTINUITY_PHI_OUTPUT_REDACT: '' }
+      );
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(parsed.continue).toBe(true);
+      expect(parsed.hookSpecificOutput).toBeUndefined();
+    });
+
+    it('declines when the opt-in is set to something other than "1"', () => {
+      for (const value of ['0', 'true', 'yes']) {
+        const { stdout } = runWrapper('messagedisplay/phi-output-redactor', MESSAGE_DISPLAY, {
+          CONTINUITY_PHI_OUTPUT_REDACT: value,
+        });
+
+        expect(JSON.parse(stdout).hookSpecificOutput, `value '${value}'`).toBeUndefined();
+      }
+    });
+
+    it('STILL REDACTS when the opt-in is set — the gate must not break the feature', () => {
+      // The half that matters: a gate that always declines would be the inert
+      // handler defect wearing a performance fix's clothing.
+      const { stdout, exitCode } = runWrapper(
+        'messagedisplay/phi-output-redactor',
+        MESSAGE_DISPLAY,
+        { CONTINUITY_PHI_OUTPUT_REDACT: '1' }
+      );
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(parsed.hookSpecificOutput.hookEventName).toBe('MessageDisplay');
+      expect(parsed.hookSpecificOutput.displayContent).toBe('Patient SSN [SSN-REDACTED] admitted.');
+    });
+
+    it('does not gate hooks that are not opt-in', () => {
+      // The gate is a named allowlist, not a blanket env check. A hook absent
+      // from the `case` must run regardless of that variable.
+      const { stdout, exitCode } = runWrapper(
+        'pretool/security-blocker',
+        JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' } }),
+        { CONTINUITY_PHI_OUTPUT_REDACT: '' }
+      );
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout).continue).toBe(true);
+    });
   });
 });
