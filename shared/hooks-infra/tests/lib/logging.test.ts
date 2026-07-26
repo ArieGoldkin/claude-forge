@@ -55,7 +55,7 @@ import type { PermissionLogEntry } from '../../src/types.js';
  * Adding a plugin? Add its directory here. The throw is deliberate: an unmapped
  * tree should stop the suite, not fall back to a guess.
  *
- * KNOWN DRIFT (issue filed): `ai-toolkit` and `frontend-toolkit` run their tests
+ * KNOWN DRIFT (#63): `ai-toolkit` and `frontend-toolkit` run their tests
  * under `ai-toolkit`/`frontend-toolkit`, but their run-hook-wrapper.sh exports
  * `ai`/`frontend` in production. The values below are what the TEST trees
  * actually set, so they are recorded as-is rather than aspirationally — do not
