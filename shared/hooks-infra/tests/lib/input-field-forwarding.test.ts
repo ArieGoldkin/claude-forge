@@ -28,28 +28,45 @@
  *   4. normalization still wins over the raw payload
  *   5. a `__proto__` payload cannot inject fields via the prototype chain
  *
- * MUST-FAIL CONTROLS — each mutation applied and RUN, counts measured not
- * predicted (2026-07-25):
- *   - restore an allowlist loop in normalizeInput   -> 5 fail (every forwarding
- *     test), prototype + normalization suites stay green. This is the control
- *     that isolates forwarding.
- *   - swap the spread for a per-key assignment loop -> exactly 1 fails, the
- *     prototype-chain injection test. Nothing else moves.
- *   - remove ONLY the Reflect.deleteProperty line        -> exactly 1 fails, the
- *     same test. Run separately from the control above so each half of the
- *     prototype defence is isolated: with only one mutation applied at a time,
- *     neither gate can be masked by the other.
+ * MUST-FAIL CONTROLS — each mutation applied one at a time and RUN, counts
+ * measured not predicted (2026-07-25):
+ *   - restore a STRIPPED allowlist (source/model/hook_event_name) -> 5 fail,
+ *     every forwarding test; prototype + normalization suites stay green. This
+ *     is the control that isolates forwarding.
+ *   - restore main's FAITHFUL 21-name allowlist    -> 4 fail, not 5. The
+ *     live-capture regression pin passes, because the 8 names it pins were all
+ *     on main's allowlist — correctly, since a faithful revert removes nothing.
+ *     Recorded because an earlier revision quoted only the 5 and described the
+ *     mutation as "restore an allowlist loop", which reads as the faithful
+ *     revert and overstates that pin's independent detection power.
+ *   - remove the safeJsonParse `__proto__` reviver  -> exactly 1 fails, the
+ *     every-depth test. This is now the ONLY prototype gate.
+ *   - drop the Array.isArray payload guard          -> exactly 2 fail, both
+ *     array cases.
  *   - drop the three normalized-field assignments   -> 6 fail: the normalization
  *     test directly, plus all 5 forwarding tests by cascade — without a string
  *     `tool_name`, isUsableInput rejects and parseHookInput returns the default
  *     input, so nothing is forwarded at all. Read control A, not this one, as
  *     evidence that the forwarding assertions bite.
  *
+ * TWO CONTROLS WERE RETIRED, AND WHY THAT MATTERS. An earlier revision claimed
+ * "swap the spread for a per-key assignment loop -> exactly 1 fails" and "remove
+ * only the Reflect.deleteProperty line -> exactly 1 fails, the same test", and
+ * presented "exactly 1" as precision. Adversarial review pointed out it was the
+ * opposite: both halves of the defence were gated by ONE assertion, and the
+ * suite had one real check wearing three test titles. The other two —
+ * global-Object.prototype pollution, and a nested prototype swap — could not
+ * fail under ANY mutation, because pollution never occurs and JSON.parse defines
+ * rather than assigns. Both are now folded in as extra assertions on tests that
+ * do bite. Once the reviver moved the defence to parse time, the spread and the
+ * delete became unfalsifiable too; the delete was removed as dead code and the
+ * spread is now just how the copy is made.
+ *
  * @module tests/lib/input-field-forwarding
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseHookInput } from '../../src/lib/input.js';
+import { getField, parseHookInput } from '../../src/lib/input.js';
 
 /** Read a field that `HookInput` does not declare, the way a handler would. */
 function field(input: unknown, name: string): unknown {
@@ -180,20 +197,178 @@ describe('normalizeInput prototype safety', () => {
     expect(input.agent_id).toBeUndefined();
     expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
     expect(Object.prototype.hasOwnProperty.call(input, '__proto__')).toBe(false);
+    // Folded in from a separate `leaves the global Object.prototype untouched`
+    // test. As its own case it was VACUOUS: global pollution does not occur
+    // under the assignment loop either, so no mutation of this file could make
+    // it fail. Kept as an assertion — free — but it earns no test title.
+    expect(field({}, 'injected')).toBeUndefined();
   });
 
-  it('leaves the global Object.prototype untouched', () => {
-    parseHookInput('{"hook_event_name":"Stop","__proto__":{"globally_injected":"PWNED"}}');
-
-    expect(field({}, 'globally_injected')).toBeUndefined();
-  });
-
-  it('does not swap the prototype of a nested tool_input carrying __proto__', () => {
+  it('strips __proto__ at EVERY depth, not just the top level', () => {
+    // Adversarial review of #56: the top-level Reflect.deleteProperty left every
+    // NESTED object holding an own `__proto__` data property, forwarded by
+    // reference from JSON.parse. Not exploitable in-repo today (nothing copies
+    // those objects with [[Set]] semantics), but it round-trips through
+    // JSON.stringify into any file a hook writes — a loaded object, not a
+    // discharged one. The JSON.parse reviver drops the key at all depths.
     const input = parseHookInput(
-      '{"tool_name":"Bash","tool_input":{"command":"ls","__proto__":{"injected":"PWNED"}}}'
+      '{"tool_name":"Bash",' +
+        '"tool_input":{"command":"ls","__proto__":{"injected":"PWNED"}},' +
+        '"tool_response":{"stdout":"x","__proto__":{"injected":"PWNED"}},' +
+        '"deep":{"a":{"b":{"__proto__":{"injected":"PWNED"}}}}}'
     );
 
-    expect(field(input.tool_input, 'injected')).toBeUndefined();
+    const owns = (o: unknown) => Object.prototype.hasOwnProperty.call(o, '__proto__');
+    const deep = field(input, 'deep') as { a: { b: object } };
+
+    expect(owns(input)).toBe(false);
+    expect(owns(input.tool_input)).toBe(false);
+    expect(owns(input.tool_response)).toBe(false);
+    expect(owns(deep.a.b)).toBe(false);
+
+    // The poisoned key must not survive serialization into a file a hook writes.
+    expect(JSON.stringify(input.tool_input)).toBe('{"command":"ls"}');
+
+    // …and the legitimate sibling data is untouched.
+    expect(input.tool_input.command).toBe('ls');
+    expect(input.tool_response?.stdout).toBe('x');
+
+    // Folded in from a separate `does not swap the prototype of a nested
+    // tool_input` test, which was VACUOUS on its own: JSON.parse DEFINES rather
+    // than assigns, so a nested prototype was never at risk under any mutation
+    // of this file. It asserted the one nested property that could not break
+    // and skipped the one that did.
     expect(Object.getPrototypeOf(input.tool_input)).toBe(Object.prototype);
+  });
+});
+
+describe('normalizeInput rejects payloads that are not objects', () => {
+  it('treats a JSON array as malformed rather than spreading it into keys', () => {
+    // `typeof [] === 'object'`, so an array used to pass the guard and spread
+    // into {"0":…,"1":…} — a "valid" HookInput built from junk, with one own
+    // property per element. Found by adversarial review of #56.
+    const input = parseHookInput('[1,2,3]');
+
+    expect(field(input, '0')).toBeUndefined();
+    expect(input.tool_name).toBe('');
+    expect(input.tool_input).toEqual({});
+  });
+
+  it('does not amplify a large array into that many own properties', () => {
+    const big = JSON.stringify(Array.from({ length: 5000 }, (_, i) => i));
+
+    expect(Object.keys(parseHookInput(big))).toEqual(['tool_name', 'session_id', 'tool_input']);
+  });
+
+  it('coerces an array tool_input to an empty object', () => {
+    const input = parseHookInput('{"tool_name":"Bash","tool_input":["command","ls"]}');
+
+    expect(Array.isArray(input.tool_input)).toBe(false);
+    expect(input.tool_input).toEqual({});
+  });
+});
+
+describe('no hook re-declares HookInput locally', () => {
+  // WHY THIS SURVIVED THE OLD GUARD'S DELETION.
+  //
+  // Adversarial review of #56 showed the deleted structural guard did something
+  // this file's other tests do NOT: it cross-checked handler-declared field
+  // names against an allowlist curated from live captures, making it a de-facto
+  // SPELL-CHECK. The 2.9.0 defect — three handlers reading `tool_output`, a key
+  // Claude Code sends on no event — was exactly that class. Forwarding does not
+  // fix it: `tool_output` is now forwarded happily and the handler is still
+  // inert. "The denylist makes this structurally impossible" was wrong.
+  //
+  // What changed instead: this release deleted every local
+  // `interface X extends HookInput`, so handlers read `input.foo` directly
+  // against the shared type, and `HookInput` has no index signature. A typo is
+  // now a COMPILE ERROR — verified: reading `input.tool_output` in a handler
+  // gives `TS2339: Property 'tool_output' does not exist on type 'HookInput'`.
+  // That is stricter than the old guard, which only ever warned.
+  //
+  // The one path tsc cannot see is a future author re-introducing a local
+  // declaration, which is precisely how all seven historical instances were
+  // written. So the rule is simply: don't. Add the field to `HookInput` in
+  // types.ts — where it sits next to the capture that justifies it — and the
+  // compiler does the rest.
+  //
+  // MUST-FAIL CONTROL: adding `interface Probe extends HookInput { x?: string }`
+  // to a hook source fails this test (verified 2026-07-25).
+  const DECL = /(?:interface\s+\w+\s+extends\s+[^{]*\bHookInput\b|type\s+\w+\s*=\s*[^;]*\bHookInput\b\s*&)/;
+
+  it('has no local HookInput extension in any hook source', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const url = await import('node:url');
+
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const repo = path.resolve(here, '../../../..');
+    const roots = [
+      path.join(repo, 'shared/hooks-infra/src/hooks'),
+      ...['continuity', 'devops', 'ai', 'frontend', 'engineering'].map((p) =>
+        path.join(repo, `plugins/${p}-toolkit/hooks/src`)
+      ),
+    ];
+
+    const walk = (dir: string): string[] => {
+      if (!fs.existsSync(dir)) return [];
+      return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        if (e.name === 'node_modules' || e.name === 'dist') return [];
+        const full = path.join(dir, e.name);
+        let isDir = e.isDirectory();
+        if (e.isSymbolicLink()) {
+          try {
+            isDir = fs.statSync(full).isDirectory();
+          } catch {
+            return [];
+          }
+        }
+        return isDir ? walk(full) : e.name.endsWith('.ts') ? [full] : [];
+      });
+    };
+
+    const seen = new Set<string>();
+    const violations: string[] = [];
+    for (const root of roots) {
+      for (const file of walk(root)) {
+        const real = fs.realpathSync(file);
+        if (seen.has(real)) continue;
+        seen.add(real);
+        // Strip comments first. Several files — including this rule's own
+        // rationale in lib/input.ts and types.ts — quote the forbidden syntax
+        // while explaining why it is forbidden. Matching prose would make the
+        // guard fire on its own documentation, which is how the first run of
+        // this test failed.
+        const src = fs
+          .readFileSync(file, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*$/gm, '');
+        if (DECL.test(src)) {
+          violations.push(path.relative(repo, file));
+        }
+      }
+    }
+
+    // Sanity: the harness must actually be reading files, or this passes vacuously.
+    expect(seen.size).toBeGreaterThan(20);
+    expect(violations).toEqual([]);
+  });
+});
+
+describe('getField reads own properties only', () => {
+  it('does not resolve Object.prototype members as tool_input fields', () => {
+    // `if (getField(input, name))` was true for any inherited member even when
+    // tool_input was empty. Found by adversarial review of #56.
+    const input = parseHookInput('{"tool_name":"Bash","tool_input":{}}');
+
+    for (const name of ['constructor', 'hasOwnProperty', 'toString', 'valueOf']) {
+      expect(getField(input, name), `'${name}' must not resolve`).toBeUndefined();
+    }
+  });
+
+  it('still reads a real field the payload did send', () => {
+    const input = parseHookInput('{"tool_name":"Bash","tool_input":{"command":"ls"}}');
+
+    expect(getField(input, 'command')).toBe('ls');
   });
 });

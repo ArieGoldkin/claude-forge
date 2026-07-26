@@ -328,11 +328,11 @@ export interface HookInput {
   // ===========================================================================
   // MessageDisplay (CC v2.1.152+)
   //
-  // Captured live from CC 2.1.220 on 2026-07-25 (22 records). The full payload
+  // Captured live from CC 2.1.220 on 2026-07-25 (41 records, one key set). Payload
   // is exactly: session_id, transcript_path, cwd, prompt_id, hook_event_name,
   // turn_id, message_id, index, final, delta. Note what is ABSENT: `message`,
   // `text`, `assistant_message`, `last_assistant_message` and `tool_input` were
-  // in 0 of 22 records. phi-output-redactor guessed four of those names and was
+  // in 0 of them. phi-output-redactor guessed four of those names and was
   // inert on every one (#54 item 2).
   // ===========================================================================
 
@@ -340,16 +340,18 @@ export interface HookInput {
    * The assistant message text for this MessageDisplay event.
    *
    * Named `delta` because the event is part of a streaming protocol — see
-   * `index` and `final`. Every captured record was a complete single-chunk
-   * message (index 0, final true, longest 202 chars); a multi-chunk message
-   * was NOT observed, so do not assume one cannot occur.
+   * `index` and `final`. Claude Code emits ONE EVENT PER MARKDOWN BLOCK, so a
+   * multi-paragraph message arrives as several of these with no shared state:
+   * across 41 records `index` ran 0-9 and the largest message was 10 events.
+   * Every non-final chunk ends in a blank line; no single-chunk delta contains
+   * one. A consumer needing the whole message must buffer until `final`.
    */
   delta?: string;
 
-  /** Chunk ordinal within a streamed message. 0 in every captured record. */
+  /** Chunk ordinal within a streamed message. Observed 0-9. */
   index?: number;
 
-  /** Whether this is the last chunk of the message. True in every capture. */
+  /** Whether this is the last chunk. False on every chunk but the last. */
   final?: boolean;
 
   /** Identifier of the assistant message this event belongs to. */

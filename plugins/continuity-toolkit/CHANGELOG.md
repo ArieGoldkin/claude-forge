@@ -21,41 +21,76 @@ already deleted — by adding names to an allowlist. This removes the allowlist.
   `interface X extends HookInput { f }`.
 - The allowlist enforced no security boundary; it is Claude Code's own payload
   either way. It bought nothing and cost silent data loss.
-- 2.9.0's structural guard is **replaced, not merely retired**. It parsed one
-  declaration syntax and the review of #53 defeated it with six ordinary ones
-  (type alias, second base type, indirect base, inline cast, bracket access,
-  destructuring). The last three need no declaration at all. Its replacement,
-  `tests/lib/input-field-forwarding.test.ts`, asserts behaviour through
-  `parseHookInput`, so no syntax can evade it.
-- **Prototype-pollution guard.** Forwarding introduces a vector the allowlist was
-  safe from by accident: a payload carrying `__proto__` under a per-key
-  assignment loop swaps the object's prototype and injects fields a handler then
-  reads (verified — `input.injected` reads `PWNED`). Normalization therefore uses
-  a spread, which defines own data properties and never calls setters, and
-  removes the key with `Reflect.deleteProperty`. Note biome's suggested
-  `noDelete` autofix (`x['__proto__'] = undefined`) is **wrong here** and leaves
-  the key present.
+- 2.9.0's structural guard is **replaced**. It parsed one declaration syntax and
+  the review of #53 defeated it with six ordinary ones (type alias, second base
+  type, indirect base, inline cast, bracket access, destructuring). Its
+  replacement, `tests/lib/input-field-forwarding.test.ts`, asserts behaviour
+  through `parseHookInput`, so no syntax can evade the forwarding checks.
+- **But forwarding does not close the whole class, and an earlier draft of this
+  entry wrongly implied it did.** The defect has two halves: (a) the normalizer
+  drops a field the handler reads, and (b) the handler reads a name Claude Code
+  never sends. Forwarding fixes (a) only. 2.9.0's own defect — three handlers
+  reading `tool_output` — is (b), and under a denylist `tool_output` is forwarded
+  happily while the handler stays inert. The old guard caught that as a
+  side-effect of checking declared names against a capture-curated allowlist.
+  Two things now cover (b) instead, and between them they are stricter:
+  - **The compiler.** With every local `interface X extends HookInput` deleted
+    and no index signature on `HookInput`, a handler reading `input.tool_output`
+    is a build error (`TS2339`), not a silent `undefined`.
+  - **A one-rule guard** asserting no hook source re-declares `HookInput`
+    locally — the form in which all seven historical instances were written, and
+    the one path the compiler cannot see. Add the field to `HookInput` instead,
+    next to the capture that justifies it.
+- **Prototype-pollution guard, at parse time.** Forwarding introduces a vector
+  the allowlist was safe from by accident: a payload carrying `__proto__` under a
+  per-key assignment loop swaps the object's prototype and injects fields a
+  handler then reads (verified — `input.injected` reads `PWNED`). `safeJsonParse`
+  now uses a `JSON.parse` reviver that drops `__proto__` at **every depth**.
+  - A first cut scrubbed only the top level. Adversarial review showed that left
+    every **nested** object — `tool_input`, `tool_response` — holding an own
+    `__proto__` data property forwarded straight from the parse, which
+    round-trips through `JSON.stringify` into any file a hook writes. Latent
+    rather than live (nothing in-repo copies those with `[[Set]]` semantics), but
+    the normalizer should hand handlers a clean object.
+  - An array payload (`[1,2,3]`) used to pass the object guard and spread into
+    `{"0":…,"1":…}` — a "valid" `HookInput` built from junk, one own property per
+    element. Now rejected, as is an array `tool_input`.
+  - `getField()` resolved through the prototype chain, so
+    `getField(input, 'constructor')` returned a truthy native function for an
+    empty `tool_input`. Own-property check added.
 
 ### Fixed — `phi-output-redactor` was inert for two independent reasons
 
-- **The field is `delta`.** Captured live from CC 2.1.220 (22 records, temporary
+- **The field is `delta`.** Captured live from CC 2.1.220 (41 records, one key
+  set across all of them, temporary
   dumper hook). The full MessageDisplay payload is `session_id`,
   `transcript_path`, `cwd`, `prompt_id`, `hook_event_name`, `turn_id`,
   `message_id`, `index`, `final`, `delta`.
 - The handler tried five candidate names — `message`, `text`,
   `assistant_message`, `last_assistant_message`, `tool_input.message` — chosen
-  because "docs are sparse on exact field naming". **All five appear in 0 of 22
-  captured records.** So the allowlist stripped three of them *and* every name
+  because "docs are sparse on exact field naming". **All five appear in 0 of them.** So the allowlist stripped three of them *and* every name
   was wrong: fixing only the normalizer would have changed nothing. This is a
   PHI redaction path, opt-in via `CONTINUITY_PHI_OUTPUT_REDACT=1`.
 - Its test suite was fully green throughout, because every test built a
   `HookInput` by hand and asserted a shape that does not exist. The tests now
   drive raw captured JSON through `parseHookInput`.
-- **Known limitation, now documented:** `delta`/`index`/`final` are a streaming
-  protocol. Every captured record was single-chunk (index 0, final true), but a
-  multi-chunk message was never observed and is not assumed impossible — PHI
-  split across a chunk boundary would match in neither half. Best-effort per
-  chunk, which is strictly more than the nothing it did before.
+- **Chunking is routine.** `delta`/`index`/`final` are a streaming protocol and
+  CC emits **one event per markdown block** — across 41 records `index` ran 0-9
+  and the largest message arrived as 10 separate events. The hook is invoked once
+  per paragraph, with no state between invocations.
+  - This makes per-chunk scanning **sound, not merely best-effort**: every
+    non-final chunk ends in a blank line and no single-chunk delta contains one,
+    so CC splits on `\n\n` — and none of phi-redactor's patterns (SSN, US phone,
+    credit card) can contain a blank line. No PHI token straddles a boundary.
+  - **The output side remains unverified.** What CC does with
+    `hookSpecificOutput.transformedMessage` returned for chunk 3 of 10 is
+    untested. If it is ignored or misapplied, the hook logs `Redacted N match(es)`
+    while displaying the PHI — a log asserting a redaction that did not happen.
+  - An earlier draft of this entry called chunking unobserved and reasoned from
+    "longest delta 202 chars". That was a sampling artifact: the first 22 records
+    were all single short paragraphs. Caught by adversarial review; recorded
+    rather than quietly corrected, because it is the same partial-capture error
+    that produced the false timeout guarantee in PR #55.
 
 ### Fixed — dead code that looked load-bearing
 

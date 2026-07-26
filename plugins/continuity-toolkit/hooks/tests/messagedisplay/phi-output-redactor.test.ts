@@ -5,13 +5,13 @@
  *
  * Every test in this file used to build a `HookInput` by hand and set a
  * top-level `message` field. That shape does not exist. A live capture of CC
- * 2.1.220 (2026-07-25, 22 records) shows the MessageDisplay payload is exactly:
+ * 2.1.220 (2026-07-25, 41 records) shows the MessageDisplay payload is exactly:
  *
  *   session_id, transcript_path, cwd, prompt_id, hook_event_name,
  *   turn_id, message_id, index, final, delta
  *
- * `message`, `text`, `assistant_message`, `last_assistant_message` and
- * `tool_input` appear in 0 of 22 records. The handler read four of those names,
+ * One key set across all 41 records. `message`, `text`, `assistant_message`,
+ * `last_assistant_message` and `tool_input` appear in 0 of them. The handler read four of those names,
  * so it was inert on every message it ever saw — and this suite was green the
  * whole time, because a hand-built input can assert any shape you like.
  *
@@ -52,6 +52,18 @@ function capturedPayload(delta: string): string {
 /** Parse a captured MessageDisplay payload the way the hook runner does. */
 function fromCapture(delta: string): HookInput {
   return parseHookInput(capturedPayload(delta));
+}
+
+/**
+ * One chunk of a multi-chunk message. CC emits one event per markdown block:
+ * at 41 captured records `index` runs 0-9, `final` takes both values, and every
+ * non-final chunk ends in a blank line.
+ */
+function chunk(delta: string, pos: { index: number; final: boolean }): HookInput {
+  const base = JSON.parse(capturedPayload(delta)) as Record<string, unknown>;
+  base['index'] = pos.index;
+  base['final'] = pos.final;
+  return parseHookInput(JSON.stringify(base));
 }
 
 describe('extractAssistantMessage', () => {
@@ -160,16 +172,28 @@ describe('phiOutputRedactor', () => {
       expect(out).toContain('[CC-REDACTED]');
     });
 
-    it('redacts each chunk of a hypothetical multi-chunk message independently', async () => {
-      // index/final are a streaming protocol. No multi-chunk message was ever
-      // observed, so this documents the BEST-EFFORT contract rather than
-      // claiming CC chunks: each chunk is scanned on its own, and PHI split
-      // across a boundary is caught in neither half.
-      const firstHalf = await phiOutputRedactor(fromCapture('SSN 123-45-'));
-      const secondHalf = await phiOutputRedactor(fromCapture('6789 for the record'));
+    it('redacts every chunk of a real multi-chunk message independently', async () => {
+      // Chunking is routine, not hypothetical: CC emits one event per markdown
+      // block, so a multi-paragraph message reaches this hook as N invocations
+      // with no state between them. Each chunk must redact on its own.
+      const chunks = [
+        chunk('Patient SSN 123-45-6789 was admitted.\n\n', { index: 0, final: false }),
+        chunk('Reachable at (555) 123-4567.\n\n', { index: 1, final: false }),
+        chunk('Card on file 4111-1111-1111-1111.', { index: 2, final: true }),
+      ];
 
-      expect(firstHalf.hookSpecificOutput).toBeUndefined();
-      expect(secondHalf.hookSpecificOutput).toBeUndefined();
+      const results = await Promise.all(chunks.map((c) => phiOutputRedactor(c)));
+      const transformed = results.map((r) => r.hookSpecificOutput?.['transformedMessage']);
+
+      expect(transformed[0]).toContain('[SSN-REDACTED]');
+      expect(transformed[1]).toContain('[PHONE-REDACTED]');
+      expect(transformed[2]).toContain('[CC-REDACTED]');
+      // Notably NOT best-effort: CC splits on `\n\n` and no pattern in
+      // phi-redactor can contain a blank line, so no PHI token straddles a
+      // boundary and every chunk is scanned whole.
+      for (const t of transformed) {
+        expect(t).not.toMatch(/\d{3}-\d{2}-\d{4}|\d{4}-\d{4}-\d{4}-\d{4}/);
+      }
     });
   });
 });

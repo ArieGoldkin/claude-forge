@@ -118,7 +118,19 @@ function safeJsonParse(jsonString: string): unknown {
   }
 
   try {
-    return JSON.parse(trimmed);
+    // The reviver drops `__proto__` at EVERY depth. Returning undefined from a
+    // reviver deletes the property, so no object anywhere in the parsed tree
+    // keeps a `__proto__` own key.
+    //
+    // Scrubbing only the top level (which is what normalizeInput does) is not
+    // enough: `tool_input`, `tool_response` and any other nested object are
+    // forwarded by reference straight from the parse, so a poisoned key on one
+    // of them survives — and round-trips through `JSON.stringify`, landing in
+    // any file a hook writes. Nothing in this repo copies those objects with
+    // [[Set]] semantics today (no Object.assign, no per-key merge), so that was
+    // latent rather than live, but the normalizer should hand handlers a clean
+    // object rather than a loaded one. Found by adversarial review of #56.
+    return JSON.parse(trimmed, (key, value) => (key === '__proto__' ? undefined : value));
   } catch {
     return null;
   }
@@ -169,7 +181,11 @@ function createDefaultInput(): HookInput {
  * @returns Normalized HookInput
  */
 function normalizeInput(raw: unknown): HookInput {
-  if (!raw || typeof raw !== 'object') {
+  // `typeof [] === 'object'`, so an array payload used to pass this guard and
+  // get spread into `{"0":…,"1":…}` — a "valid" HookInput built from junk, and
+  // one own property per element for a large array. A hook payload is always a
+  // JSON object; anything else is malformed input and takes the default path.
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return createDefaultInput();
   }
 
@@ -179,11 +195,14 @@ function normalizeInput(raw: unknown): HookInput {
   // Priority: tool_name > hook_event_name (for compatibility)
   const eventName = (obj['tool_name'] || obj['hook_event_name'] || '') as string;
 
-  // Get tool_input, defaulting to empty object for lifecycle events
+  // Get tool_input, defaulting to empty object for lifecycle events.
+  // Arrays are rejected for the same reason as an array payload above: the
+  // coercion admitted them (`typeof [] === 'object'`), so `input.tool_input`
+  // could be `["command","ls"]` while isUsableInput still returned true.
   let toolInput = obj['tool_input'];
   if (toolInput === undefined || toolInput === null) {
     toolInput = {};
-  } else if (typeof toolInput !== 'object') {
+  } else if (typeof toolInput !== 'object' || Array.isArray(toolInput)) {
     toolInput = {};
   }
 
@@ -210,19 +229,19 @@ function normalizeInput(raw: unknown): HookInput {
   // payload either way — so it bought nothing and cost silent data loss. Only
   // normalizeInput can end a defect caused by normalizeInput dropping data.
   //
-  // Spread, NOT a per-key assignment loop: a payload carrying `__proto__` would
-  // invoke Object.prototype's setter under `normalized[key] = …` and swap this
-  // object's prototype, letting the payload inject fields a handler then reads
-  // through the prototype chain. Spread defines own data properties and never
-  // calls setters, so `__proto__` lands inert; it is deleted below regardless.
+  // PROTOTYPE SAFETY LIVES IN `safeJsonParse`, NOT HERE. Its reviver drops
+  // `__proto__` at every depth, so `obj` cannot carry the key at all and this
+  // copy cannot reintroduce it — spread or per-key assignment would both be
+  // safe now.
   //
-  // `Reflect.deleteProperty`, not `delete` (biome lint/performance/noDelete) and
-  // NOT biome's suggested `normalized['__proto__'] = undefined` autofix: after
-  // the spread this object has an OWN `__proto__` data property, so assignment
-  // hits that property rather than the setter and leaves the key in place with
-  // an undefined value. Removing it is the point.
+  // This function briefly had its own `Reflect.deleteProperty(normalized,
+  // '__proto__')` backstop. It is gone because it became UNFALSIFIABLE once the
+  // reviver landed: deleting the line left every test green (measured, not
+  // assumed). Keeping it would have been a dead gate that reads as load-bearing
+  // — the same defect this release removes from error-warner, and it would have
+  // been the third test title over what is really one assertion. The reviver is
+  // covered by its own must-fail control.
   const normalized = { ...obj } as Record<string, unknown>;
-  Reflect.deleteProperty(normalized, '__proto__');
 
   // The three normalized fields win over whatever the raw payload carried:
   // tool_name absorbs hook_event_name, session_id falls back to the environment,
@@ -634,6 +653,15 @@ export function getField<T = unknown>(
   field: keyof ToolInput | string
 ): T | undefined {
   const toolInput = input.tool_input;
+  // Own properties only. A bare `toolInput[field]` resolves through the
+  // prototype chain, so `getField(input, 'constructor')` returned a truthy
+  // native function even for an empty tool_input — making `if (getField(input,
+  // name))` true for names the payload never sent. Latent (every in-repo call
+  // site passes a literal), but forwarding-everything makes "what can reach a
+  // handler" the load-bearing question. Found by adversarial review of #56.
+  if (!Object.prototype.hasOwnProperty.call(toolInput, field)) {
+    return undefined;
+  }
   const value = toolInput[field as keyof ToolInput];
   return value as T | undefined;
 }

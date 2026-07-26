@@ -46,15 +46,34 @@ const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
  * normalizeInput's allowlist stripped three of the names, AND all five names
  * were wrong. Fixing only the first would have changed nothing.
  *
- * CHUNKING CAVEAT: `delta` / `index` / `final` are a streaming protocol. Every
- * captured record was a complete single-chunk message (index 0, final true,
- * longest 202 chars), but a multi-chunk message was never observed and must not
- * be assumed impossible. If Claude Code does split a long message, this hook
- * sees each chunk separately and a PHI pattern straddling a chunk boundary
- * ("123-45-" | "6789") matches in neither. Redaction is therefore best-effort
- * per chunk, which is strictly better than the nothing it did before, but it is
- * not a guarantee — one more reason this is defense in depth and not a
- * compliance claim.
+ * CHUNKING IS ROUTINE, NOT HYPOTHETICAL. `delta` / `index` / `final` are a
+ * streaming protocol and Claude Code emits ONE EVENT PER MARKDOWN BLOCK. At 41
+ * captured records: index runs 0-9, `final` takes both values, and the largest
+ * message arrived as 10 separate events. So this hook is invoked once per
+ * paragraph of a multi-paragraph message, with no state between invocations.
+ *
+ * An earlier draft of this comment said a multi-chunk message "was never
+ * observed"; that was true of the first 22 records and false as a general
+ * claim. The reasoning behind it — "longest delta 202 chars" — mistook a
+ * sampling artifact for a bound: every message in that sample happened to be a
+ * single short paragraph. Recorded rather than quietly corrected, because the
+ * error is the same one that produced the false timeout guarantee in PR #55:
+ * a partial capture read as a complete one.
+ *
+ * The boundary rule makes per-chunk scanning SOUNDER than "best effort", not
+ * weaker. All 10 non-final chunks end in a blank line, and 0 of the 29
+ * single-chunk deltas contain one — Claude Code splits on `\n\n`. None of the
+ * patterns in `phi-redactor` (SSN, US phone, credit card) can contain a blank
+ * line, so a PHI token cannot straddle a boundary and each chunk is scanned
+ * whole. The worked example an earlier draft gave here ("123-45-" | "6789") is
+ * therefore close to unreachable.
+ *
+ * WHAT REMAINS UNVERIFIED is the OUTPUT side: what Claude Code does with
+ * `hookSpecificOutput.transformedMessage` returned for chunk 3 of 10. If that
+ * field is ignored or applied to the wrong span, this hook logs "Redacted N
+ * match(es)" while displaying the PHI anyway — a log asserting a redaction that
+ * did not happen, which is worse than no hook at all. Untested end-to-end.
+ * Defense in depth, not a compliance claim.
  *
  * @returns The message text, or null if absent/empty (hook becomes a no-op)
  */

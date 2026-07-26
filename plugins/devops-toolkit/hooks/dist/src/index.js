@@ -143,7 +143,7 @@ function safeJsonParse(jsonString) {
     return null;
   }
   try {
-    return JSON.parse(trimmed);
+    return JSON.parse(trimmed, (key, value) => key === "__proto__" ? void 0 : value);
   } catch {
     return null;
   }
@@ -159,7 +159,7 @@ function createDefaultInput() {
   };
 }
 function normalizeInput(raw) {
-  if (!raw || typeof raw !== "object") {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return createDefaultInput();
   }
   const obj = raw;
@@ -167,12 +167,11 @@ function normalizeInput(raw) {
   let toolInput = obj["tool_input"];
   if (toolInput === void 0 || toolInput === null) {
     toolInput = {};
-  } else if (typeof toolInput !== "object") {
+  } else if (typeof toolInput !== "object" || Array.isArray(toolInput)) {
     toolInput = {};
   }
   const sessionId = typeof obj["session_id"] === "string" && obj["session_id"] ? obj["session_id"] : getDefaultSessionId();
   const normalized = { ...obj };
-  Reflect.deleteProperty(normalized, "__proto__");
   normalized["tool_name"] = eventName;
   normalized["session_id"] = sessionId;
   normalized["tool_input"] = toolInput;
@@ -279,6 +278,9 @@ function getNewString(input) {
 }
 function getField(input, field) {
   const toolInput = input.tool_input;
+  if (!Object.prototype.hasOwnProperty.call(toolInput, field)) {
+    return void 0;
+  }
   const value = toolInput[field];
   return value;
 }
