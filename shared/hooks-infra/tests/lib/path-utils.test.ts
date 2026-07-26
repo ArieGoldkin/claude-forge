@@ -156,24 +156,20 @@ describe('resolveRealPath', () => {
       expect(resolved).toBe(fs.realpathSync(realFile));
     });
 
-    it('should resolve symlinks pointing outside project - ME-001 attack vector', () => {
-      // This is the critical security test!
-      // Create symlink inside project pointing to /etc/passwd (outside project)
-      const symlink = path.join(tempDir, 'evil-link');
+    it.runIf(fs.existsSync('/etc/passwd'))(
+      'should resolve symlinks pointing outside project - ME-001 attack vector',
+      () => {
+        // This is the critical security test!
+        // Create symlink inside project pointing to /etc/passwd (outside project)
+        const symlink = path.join(tempDir, 'evil-link');
+        fs.symlinkSync('/etc/passwd', symlink);
 
-      try {
-        // Only run if /etc/passwd exists (Unix systems)
-        if (fs.existsSync('/etc/passwd')) {
-          fs.symlinkSync('/etc/passwd', symlink);
-
-          const resolved = resolveRealPath(symlink);
-          // The resolved path should be /etc/passwd, NOT the symlink path
-          expect(resolved).toBe('/etc/passwd');
-        }
-      } catch {
-        // Skip on systems where we can't create symlinks or /etc/passwd doesn't exist
+        const resolved = resolveRealPath(symlink);
+        // The resolved path should be the real path of /etc/passwd (on macOS
+        // /etc is itself a symlink to /private/etc, so we compare canonical paths)
+        expect(resolved).toBe(fs.realpathSync('/etc/passwd'));
       }
-    });
+    );
 
     it('should resolve nested symlinks', () => {
       // Create directory structure
@@ -192,7 +188,6 @@ describe('resolveRealPath', () => {
     });
   });
 });
-
 
 // =============================================================================
 // isWithinProject TESTS - SECURITY CRITICAL
@@ -247,21 +242,14 @@ describe('isWithinProject', () => {
   });
 
   describe('symlink bypass prevention - ME-001 SECURITY', () => {
-    it('should detect symlink pointing outside project', () => {
+    it.runIf(fs.existsSync('/etc/passwd'))('should detect symlink pointing outside project', () => {
       // This is the CRITICAL security test for ME-001
       const symlink = path.join(tempDir, 'evil-symlink');
+      fs.symlinkSync('/etc/passwd', symlink);
 
-      try {
-        if (fs.existsSync('/etc/passwd')) {
-          fs.symlinkSync('/etc/passwd', symlink);
-
-          // The symlink is INSIDE the project, but it POINTS to /etc/passwd
-          // isWithinProject MUST return false because the real target is outside
-          expect(isWithinProject(symlink, tempDir)).toBe(false);
-        }
-      } catch {
-        // Skip on systems where we can't create symlinks
-      }
+      // The symlink is INSIDE the project, but it POINTS to /etc/passwd
+      // isWithinProject MUST return false because the real target is outside
+      expect(isWithinProject(symlink, tempDir)).toBe(false);
     });
 
     it('should allow symlink pointing inside project', () => {
@@ -275,23 +263,17 @@ describe('isWithinProject', () => {
       expect(isWithinProject(symlink, tempDir)).toBe(true);
     });
 
-    it('should detect nested symlink attack', () => {
+    it.runIf(fs.existsSync('/etc'))('should detect nested symlink attack', () => {
       // Create directory with symlink
       const subdir = path.join(tempDir, 'subdir');
       fs.mkdirSync(subdir);
 
-      try {
-        if (fs.existsSync('/etc')) {
-          // Symlink subdir/etc -> /etc
-          fs.symlinkSync('/etc', path.join(subdir, 'etc'));
+      // Symlink subdir/etc -> /etc
+      fs.symlinkSync('/etc', path.join(subdir, 'etc'));
 
-          // subdir/etc/passwd looks like it's in project, but resolves to /etc/passwd
-          const maliciousPath = path.join(subdir, 'etc', 'passwd');
-          expect(isWithinProject(maliciousPath, tempDir)).toBe(false);
-        }
-      } catch {
-        // Skip if can't create symlinks
-      }
+      // subdir/etc/passwd looks like it's in project, but resolves to /etc/passwd
+      const maliciousPath = path.join(subdir, 'etc', 'passwd');
+      expect(isWithinProject(maliciousPath, tempDir)).toBe(false);
     });
   });
 
@@ -473,22 +455,15 @@ describe('isProtectedPath', () => {
       delete process.env['CLAUDE_PROJECT_DIR'];
     });
 
-    it('should detect symlink to protected system file', () => {
+    it.runIf(fs.existsSync('/etc/passwd'))('should detect symlink to protected system file', () => {
       const symlink = path.join(tempDir, 'innocent-looking-file');
+      fs.symlinkSync('/etc/passwd', symlink);
 
-      try {
-        if (fs.existsSync('/etc/passwd')) {
-          fs.symlinkSync('/etc/passwd', symlink);
-
-          // Even though the symlink name looks innocent,
-          // isProtectedPath should detect that it points to /etc
-          const result = isProtectedPath(symlink);
-          expect(result.isProtected).toBe(true);
-          expect(result.category).toBe('system');
-        }
-      } catch {
-        // Skip on systems where we can't create symlinks
-      }
+      // Even though the symlink name looks innocent,
+      // isProtectedPath should detect that it points to /etc
+      const result = isProtectedPath(symlink);
+      expect(result.isProtected).toBe(true);
+      expect(result.category).toBe('system');
     });
   });
 });

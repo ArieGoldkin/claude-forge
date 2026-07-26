@@ -127,29 +127,31 @@ describe('matchesPathPattern', () => {
     const dottedDir = '/Users/jane.doe/projects/my-app';
 
     it('should match $PROJECT/** under a dotted project path', () => {
-      expect(
-        matchesPathPattern(`${dottedDir}/src/index.ts`, ['$PROJECT/src/**'], dottedDir)
-      ).toBe(true);
+      expect(matchesPathPattern(`${dottedDir}/src/index.ts`, ['$PROJECT/src/**'], dottedDir)).toBe(
+        true
+      );
     });
 
     it('should match $PROJECT/*.md under a dotted project path', () => {
-      expect(matchesPathPattern(`${dottedDir}/README.md`, ['$PROJECT/*.md'], dottedDir)).toBe(
-        true
-      );
+      expect(matchesPathPattern(`${dottedDir}/README.md`, ['$PROJECT/*.md'], dottedDir)).toBe(true);
     });
 
     it('should still treat the dot in the project path as a literal', () => {
       // 'janeXdoe' must NOT match — the '.' is a literal char, not a regex wildcard
       expect(
-        matchesPathPattern('/Users/janeXdoe/projects/my-app/src/index.ts', ['$PROJECT/src/**'], dottedDir)
+        matchesPathPattern(
+          '/Users/janeXdoe/projects/my-app/src/index.ts',
+          ['$PROJECT/src/**'],
+          dottedDir
+        )
       ).toBe(false);
     });
 
     it('should match a project path containing parens', () => {
       const parenDir = '/Users/dev/work (client)/app';
-      expect(
-        matchesPathPattern(`${parenDir}/src/main.ts`, ['$PROJECT/src/**'], parenDir)
-      ).toBe(true);
+      expect(matchesPathPattern(`${parenDir}/src/main.ts`, ['$PROJECT/src/**'], parenDir)).toBe(
+        true
+      );
     });
 
     // Globstar must match ZERO directories (standard glob semantics) — the
@@ -158,17 +160,29 @@ describe('matchesPathPattern', () => {
     // failed open on that shape).
     it('should match zero intermediate directories with **', () => {
       expect(
-        matchesPathPattern(`${dottedDir}/.claude/settings.json`, ['$PROJECT/.claude/**/*.json'], dottedDir)
+        matchesPathPattern(
+          `${dottedDir}/.claude/settings.json`,
+          ['$PROJECT/.claude/**/*.json'],
+          dottedDir
+        )
       ).toBe(true);
       expect(
-        matchesPathPattern(`${dottedDir}/.claude/a/b/settings.json`, ['$PROJECT/.claude/**/*.json'], dottedDir)
+        matchesPathPattern(
+          `${dottedDir}/.claude/a/b/settings.json`,
+          ['$PROJECT/.claude/**/*.json'],
+          dottedDir
+        )
       ).toBe(true);
       expect(
-        matchesPathPattern(`${dottedDir}/.claude/settings.yaml`, ['$PROJECT/.claude/**/*.json'], dottedDir)
+        matchesPathPattern(
+          `${dottedDir}/.claude/settings.yaml`,
+          ['$PROJECT/.claude/**/*.json'],
+          dottedDir
+        )
       ).toBe(false);
     });
 
-    it("should match the shipped default.json rules under a dotted project path", () => {
+    it('should match the shipped default.json rules under a dotted project path', () => {
       // default.json is the live consumer of $PROJECT rules — assert its own
       // shapes match (auto_approve fails safe, but require_approval fails OPEN)
       const defaultJsonAutoApprove = [

@@ -507,8 +507,7 @@ describe('getDurationMs', () => {
   });
 
   it('should parse duration_ms from JSON input via passthrough', () => {
-    const json =
-      '{"tool_name":"Bash","tool_input":{"command":"ls"},"duration_ms":5678}';
+    const json = '{"tool_name":"Bash","tool_input":{"command":"ls"},"duration_ms":5678}';
     const input = parseHookInput(json);
     expect(getDurationMs(input)).toBe(5678);
   });

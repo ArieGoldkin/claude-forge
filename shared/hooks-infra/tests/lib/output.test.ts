@@ -14,11 +14,13 @@ import {
   outputAnswerQuestion,
   outputAsk,
   outputContextBudgeted,
+  outputDefer,
   outputDeny,
   outputPromptContext,
-  outputStopContext,
+  outputRetry,
   outputSessionTitle,
   outputSilentSuccess,
+  outputStopContext,
   outputSuccess,
   outputWarning,
   outputWarningBudgeted,
@@ -593,14 +595,14 @@ describe('outputAllowWithContext', () => {
 
 describe('outputPromptContext', () => {
   it('should return exact expected structure with context', () => {
-    const result = outputPromptContext('Remember: PHI must be encrypted at rest');
+    const result = outputPromptContext('Remember: PII must be encrypted at rest');
 
     expect(result).toEqual({
       continue: true,
       suppressOutput: true,
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: 'Remember: PHI must be encrypted at rest',
+        additionalContext: 'Remember: PII must be encrypted at rest',
       },
     });
   });
@@ -621,7 +623,7 @@ describe('outputPromptContext', () => {
   });
 
   it('should include context as additionalContext', () => {
-    const context = 'HIPAA: Use parameterized queries';
+    const context = 'Security: Use parameterized queries';
     const result = outputPromptContext(context);
     expect(result.hookSpecificOutput?.additionalContext).toBe(context);
   });
@@ -648,13 +650,13 @@ describe('outputPromptContext', () => {
     });
 
     it('should preserve special characters in context', () => {
-      const context = 'PHI fields: <name>, "DOB", \'SSN\'';
+      const context = 'PII fields: <name>, "DOB", \'SSN\'';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
 
     it('should preserve unicode in context', () => {
-      const context = 'HIPAA \u2714 compliant';
+      const context = 'Security \u2714 compliant';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
@@ -666,7 +668,7 @@ describe('outputPromptContext', () => {
     });
 
     it('should handle multi-line context', () => {
-      const context = 'Rule 1: Encrypt PHI\nRule 2: Audit access\nRule 3: Minimum necessary';
+      const context = 'Rule 1: Encrypt PII\nRule 2: Audit access\nRule 3: Minimum necessary';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
@@ -691,7 +693,7 @@ describe('outputPromptContext', () => {
   });
 
   it('JSON round-trip should preserve structure', () => {
-    const result = outputPromptContext('HIPAA compliance reminder');
+    const result = outputPromptContext('Security compliance reminder');
     const json = JSON.stringify(result);
     const parsed = JSON.parse(json);
     expect(parsed).toEqual(result);
@@ -1176,6 +1178,66 @@ describe('hookEventName parameter', () => {
       expect(result.hookSpecificOutput?.hookEventName).toBe('PermissionRequest');
     });
   });
+
+  describe('outputRetry', () => {
+    it('should return exact expected structure', () => {
+      const result = outputRetry();
+      expect(result).toEqual({
+        continue: true,
+        suppressOutput: true,
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          retry: true,
+        },
+      });
+    });
+
+    it('should have continue set to true', () => {
+      expect(outputRetry().continue).toBe(true);
+    });
+
+    it('should have suppressOutput set to true', () => {
+      expect(outputRetry().suppressOutput).toBe(true);
+    });
+
+    it('should have retry set to true', () => {
+      expect(outputRetry().hookSpecificOutput?.retry).toBe(true);
+    });
+
+    it('should not have permissionDecision', () => {
+      expect(outputRetry().hookSpecificOutput?.permissionDecision).toBeUndefined();
+    });
+  });
+
+  describe('outputDefer', () => {
+    it('should return exact expected structure', () => {
+      const result = outputDefer();
+      expect(result).toEqual({
+        continue: true,
+        suppressOutput: true,
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'defer',
+        },
+      });
+    });
+
+    it('should have continue set to true', () => {
+      expect(outputDefer().continue).toBe(true);
+    });
+
+    it('should have suppressOutput set to true', () => {
+      expect(outputDefer().suppressOutput).toBe(true);
+    });
+
+    it('should have permissionDecision set to defer', () => {
+      expect(outputDefer().hookSpecificOutput?.permissionDecision).toBe('defer');
+    });
+
+    it('should not have retry', () => {
+      expect(outputDefer().hookSpecificOutput?.retry).toBeUndefined();
+    });
+  });
 });
 
 // =============================================================================
@@ -1284,7 +1346,10 @@ describe('truncateForLLM', () => {
   describe('maxLines applied before maxChars', () => {
     it('should apply maxLines first, then maxChars on the result', () => {
       // 100 lines of 20 chars each
-      const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i).padStart(3, '0')}-padding`);
+      const lines = Array.from(
+        { length: 100 },
+        (_, i) => `line-${String(i).padStart(3, '0')}-padding`
+      );
       const text = lines.join('\n');
 
       // maxLines=5 reduces to ~5 lines + truncation notice, then maxChars=50 further trims
@@ -1342,7 +1407,7 @@ describe('outputWarningBudgeted', () => {
     expect(result.systemMessage?.startsWith('\u26a0 ')).toBe(true);
     // The truncated content should be shorter than original
     // systemMessage = "⚠ " + truncated(1000 -> 200)
-    expect(result.systemMessage!.length).toBeLessThan(1000);
+    expect(result.systemMessage?.length).toBeLessThan(1000);
   });
 
   it('should use default maxChars of 500', () => {
@@ -1395,8 +1460,8 @@ describe('outputContextBudgeted', () => {
     expect(result.continue).toBe(true);
     expect(result.suppressOutput).toBe(true);
     expect(result.hookSpecificOutput?.additionalContext).toBeDefined();
-    expect(result.hookSpecificOutput!.additionalContext!.length).toBeLessThan(2000);
-    expect(result.hookSpecificOutput!.additionalContext).toContain('chars omitted');
+    expect(result.hookSpecificOutput?.additionalContext?.length).toBeLessThan(2000);
+    expect(result.hookSpecificOutput?.additionalContext).toContain('chars omitted');
   });
 
   it('should use default maxChars of 1000', () => {
