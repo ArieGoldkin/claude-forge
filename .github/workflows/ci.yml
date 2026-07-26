@@ -99,12 +99,18 @@ jobs:
       - name: good-nested-experimental must pass
         run: bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/good-nested-experimental.json
 
-  # Plugin lib tests that have a shared counterpart must BE that counterpart.
+  # Every plugin must run the same SET of lib tests as shared/, as the same files.
   # src/lib is symlinked into every plugin, so all six trees run identical code;
-  # when the tests were copies they drifted up to 735 lines and five suites
-  # passed against a stale spec (#60). A `cp` reintroduces that silently, so the
-  # invariant is structural. The negative steps exist because a guard nobody has
-  # seen fail is indistinguishable from one that cannot.
+  # when the tests were copies they drifted up to 735 lines and five suites passed
+  # against a stale spec (#60). A `cp` reintroduces that silently, so the
+  # invariant is structural.
+  #
+  # The five negatives deliberately span FIVE DIFFERENT PLUGINS and FIVE
+  # DIFFERENT FILES. An earlier version mutated one file in one plugin three
+  # times; a deliberately crippled guard that inspected exactly that one path and
+  # ignored the rest of the tree passed all of it. Branch coverage is not
+  # traversal coverage — diversity here is what proves the guard is applied to
+  # the whole repo, not merely that its checks fire.
   shared-test-symlinks:
     runs-on: ubuntu-latest
     steps:
@@ -112,26 +118,48 @@ jobs:
       - name: real repo must pass
         run: bash scripts/validate-shared-test-symlinks.sh
       # Exit code must be exactly 1 (a drift finding). Bare `! cmd` would also
-      # pass on exit 2, which is the script's "environment broken" code — that
-      # is how a guard that validates nothing looks green.
-      - name: a real file where shared has one must fail
+      # pass on exit 2, the script's "environment broken" code — which is how a
+      # guard that validates nothing looks green.
+      - name: 'devops: a real file where shared has one must fail'
         run: |
           T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
           rm "$T" && cp shared/hooks-infra/tests/lib/guards.test.ts "$T"
           bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          git checkout -- "$T"
           [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
-      - name: a broken symlink must fail
+      - name: 'ai-toolkit: a broken symlink must fail'
         run: |
-          T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
-          rm -f "$T" && ln -s ../../../../shared/hooks-infra/tests/lib/guards.test.ts "$T"
+          T=plugins/ai-toolkit/hooks/tests/lib/input.test.ts
+          rm -f "$T" && ln -s ../../../../shared/hooks-infra/tests/lib/input.test.ts "$T"
           bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          git checkout -- "$T"
           [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
-      - name: a link to the wrong shared file must fail
+      - name: 'frontend-toolkit: a link to the wrong shared file must fail'
         run: |
-          T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
-          rm -f "$T" && ln -s ../../../../../shared/hooks-infra/tests/lib/input.test.ts "$T"
+          T=plugins/frontend-toolkit/hooks/tests/lib/output.test.ts
+          rm -f "$T" && ln -s ../../../../../shared/hooks-infra/tests/lib/guards.test.ts "$T"
           bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          git checkout -- "$T"
           [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+      - name: 'engineering-toolkit: a DELETED link must fail'
+        run: |
+          T=plugins/engineering-toolkit/hooks/tests/lib/logging.test.ts
+          rm -f "$T"
+          bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          git checkout -- "$T"
+          [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+      - name: 'continuity-toolkit: a renamed stale copy must fail'
+        run: |
+          T=plugins/continuity-toolkit/hooks/tests/lib/output-plugin.test.ts
+          cp shared/hooks-infra/tests/lib/output.test.ts "$T"
+          bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          rm -f "$T"
+          [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+      - name: tree restored after the negatives
+        if: always()
+        run: |
+          git checkout -- plugins/ && git clean -fd plugins/
+          bash scripts/validate-shared-test-symlinks.sh
 
   # Version consistency across plugin.json / marketplace.json / CHANGELOG /
   # README / both CLAUDE.md files. Previously enforced by neither CI nor an

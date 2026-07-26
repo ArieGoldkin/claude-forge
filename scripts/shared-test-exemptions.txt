@@ -1,0 +1,33 @@
+# Shared lib tests that plugins are NOT required to link, one basename per line.
+#
+# Read by scripts/validate-shared-test-symlinks.sh. Anything in
+# shared/hooks-infra/tests/lib/*.test.ts that is NOT listed here must be a
+# symlink in EVERY plugin's hooks/tests/lib/. That inversion is the point: the
+# guard's earlier version only inspected files that already existed in a plugin,
+# so deleting a symlink — or never adding one — was invisible. Requiring the set
+# and exempting by name makes every omission a line in this file, which is a
+# reviewable act rather than a silent absence.
+#
+# Adding an exemption is a deliberate statement that the plugins do not need that
+# coverage. Give a reason.
+
+# --- Shared-infrastructure tests: exercise surfaces no plugin re-implements ---
+# These test the shared library's own plumbing, not behaviour a plugin inherits,
+# and several need fixtures or deps that live only in shared/hooks-infra.
+handoff-schema.test.ts        # continuity handoff YAML schema, ctk-only surface
+input-field-forwarding.test.ts # normalizeInput denylist contract (#54); shared-only
+input-stdin.test.ts           # stdin parsing harness, shared-only
+lock.test.ts                  # mkdir-based file lock, exercised via shared helpers
+phi-redactor.test.ts          # PHI pattern library; the hook that uses it is ctk-only
+posttool-empty-payload.test.ts # PostToolUse payload regression (#53), shared-only
+read-cache-deadlock.test.ts   # read-cache invalidation deadlock (ctk 2.7.0), shared-only
+review-logger.test.ts         # etk's review-logger hook lives in etk, tested here
+sandbox-isolation.test.ts     # maintainer-only sandbox launcher (ADR-0001), not a plugin surface
+sandbox-registry.test.ts      # maintainer-only sandbox registry (T2/#45), not a plugin surface
+terminal-sequence.test.ts     # terminal escape handling, shared-only
+
+# --- Plugin-local files permitted to exist under hooks/tests/ ---
+# Prefixed `local:` — these are NOT shared tests. Any other real file under a
+# plugin's tests/lib whose basename matches a shared test is a drift finding.
+local:.gitkeep                        # keeps empty tests/lib dirs in git
+local:continuity-integration.test.ts  # ctk-only integration suite, no shared counterpart

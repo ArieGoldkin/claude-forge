@@ -38,36 +38,87 @@ import type { PermissionLogEntry } from '../../src/types.js';
 // =============================================================================
 
 /**
- * This file is symlinked into every plugin's tests/lib/, so it runs six times
- * under six different CLAUDE_PLUGIN_NAME values (each plugin's vitest.config.ts
- * sets its own). logging.ts derives its log-level env var from that name; the
- * map below states the expected name for each tree *independently* of that
- * derivation, so changing the formula in logging.ts fails these tests rather
- * than being silently mirrored by them. Recomputing the formula here would make
- * the test agree with the implementation by construction — the same
- * cannot-fail shape this file's own history is full of.
+ * This file is symlinked into every plugin's tests/lib/, so it runs six times,
+ * once per tree, each with its own CLAUDE_PLUGIN_NAME from that tree's
+ * vitest.config.ts. logging.ts derives both the log-level env var and the log
+ * directory from that name.
  *
- * Adding a plugin? Add its CLAUDE_PLUGIN_NAME here. The throw is deliberate:
- * a missing entry should stop the suite, not fall back to a guess.
+ * The table is keyed by TREE (the directory the suite runs in), not by
+ * CLAUDE_PLUGIN_NAME. Keying it by the env var would make it un-falsifiable: a
+ * vitest.config.ts that set the wrong name would simply select a different row
+ * and pass. Keyed by tree, the expected identity is a fixed statement about this
+ * repo, so a misconfigured CLAUDE_PLUGIN_NAME fails `identity matches the tree`
+ * below — which is what the five per-plugin copies of this file used to catch by
+ * hardcoding their own literals, and what a recomputed
+ * `process.env['CLAUDE_PLUGIN_NAME']` cannot catch at all.
+ *
+ * Adding a plugin? Add its directory here. The throw is deliberate: an unmapped
+ * tree should stop the suite, not fall back to a guess.
+ *
+ * KNOWN DRIFT (issue filed): `ai-toolkit` and `frontend-toolkit` run their tests
+ * under `ai-toolkit`/`frontend-toolkit`, but their run-hook-wrapper.sh exports
+ * `ai`/`frontend` in production. The values below are what the TEST trees
+ * actually set, so they are recorded as-is rather than aspirationally — do not
+ * "fix" them here without changing the wrappers, or the suites will fail. Note
+ * also that a hyphenated name yields a log-level env var that is not a valid
+ * shell identifier, which is further evidence these two are unintended.
  */
-const PLUGIN_NAME = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
+interface TreeIdentity {
+  /** Expected CLAUDE_PLUGIN_NAME for this tree. */
+  pluginName: string;
+  /** Expected log-level env var — stated, never recomputed from pluginName. */
+  logLevelEnv: string;
+  /** Expected trailing path segment of the log directory. */
+  logDirName: string;
+}
 
-const LOG_LEVEL_ENV_BY_PLUGIN: Record<string, string> = {
-  plugin: 'PLUGIN_LOG_LEVEL',
-  continuity: 'CONTINUITY_LOG_LEVEL',
-  devops: 'DEVOPS_LOG_LEVEL',
-  'ai-toolkit': 'AI-TOOLKIT_LOG_LEVEL',
-  'frontend-toolkit': 'FRONTEND-TOOLKIT_LOG_LEVEL',
-  engineering: 'ENGINEERING_LOG_LEVEL',
+const IDENTITY_BY_TREE: Record<string, TreeIdentity> = {
+  'shared/hooks-infra': {
+    pluginName: 'plugin',
+    logLevelEnv: 'PLUGIN_LOG_LEVEL',
+    logDirName: 'plugin',
+  },
+  'continuity-toolkit/hooks': {
+    pluginName: 'continuity',
+    logLevelEnv: 'CONTINUITY_LOG_LEVEL',
+    logDirName: 'continuity',
+  },
+  'devops-toolkit/hooks': {
+    pluginName: 'devops',
+    logLevelEnv: 'DEVOPS_LOG_LEVEL',
+    logDirName: 'devops',
+  },
+  'ai-toolkit/hooks': {
+    pluginName: 'ai-toolkit',
+    logLevelEnv: 'AI-TOOLKIT_LOG_LEVEL',
+    logDirName: 'ai-toolkit',
+  },
+  'frontend-toolkit/hooks': {
+    pluginName: 'frontend-toolkit',
+    logLevelEnv: 'FRONTEND-TOOLKIT_LOG_LEVEL',
+    logDirName: 'frontend-toolkit',
+  },
+  'engineering-toolkit/hooks': {
+    pluginName: 'engineering',
+    logLevelEnv: 'ENGINEERING_LOG_LEVEL',
+    logDirName: 'engineering',
+  },
 };
 
-const mappedLogLevelEnv = LOG_LEVEL_ENV_BY_PLUGIN[PLUGIN_NAME];
-if (!mappedLogLevelEnv) {
+/** vitest runs with cwd at the package root, so the last two segments identify the tree. */
+const TREE_KEY = path.join(
+  path.basename(path.dirname(process.cwd())),
+  path.basename(process.cwd())
+);
+
+const mappedIdentity = IDENTITY_BY_TREE[TREE_KEY];
+if (!mappedIdentity) {
   throw new Error(
-    `logging.test.ts: no log-level env var mapped for CLAUDE_PLUGIN_NAME="${PLUGIN_NAME}". Add an entry to LOG_LEVEL_ENV_BY_PLUGIN in this file.`
+    `logging.test.ts: no identity mapped for tree "${TREE_KEY}" (cwd ${process.cwd()}). Add an entry to IDENTITY_BY_TREE in this file.`
   );
 }
-const LOG_LEVEL_ENV = mappedLogLevelEnv;
+const IDENTITY = mappedIdentity;
+const LOG_LEVEL_ENV = IDENTITY.logLevelEnv;
 
 // =============================================================================
 // TEST HELPERS
@@ -229,14 +280,23 @@ describe('logging module', () => {
   // PATH HELPERS TESTS
   // ===========================================================================
 
+  describe('plugin identity', () => {
+    // The five per-plugin copies of this file used to catch a misconfigured
+    // CLAUDE_PLUGIN_NAME by hardcoding their own literal. This is that check,
+    // stated once: IDENTITY comes from the tree on disk, so it does not move
+    // when the env var does.
+    it(`should run as "${IDENTITY.pluginName}" in tree ${TREE_KEY}`, () => {
+      expect(process.env['CLAUDE_PLUGIN_NAME'] ?? 'plugin').toBe(IDENTITY.pluginName);
+    });
+  });
+
   describe('getLogDir', () => {
-    it('should return path under HOME/.claude/logs/{CLAUDE_PLUGIN_NAME}', () => {
-      const pluginName = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
+    it(`should return path under HOME/.claude/logs/${IDENTITY.logDirName}`, () => {
       const logDir = getLogDir();
       expect(logDir).toContain('.claude');
       expect(logDir).toContain('logs');
-      expect(logDir).toContain(pluginName);
-      expect(logDir.endsWith(pluginName)).toBe(true);
+      expect(logDir).toContain(IDENTITY.logDirName);
+      expect(logDir.endsWith(IDENTITY.logDirName)).toBe(true);
     });
 
     it('should return an absolute path', () => {
@@ -251,20 +311,22 @@ describe('logging module', () => {
       try {
         const logDir = getLogDir();
         expect(logDir).toBe(path.join(testPluginDataDir, 'logs'));
-        expect(logDir).not.toContain('.claude');
+        // Asserting the prefix, not the ABSENCE of '.claude': the latter depends
+        // on os.tmpdir() and fails under e.g. TMPDIR=~/.claude/tmp.
+        expect(logDir.startsWith(testPluginDataDir)).toBe(true);
       } finally {
         delete process.env['CLAUDE_PLUGIN_DATA'];
         resetLogDir();
       }
     });
 
-    it('should fall back to HOME/.claude/logs/<plugin> when CLAUDE_PLUGIN_DATA is not set', () => {
+    it(`should fall back to HOME/.claude/logs/${IDENTITY.logDirName} when CLAUDE_PLUGIN_DATA is not set`, () => {
       delete process.env['CLAUDE_PLUGIN_DATA'];
       resetLogDir();
       const logDir = getLogDir();
       expect(logDir).toContain('.claude');
       expect(logDir).toContain('logs');
-      expect(logDir).toContain(PLUGIN_NAME);
+      expect(logDir.endsWith(IDENTITY.logDirName)).toBe(true);
     });
   });
 

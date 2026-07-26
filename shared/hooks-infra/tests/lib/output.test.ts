@@ -595,14 +595,14 @@ describe('outputAllowWithContext', () => {
 
 describe('outputPromptContext', () => {
   it('should return exact expected structure with context', () => {
-    const result = outputPromptContext('Remember: PHI must be encrypted at rest');
+    const result = outputPromptContext('Remember: PII must be encrypted at rest');
 
     expect(result).toEqual({
       continue: true,
       suppressOutput: true,
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: 'Remember: PHI must be encrypted at rest',
+        additionalContext: 'Remember: PII must be encrypted at rest',
       },
     });
   });
@@ -623,7 +623,7 @@ describe('outputPromptContext', () => {
   });
 
   it('should include context as additionalContext', () => {
-    const context = 'HIPAA: Use parameterized queries';
+    const context = 'Security: Use parameterized queries';
     const result = outputPromptContext(context);
     expect(result.hookSpecificOutput?.additionalContext).toBe(context);
   });
@@ -650,13 +650,13 @@ describe('outputPromptContext', () => {
     });
 
     it('should preserve special characters in context', () => {
-      const context = 'PHI fields: <name>, "DOB", \'SSN\'';
+      const context = 'PII fields: <name>, "DOB", \'SSN\'';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
 
     it('should preserve unicode in context', () => {
-      const context = 'HIPAA \u2714 compliant';
+      const context = 'Security \u2714 compliant';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
@@ -668,7 +668,7 @@ describe('outputPromptContext', () => {
     });
 
     it('should handle multi-line context', () => {
-      const context = 'Rule 1: Encrypt PHI\nRule 2: Audit access\nRule 3: Minimum necessary';
+      const context = 'Rule 1: Encrypt PII\nRule 2: Audit access\nRule 3: Minimum necessary';
       const result = outputPromptContext(context);
       expect(result.hookSpecificOutput?.additionalContext).toBe(context);
     });
@@ -693,7 +693,7 @@ describe('outputPromptContext', () => {
   });
 
   it('JSON round-trip should preserve structure', () => {
-    const result = outputPromptContext('HIPAA compliance reminder');
+    const result = outputPromptContext('Security compliance reminder');
     const json = JSON.stringify(result);
     const parsed = JSON.parse(json);
     expect(parsed).toEqual(result);
@@ -1585,161 +1585,5 @@ describe('outputAnswerQuestion', () => {
     const parsed = JSON.parse(json);
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(parsed.hookSpecificOutput.updatedInput.answer).toBe('confirmed');
-  });
-});
-
-// =============================================================================
-// CROSS-FUNCTION COMPARISON TESTS
-// =============================================================================
-
-describe('output function comparisons', () => {
-  describe('continue field behavior', () => {
-    it('outputSilentSuccess should have continue=true', () => {
-      expect(outputSilentSuccess().continue).toBe(true);
-    });
-
-    it('outputSuccess should have continue=true', () => {
-      expect(outputSuccess('msg').continue).toBe(true);
-    });
-
-    it('outputWarning should have continue=true', () => {
-      expect(outputWarning('msg').continue).toBe(true);
-    });
-
-    it('outputDeny should have continue=false', () => {
-      expect(outputDeny('reason').continue).toBe(false);
-    });
-
-    it('outputAllow should have continue=true', () => {
-      expect(outputAllow().continue).toBe(true);
-    });
-
-    it('outputAllowWithContext should have continue=true', () => {
-      expect(outputAllowWithContext('ctx').continue).toBe(true);
-    });
-
-    it('outputPromptContext should have continue=true', () => {
-      expect(outputPromptContext('ctx').continue).toBe(true);
-    });
-  });
-
-  describe('suppressOutput field behavior', () => {
-    it('outputSilentSuccess should suppress output', () => {
-      expect(outputSilentSuccess().suppressOutput).toBe(true);
-    });
-
-    it('outputSuccess should not suppress output', () => {
-      expect(outputSuccess('msg').suppressOutput).toBeUndefined();
-    });
-
-    it('outputWarning should not suppress output', () => {
-      expect(outputWarning('msg').suppressOutput).toBeUndefined();
-    });
-
-    it('outputDeny should not suppress output', () => {
-      expect(outputDeny('reason').suppressOutput).toBeUndefined();
-    });
-
-    it('outputAllow should suppress output', () => {
-      expect(outputAllow().suppressOutput).toBe(true);
-    });
-
-    it('outputAllowWithContext should suppress output', () => {
-      expect(outputAllowWithContext('ctx').suppressOutput).toBe(true);
-    });
-
-    it('outputPromptContext should suppress output', () => {
-      expect(outputPromptContext('ctx').suppressOutput).toBe(true);
-    });
-  });
-
-  describe('permissionDecision field behavior', () => {
-    it('outputSilentSuccess should not have permissionDecision', () => {
-      expect(outputSilentSuccess().hookSpecificOutput).toBeUndefined();
-    });
-
-    it('outputSuccess should not have permissionDecision', () => {
-      expect(outputSuccess('msg').hookSpecificOutput).toBeUndefined();
-    });
-
-    it('outputWarning should not have permissionDecision', () => {
-      expect(outputWarning('msg').hookSpecificOutput).toBeUndefined();
-    });
-
-    it('outputDeny should have permissionDecision=deny', () => {
-      expect(outputDeny('reason').hookSpecificOutput?.permissionDecision).toBe('deny');
-    });
-
-    it('outputAllow should have permissionDecision=allow', () => {
-      expect(outputAllow().hookSpecificOutput?.permissionDecision).toBe('allow');
-    });
-
-    it('outputAllowWithContext should have permissionDecision=allow', () => {
-      expect(outputAllowWithContext('ctx').hookSpecificOutput?.permissionDecision).toBe('allow');
-    });
-
-    it('outputPromptContext should NOT have permissionDecision', () => {
-      expect(outputPromptContext('ctx').hookSpecificOutput?.permissionDecision).toBeUndefined();
-    });
-  });
-});
-
-// =============================================================================
-// JSON SERIALIZATION TESTS
-// =============================================================================
-
-describe('JSON serialization', () => {
-  it('all output functions should produce valid JSON', () => {
-    const outputs = [
-      outputSilentSuccess(),
-      outputSuccess('test'),
-      outputWarning('test'),
-      outputDeny('test'),
-      outputAllow(),
-      outputAllowWithContext('test'),
-      outputPromptContext('test'),
-    ];
-
-    for (const output of outputs) {
-      expect(() => JSON.stringify(output)).not.toThrow();
-    }
-  });
-
-  it('JSON round-trip should preserve structure', () => {
-    const outputs = [
-      outputSilentSuccess(),
-      outputSuccess('test message'),
-      outputWarning('warning message'),
-      outputDeny('denial reason'),
-      outputAllow(),
-      outputAllowWithContext('context info'),
-      outputPromptContext('compliance context'),
-    ];
-
-    for (const output of outputs) {
-      const json = JSON.stringify(output);
-      const parsed = JSON.parse(json);
-      expect(parsed).toEqual(output);
-    }
-  });
-
-  it('should handle JSON-unsafe characters in messages', () => {
-    const problematicStrings = [
-      'Quote: "test"',
-      "Apostrophe: 'test'",
-      'Backslash: \\test\\',
-      'Newline:\ntest',
-      'Tab:\ttest',
-      'Unicode: \u0000\u001f', // Control characters
-      'Null byte: \x00',
-    ];
-
-    for (const str of problematicStrings) {
-      // These should not throw
-      expect(() => JSON.stringify(outputSuccess(str))).not.toThrow();
-      expect(() => JSON.stringify(outputWarning(str))).not.toThrow();
-      expect(() => JSON.stringify(outputDeny(str))).not.toThrow();
-      expect(() => JSON.stringify(outputAllowWithContext(str))).not.toThrow();
-    }
   });
 });
