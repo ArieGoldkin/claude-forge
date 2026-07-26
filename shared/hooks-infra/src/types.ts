@@ -628,19 +628,24 @@ export interface HookSpecificOutput {
   reloadSkills?: boolean;
 
   /**
-   * MessageDisplay hook — transformed assistant message text (CC v2.1.152+).
-   * When set, replaces the original assistant message at display time.
-   * Field name is informed by the v2.1.152 CHANGELOG description; CC will
-   * silently ignore unknown fields, so this is safe to ship across versions.
+   * MessageDisplay hook — text displayed in place of the delta (CC v2.1.152+).
+   * Omit, or return the delta unchanged, to display the original. An empty
+   * string suppresses the delta; there is no separate `hide` flag.
+   *
+   * Read out of the CC 2.1.220 binary, not inferred: the MessageDisplay branch
+   * of the hookSpecificOutput schema has exactly this one field, and the
+   * dispatch code seeds its output with the original delta and overrides it
+   * only when `displayContent !== undefined`.
+   *
+   * This replaces `transformedMessage` and `hide`, which occur 0 times in the
+   * binary. Their JSDoc read: "Field name is informed by the v2.1.152 CHANGELOG
+   * description; CC will silently ignore unknown fields, so this is safe to
+   * ship across versions." Silently ignoring an unknown field is what makes a
+   * wrong name SAFE TO SHIP AND INERT — the identical reasoning error as the
+   * input-side allowlist this release removes, on the output side. It left
+   * phi-output-redactor logging redactions Claude Code never applied.
    */
-  transformedMessage?: string;
-
-  /**
-   * MessageDisplay hook — when true, hide the assistant message at display
-   * time (CC v2.1.152+). Use sparingly; prefer transformedMessage with a
-   * placeholder for transparency.
-   */
-  hide?: boolean;
+  displayContent?: string;
 }
 
 /**

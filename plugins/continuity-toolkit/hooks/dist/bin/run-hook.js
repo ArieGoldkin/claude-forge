@@ -115,7 +115,20 @@ function outputMessageDisplay(transformedText) {
     suppressOutput: true,
     hookSpecificOutput: {
       hookEventName: "MessageDisplay",
-      transformedMessage: transformedText
+      // `displayContent`, NOT `transformedMessage`. Read out of the CC 2.1.220
+      // binary: `transformedMessage` occurs 0 times, `displayContent` 9,
+      // including the hook's own doc string ("Output JSON with
+      // hookSpecificOutput containing displayContent to replace the delta on
+      // screen") and the dispatch code, which seeds the output with the
+      // original delta and overrides it only for `displayContent`.
+      //
+      // Under the old name CC dropped the key, displayed the unredacted text,
+      // and phi-output-redactor still logged "Redacted N match(es)" — an audit
+      // line asserting a redaction that never happened, which is worse than no
+      // hook. Exactly the defect this release fixes on the INPUT side (a
+      // handler reading a name CC never sends), in the opposite direction.
+      // Found by adversarial review of #56.
+      displayContent: transformedText
     }
   };
 }

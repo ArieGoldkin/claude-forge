@@ -403,7 +403,20 @@ export function outputMessageDisplay(transformedText: string): HookResult {
     suppressOutput: true,
     hookSpecificOutput: {
       hookEventName: 'MessageDisplay',
-      transformedMessage: transformedText,
+      // `displayContent`, NOT `transformedMessage`. Read out of the CC 2.1.220
+      // binary: `transformedMessage` occurs 0 times, `displayContent` 9,
+      // including the hook's own doc string ("Output JSON with
+      // hookSpecificOutput containing displayContent to replace the delta on
+      // screen") and the dispatch code, which seeds the output with the
+      // original delta and overrides it only for `displayContent`.
+      //
+      // Under the old name CC dropped the key, displayed the unredacted text,
+      // and phi-output-redactor still logged "Redacted N match(es)" — an audit
+      // line asserting a redaction that never happened, which is worse than no
+      // hook. Exactly the defect this release fixes on the INPUT side (a
+      // handler reading a name CC never sends), in the opposite direction.
+      // Found by adversarial review of #56.
+      displayContent: transformedText,
     },
   };
 }
@@ -420,14 +433,14 @@ export function outputMessageDisplay(transformedText: string): HookResult {
  * @returns HookResult with hide directive
  */
 export function outputMessageDisplayHide(): HookResult {
-  return {
-    continue: true,
-    suppressOutput: true,
-    hookSpecificOutput: {
-      hookEventName: 'MessageDisplay',
-      hide: true,
-    },
-  };
+  // Suppression is an EMPTY `displayContent`, not a `hide` flag. The
+  // MessageDisplay branch of CC 2.1.220's hookSpecificOutput schema has exactly
+  // one field; `hide` occurs nowhere in the binary and the dispatch code has no
+  // handling for it. The previous implementation returned `{ hide: true }`, so
+  // any caller believing it had suppressed a message displayed it in full.
+  // Never reached by phi-output-redactor, but shipped. Found by adversarial
+  // review of #56.
+  return outputMessageDisplay('');
 }
 
 /**

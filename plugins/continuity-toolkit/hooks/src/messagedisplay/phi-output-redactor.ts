@@ -34,14 +34,14 @@ const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
  * Extract the assistant message text from MessageDisplay hook input.
  *
  * The field is `delta`. That is not a guess — it comes from a live capture of
- * CC 2.1.220 (2026-07-25, 22 records via a temporary dumper hook). The complete
+ * CC 2.1.220 (2026-07-25, 41 records via a temporary dumper hook). The complete
  * payload is: session_id, transcript_path, cwd, prompt_id, hook_event_name,
  * turn_id, message_id, index, final, delta.
  *
  * This function previously tried five candidate names — `message`, `text`,
  * `assistant_message`, `last_assistant_message`, `tool_input.message` — chosen
  * because "CC v2.1.152 docs are sparse on exact field naming". All five appear
- * in 0 of 22 captured records, so the hook was inert for every message it ever
+ * in 0 of 41 captured records, so the hook was inert for every message it ever
  * saw, on a PHI redaction path (#54 item 2). Two independent causes stacked:
  * normalizeInput's allowlist stripped three of the names, AND all five names
  * were wrong. Fixing only the first would have changed nothing.
@@ -60,20 +60,32 @@ const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
  * error is the same one that produced the false timeout guarantee in PR #55:
  * a partial capture read as a complete one.
  *
- * The boundary rule makes per-chunk scanning SOUNDER than "best effort", not
- * weaker. All 10 non-final chunks end in a blank line, and 0 of the 29
- * single-chunk deltas contain one — Claude Code splits on `\n\n`. None of the
- * patterns in `phi-redactor` (SSN, US phone, credit card) can contain a blank
- * line, so a PHI token cannot straddle a boundary and each chunk is scanned
- * whole. The worked example an earlier draft gave here ("123-45-" | "6789") is
- * therefore close to unreachable.
+ * At the boundaries actually OBSERVED, per-chunk scanning is safe: all 10
+ * non-final chunks ended in a blank line and 0 of the 29 single-chunk deltas
+ * contained one, and no phi-redactor pattern can span a blank line. So the
+ * worked example an earlier draft gave here ("123-45-" | "6789") is unreachable
+ * at a `\n\n` boundary.
  *
- * WHAT REMAINS UNVERIFIED is the OUTPUT side: what Claude Code does with
- * `hookSpecificOutput.transformedMessage` returned for chunk 3 of 10. If that
- * field is ignored or applied to the wrong span, this hook logs "Redacted N
- * match(es)" while displaying the PHI anyway — a log asserting a redaction that
- * did not happen, which is worse than no hook at all. Untested end-to-end.
- * Defense in depth, not a compliance claim.
+ * Do NOT read that as a guarantee. Claude Code's own hook documentation
+ * describes a delta as "the newly completed LINES", which does not exclude a
+ * flush on a single newline — and two patterns use a one-character separator
+ * class that `\n` satisfies: `us-phone-parens` and `credit-card-spaced`. A card
+ * number wrapped mid-number across a line, flushed as two deltas, would display
+ * in full. Not observed; not excluded by the documented contract either.
+ *
+ * THE OUTPUT SIDE WAS ALSO WRONG, and is now fixed. This hook returned
+ * `hookSpecificOutput.transformedMessage`; Claude Code reads `displayContent`
+ * and drops unknown keys, so it redacted correctly, shipped the result under a
+ * key nothing reads, and logged "Redacted N match(es)" while the original text
+ * was displayed — an audit line asserting a redaction that never happened.
+ * See `outputMessageDisplay` in lib/output.ts.
+ *
+ * SCOPE, from Claude Code's own hook documentation: "Display-only: the stored
+ * message and what the model sees are untouched." This hook cannot remove PHI
+ * from the transcript on disk, from what is sent to the API, or from /resume —
+ * it only changes what is rendered. It also fails OPEN: a non-zero exit or a
+ * timeout displays the original delta. Defense in depth, not a compliance
+ * claim, and specifically not a control on data at rest.
  *
  * @returns The message text, or null if absent/empty (hook becomes a no-op)
  */

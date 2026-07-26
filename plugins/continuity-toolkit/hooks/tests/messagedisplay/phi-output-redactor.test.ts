@@ -144,9 +144,9 @@ describe('phiOutputRedactor', () => {
       process.env[OPT_IN_ENV_VAR] = '1';
     });
 
-    it('redacts a single SSN and returns transformedMessage', async () => {
+    it('redacts a single SSN and returns displayContent', async () => {
       const result = await phiOutputRedactor(fromCapture('Patient SSN 123-45-6789 admitted.'));
-      expect(result.hookSpecificOutput?.['transformedMessage']).toBe(
+      expect(result.hookSpecificOutput?.['displayContent']).toBe(
         'Patient SSN [SSN-REDACTED] admitted.'
       );
     });
@@ -166,7 +166,7 @@ describe('phiOutputRedactor', () => {
       const result = await phiOutputRedactor(
         fromCapture('Patient 123-45-6789 reached at (555) 123-4567 via card 4111-1111-1111-1111.')
       );
-      const out = result.hookSpecificOutput?.['transformedMessage'] as string;
+      const out = result.hookSpecificOutput?.['displayContent'] as string;
       expect(out).toContain('[SSN-REDACTED]');
       expect(out).toContain('[PHONE-REDACTED]');
       expect(out).toContain('[CC-REDACTED]');
@@ -183,7 +183,7 @@ describe('phiOutputRedactor', () => {
       ];
 
       const results = await Promise.all(chunks.map((c) => phiOutputRedactor(c)));
-      const transformed = results.map((r) => r.hookSpecificOutput?.['transformedMessage']);
+      const transformed = results.map((r) => r.hookSpecificOutput?.['displayContent']);
 
       expect(transformed[0]).toContain('[SSN-REDACTED]');
       expect(transformed[1]).toContain('[PHONE-REDACTED]');
