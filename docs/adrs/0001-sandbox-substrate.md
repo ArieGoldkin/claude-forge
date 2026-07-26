@@ -39,7 +39,7 @@ Milestone #1 upgrades `etk:auto-research` from *route-goal→pick-a-skill* into 
 | Concurrency / rate | Hobby 10 concurrent, 40 vCPU/10 min · Pro 2,000 concurrent, 200 vCPU/min | IAM/service quotas |
 | Data residency | **`iad1` only** — no region choice | Standard AWS multi-region |
 | Retention | Snapshots expire 30 days after last use (configurable) | Session data TTL **30 days** |
-| Lifecycle extras | snapshot-on-stop (default), `fork()`, `extendTimeout()`, ≤15 exposed ports, multi-agent user isolation, Drives (beta) | session lifecycle + CloudTrail audit logging |
+| Lifecycle extras | snapshot-on-stop (default), `fork()`, `extendTimeout()`, **≤4 exposed ports** (`@vercel/sandbox@2.9.0` `dist/sandbox.d.ts:51-54` — "Sandboxes can expose up to 4 ports"), multi-agent user isolation, Drives (beta — *not present in the 2.9.0 SDK surface*) | session lifecycle + CloudTrail audit logging |
 | Auth model | Vercel account — OIDC token (recommended) or access token | AWS SigV4 / full IAM credential chain |
 | Stack fit | Node/TS-native SDK (also Python); matches our tsup + vitest + biome toolchain | AWS-native; heavier IAM/VPC setup |
 
