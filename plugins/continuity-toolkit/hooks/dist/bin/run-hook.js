@@ -5461,6 +5461,22 @@ async function hipaaContextInjector(input) {
 }
 
 // src/lib/phi-redactor.ts
+function luhn(value) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 13 || digits.length > 19) return false;
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48;
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    double = !double;
+  }
+  return sum % 10 === 0;
+}
 var DEFAULT_PHI_PATTERNS = [
   {
     id: "ssn-dashed",
@@ -5483,12 +5499,26 @@ var DEFAULT_PHI_PATTERNS = [
   },
   {
     id: "credit-card-spaced",
-    // #### #### #### #### (Visa/MC/Discover formatting)
+    // #### #### #### #### (Visa/MC/Discover formatting), Luhn-gated so that
+    // grouped non-card numbers (build ids, key fragments) are left alone.
     regex: /\b\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4}\b/g,
-    replacement: "[CC-REDACTED]"
+    replacement: "[CC-REDACTED]",
+    validate: luhn
+  },
+  {
+    id: "credit-card-plain",
+    // 13-19 unseparated digits. Only safe to include BECAUSE of the Luhn gate —
+    // without it this would match most long numeric ids. Closes a recall gap:
+    // a pasted card is at least as likely to arrive unformatted as formatted.
+    regex: /\b\d{13,19}\b/g,
+    replacement: "[CC-REDACTED]",
+    validate: luhn
   }
 ];
 function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
+  if (typeof text !== "string") {
+    return { text: "", matchedPatterns: [], totalSubstitutions: 0 };
+  }
   if (!text) {
     return { text, matchedPatterns: [], totalSubstitutions: 0 };
   }
@@ -5497,12 +5527,18 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
   let current = text;
   for (const pattern of patterns) {
     pattern.regex.lastIndex = 0;
-    const matches = current.match(pattern.regex);
-    if (matches && matches.length > 0) {
+    let substitutions = 0;
+    const next = current.replace(pattern.regex, (match) => {
+      if (pattern.validate && !pattern.validate(match)) {
+        return match;
+      }
+      substitutions++;
+      return pattern.replacement;
+    });
+    if (substitutions > 0) {
       matchedPatterns.push(pattern.id);
-      totalSubstitutions += matches.length;
-      pattern.regex.lastIndex = 0;
-      current = current.replace(pattern.regex, pattern.replacement);
+      totalSubstitutions += substitutions;
+      current = next;
     }
   }
   return { text: current, matchedPatterns, totalSubstitutions };

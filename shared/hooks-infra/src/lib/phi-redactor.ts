@@ -3,10 +3,27 @@
  *
  * Designed for the CC v2.1.152 MessageDisplay hook event. Scans
  * assistant message text for high-confidence PHI / PII patterns and
- * replaces matches with stable placeholders. Conservative by design:
- * only patterns with very low false-positive rates are included by
- * default. Email and date heuristics are deliberately excluded — they
- * over-match on technical content (commit emails, ISO timestamps).
+ * replaces matches with stable placeholders. Email and date heuristics
+ * are deliberately excluded — they over-match on technical content
+ * (commit emails, ISO timestamps).
+ *
+ * KNOWN FALSE POSITIVES. This module used to claim "only patterns with
+ * very low false-positive rates". That is not true of the dashed
+ * patterns, whose surface form is genuinely ambiguous, and measuring
+ * beats asserting:
+ *
+ *   commits 100-200-3000   -> [PHONE-REDACTED]   (us-phone-dashed)
+ *   build 123-45-6789      -> [SSN-REDACTED]     (ssn-dashed)
+ *
+ * Nothing in a regex separates those from a real phone number or SSN;
+ * only surrounding words would, and word lists are their own false-
+ * positive source. The card patterns ARE precise, because Luhn gates
+ * them — a grouped non-card number now survives untouched.
+ *
+ * The cost of a false positive here is confusion, not data loss: the
+ * transform is display-only and the stored message is untouched. The
+ * cost of a false negative is unredacted PHI on screen. The bias is
+ * deliberate, and worth restating whenever a pattern is added.
  *
  * Stays purely synchronous and dependency-free so it can be reused
  * outside the hook (e.g., handoff scrubbing).
@@ -21,6 +38,39 @@ export interface PhiPattern {
   regex: RegExp;
   /** Replacement placeholder (does not need to be the same length). */
   replacement: string;
+  /**
+   * Optional second-stage check on a regex match. Return false to leave the
+   * match alone. Lets a pattern be written loosely enough for recall and then
+   * tightened by something a regex cannot express — see `luhn`.
+   */
+  validate?: (match: string) => boolean;
+}
+
+/**
+ * Luhn checksum. Every real payment card satisfies it and a randomly grouped
+ * 16-digit number satisfies it about 1 time in 10, so gating the card patterns
+ * on this is close to pure precision: no recall is lost and most build numbers,
+ * ids and version strings stop matching.
+ *
+ * Note it does NOT rescue `4111-1111-1111-1111` from being redacted — that is
+ * the industry's standard test card and it is Luhn-valid by construction.
+ */
+export function luhn(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 13 || digits.length > 19) return false;
+
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48;
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    double = !double;
+  }
+  return sum % 10 === 0;
 }
 
 /**
@@ -55,9 +105,20 @@ export const DEFAULT_PHI_PATTERNS: ReadonlyArray<PhiPattern> = [
   },
   {
     id: 'credit-card-spaced',
-    // #### #### #### #### (Visa/MC/Discover formatting)
+    // #### #### #### #### (Visa/MC/Discover formatting), Luhn-gated so that
+    // grouped non-card numbers (build ids, key fragments) are left alone.
     regex: /\b\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4}\b/g,
     replacement: '[CC-REDACTED]',
+    validate: luhn,
+  },
+  {
+    id: 'credit-card-plain',
+    // 13-19 unseparated digits. Only safe to include BECAUSE of the Luhn gate —
+    // without it this would match most long numeric ids. Closes a recall gap:
+    // a pasted card is at least as likely to arrive unformatted as formatted.
+    regex: /\b\d{13,19}\b/g,
+    replacement: '[CC-REDACTED]',
+    validate: luhn,
   },
 ] as const;
 
@@ -84,6 +145,18 @@ export function redactPhi(
   text: string,
   patterns: ReadonlyArray<PhiPattern> = DEFAULT_PHI_PATTERNS
 ): RedactionResult {
+  // Non-string input FAILS CLOSED. The declared parameter type is `string`, but
+  // this module advertises reuse outside the hook, and callers reached from
+  // JSON or `any` can hand it anything. It used to throw
+  // `current.match is not a function` on a number/object/array, and to return
+  // `{ text: null }` for null — a value its own `text: string` type says is
+  // impossible. A redactor must never hand back something it did not inspect,
+  // so unusable input yields empty text, not the original. Found by adversarial
+  // review of #56.
+  if (typeof text !== 'string') {
+    return { text: '', matchedPatterns: [], totalSubstitutions: 0 };
+  }
+
   if (!text) {
     return { text, matchedPatterns: [], totalSubstitutions: 0 };
   }
@@ -94,12 +167,25 @@ export function redactPhi(
 
   for (const pattern of patterns) {
     pattern.regex.lastIndex = 0;
-    const matches = current.match(pattern.regex);
-    if (matches && matches.length > 0) {
+    let substitutions = 0;
+
+    // `replace` with a callback so `validate` can veto an individual match.
+    // Counting inside the callback keeps the tally equal to the number of
+    // substitutions actually applied — a separate `match()` pass would count
+    // vetoed matches too and report redactions that never happened, which is
+    // the failure mode this release spent its time removing.
+    const next = current.replace(pattern.regex, (match) => {
+      if (pattern.validate && !pattern.validate(match)) {
+        return match;
+      }
+      substitutions++;
+      return pattern.replacement;
+    });
+
+    if (substitutions > 0) {
       matchedPatterns.push(pattern.id);
-      totalSubstitutions += matches.length;
-      pattern.regex.lastIndex = 0;
-      current = current.replace(pattern.regex, pattern.replacement);
+      totalSubstitutions += substitutions;
+      current = next;
     }
   }
 

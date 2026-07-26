@@ -78,19 +78,45 @@ already deleted — by adding names to an allowlist. This removes the allowlist.
   CC emits **one event per markdown block** — across 41 records `index` ran 0-9
   and the largest message arrived as 10 separate events. The hook is invoked once
   per paragraph, with no state between invocations.
-  - This makes per-chunk scanning **sound, not merely best-effort**: every
-    non-final chunk ends in a blank line and no single-chunk delta contains one,
-    so CC splits on `\n\n` — and none of phi-redactor's patterns (SSN, US phone,
-    credit card) can contain a blank line. No PHI token straddles a boundary.
-  - **The output side remains unverified.** What CC does with
-    `hookSpecificOutput.transformedMessage` returned for chunk 3 of 10 is
-    untested. If it is ignored or misapplied, the hook logs `Redacted N match(es)`
-    while displaying the PHI — a log asserting a redaction that did not happen.
+  - At every boundary OBSERVED, per-chunk scanning is safe: all non-final chunks
+    ended in a blank line, no single-chunk delta contained one, and no
+    phi-redactor pattern can span a blank line. Not a guarantee, though — CC's
+    own doc calls a delta "the newly completed **lines**", which does not exclude
+    a single-newline flush, and two patterns (`us-phone-parens`,
+    `credit-card-spaced`) use a one-character separator class that `\n`
+    satisfies. A card wrapped mid-number across a line would display in full.
+  - **The output side was wrong too — see below.** It is now fixed and verified
+    end-to-end, not merely asserted.
   - An earlier draft of this entry called chunking unobserved and reasoned from
     "longest delta 202 chars". That was a sampling artifact: the first 22 records
     were all single short paragraphs. Caught by adversarial review; recorded
     rather than quietly corrected, because it is the same partial-capture error
     that produced the false timeout guarantee in PR #55.
+
+### Changed — redaction quality (all from adversarial review)
+
+- **Credit-card patterns are now Luhn-gated**, and a `validate` hook on
+  `PhiPattern` provides the mechanism. A grouped non-card number
+  (`build 1234-5678-9012-3456`) is no longer redacted. This is a filter, not a
+  proof — roughly 1 grouped 16-digit number in 10 passes Luhn by chance, and a
+  test pins that honestly rather than claiming precision the gate cannot give.
+- **New `credit-card-plain` pattern** for 13-19 unseparated digits, closing a
+  recall gap (a pasted card is at least as likely to arrive unformatted). Only
+  safe *because* of the Luhn gate.
+- `totalSubstitutions` now counts substitutions **actually applied**, not regex
+  matches. With a `validate` veto the two differ, and the count feeds the hook's
+  `Redacted N match(es)` log line — reporting vetoed matches would assert
+  redactions that never happened, the same class as the `displayContent` defect.
+- **`redactPhi` fails closed on non-string input.** It threw
+  `current.match is not a function` for a number/object/array, and returned
+  `{ text: null }` for null — a value its own `text: string` type says cannot
+  exist. Unusable input now yields empty text, never the uninspected original.
+- **The module's "very low false-positive rates" claim was false and is
+  corrected in place.** `commits 100-200-3000` → `[PHONE-REDACTED]` and
+  `build 123-45-6789` → `[SSN-REDACTED]`; nothing in a regex separates those
+  from the real thing. Documented with the reasoning: a false positive costs
+  confusion on a display-only transform, a false negative costs unredacted PHI
+  on screen, and the bias is deliberate.
 
 ### Fixed — dead code that looked load-bearing
 
