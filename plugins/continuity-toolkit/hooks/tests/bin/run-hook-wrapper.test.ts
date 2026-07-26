@@ -68,6 +68,26 @@ function runWrapper(
   }
 }
 
+/**
+ * Assert the wrapper actually spawned the runner rather than bailing out early.
+ *
+ * The wrapper has three pre-execution exits — empty hook name, missing dist/,
+ * and the opt-in gate — and all three return JSON with `continue: true`. So a
+ * test asserting only `continue` passes whether or not a hook ever ran, which
+ * is how every test in this file stayed green while the harness pointed
+ * CLAUDE_PLUGIN_ROOT at the wrong directory and took the "compiled hooks not
+ * found" path on every invocation. Reverting that harness bug used to fail
+ * exactly one of eleven tests. Found by adversarial review of #56, round 2.
+ *
+ * The bundle-not-found message is the marker: it can only appear when the
+ * wrapper gave up before Node.
+ */
+function expectRanTheHook(stdout: string): Record<string, unknown> {
+  const parsed = JSON.parse(stdout) as Record<string, unknown>;
+  expect(String(parsed['systemMessage'] ?? '')).not.toContain('compiled hooks not found');
+  return parsed;
+}
+
 describe('run-hook-wrapper.sh', () => {
   it('should execute a valid hook and return JSON', () => {
     const input = JSON.stringify({
@@ -80,11 +100,13 @@ describe('run-hook-wrapper.sh', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBeTruthy();
 
-    // Should be valid JSON
-    const parsed = JSON.parse(stdout);
+    const parsed = expectRanTheHook(stdout);
     expect(parsed).toHaveProperty('continue');
   });
 
+  // The next two tests deliberately do NOT use expectRanTheHook: an empty hook
+  // name and a missing bundle are the wrapper's own pre-execution branches, and
+  // asserting the fallback IS the point of them.
   it('should return safe JSON when no hook name provided', () => {
     const { stdout, exitCode } = runWrapper('');
 
@@ -129,7 +151,10 @@ describe('run-hook-wrapper.sh', () => {
     });
 
     expect(exitCode).toBe(0);
-    const parsed = JSON.parse(stdout);
+    // The whole point of this test is that derivation found a REAL plugin root.
+    // Asserting `continue` alone passed even when derivation was irrelevant
+    // because the harness root was wrong anyway.
+    const parsed = expectRanTheHook(stdout);
     expect(parsed).toHaveProperty('continue');
   });
 
@@ -142,15 +167,20 @@ describe('run-hook-wrapper.sh', () => {
     const { stdout, exitCode } = runWrapper('nonexistent/hook-name', input);
 
     expect(exitCode).toBe(0);
-    const parsed = JSON.parse(stdout);
-    expect(parsed.continue).toBe(true);
+    // "Gracefully" means the RUNNER declined an unknown name, not that the
+    // wrapper never got there.
+    const parsed = expectRanTheHook(stdout);
+    expect(parsed['continue']).toBe(true);
   });
 
   it('should always exit 0', () => {
-    // Even with garbage input, should exit 0
-    const { exitCode } = runWrapper('lifecycle/session-loader', 'not json at all');
+    // Even with garbage input, should exit 0 — and still reach the runner, so
+    // this covers the runner's own bad-input handling rather than the
+    // wrapper's bail-out.
+    const { stdout, exitCode } = runWrapper('lifecycle/session-loader', 'not json at all');
 
     expect(exitCode).toBe(0);
+    expectRanTheHook(stdout);
   });
 
   describe('opt-in gate (pre-Node short circuit)', () => {
