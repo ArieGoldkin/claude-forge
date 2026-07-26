@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   clearBranchPatternsCache,
   extractCommitMessageFromCommand,
@@ -20,6 +20,40 @@ import {
   validateBranchName,
   validateCommitMessage,
 } from '../../src/lib/git-validators.js';
+import { resetLogDir } from '../../src/lib/logging.js';
+
+// =============================================================================
+// LOG ISOLATION
+// =============================================================================
+
+/**
+ * loadBranchPatterns() logs an ERROR through the shared logger when it skips an
+ * invalid pattern, and several tests below feed it invalid patterns on purpose.
+ * Against the real HOME that appended ~719 bytes to the developer's
+ * ~/.claude/logs/<plugin>/hooks.log on every run — measured, per file, in
+ * isolation. This file is now symlinked into all five plugins, so that would be
+ * six writers to a log family whose contention is what made logging.test.ts
+ * flaky (#55/#59). Point HOME somewhere disposable instead.
+ */
+const originalHome = process.env['HOME'];
+let tmpLogHome: string;
+
+beforeEach(() => {
+  tmpLogHome = fs.mkdtempSync(path.join(os.tmpdir(), 'git-validators-logs-'));
+  process.env['HOME'] = tmpLogHome;
+  delete process.env['CLAUDE_PLUGIN_DATA'];
+  resetLogDir();
+});
+
+afterEach(() => {
+  if (originalHome === undefined) {
+    delete process.env['HOME'];
+  } else {
+    process.env['HOME'] = originalHome;
+  }
+  resetLogDir();
+  fs.rmSync(tmpLogHome, { recursive: true, force: true });
+});
 
 // =============================================================================
 // BRANCH NAME VALIDATION TESTS
@@ -286,7 +320,7 @@ describe('validateBranchName with custom patterns', () => {
     });
 
     it('should accept a pattern exactly at the 256-char limit', () => {
-      const atLimit = '*' + 'a'.repeat(254) + '*';
+      const atLimit = `*${'a'.repeat(254)}*`;
       expect(atLimit.length).toBe(256);
       const tmpDir = createTempProjectDir({ additional_patterns: [atLimit] });
       try {

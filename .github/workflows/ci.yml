@@ -99,6 +99,40 @@ jobs:
       - name: good-nested-experimental must pass
         run: bash scripts/validate-manifest-shape.sh tests/fixtures/manifest-shape/good-nested-experimental.json
 
+  # Plugin lib tests that have a shared counterpart must BE that counterpart.
+  # src/lib is symlinked into every plugin, so all six trees run identical code;
+  # when the tests were copies they drifted up to 735 lines and five suites
+  # passed against a stale spec (#60). A `cp` reintroduces that silently, so the
+  # invariant is structural. The negative steps exist because a guard nobody has
+  # seen fail is indistinguishable from one that cannot.
+  shared-test-symlinks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: real repo must pass
+        run: bash scripts/validate-shared-test-symlinks.sh
+      # Exit code must be exactly 1 (a drift finding). Bare `! cmd` would also
+      # pass on exit 2, which is the script's "environment broken" code — that
+      # is how a guard that validates nothing looks green.
+      - name: a real file where shared has one must fail
+        run: |
+          T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
+          rm "$T" && cp shared/hooks-infra/tests/lib/guards.test.ts "$T"
+          bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+      - name: a broken symlink must fail
+        run: |
+          T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
+          rm -f "$T" && ln -s ../../../../shared/hooks-infra/tests/lib/guards.test.ts "$T"
+          bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+      - name: a link to the wrong shared file must fail
+        run: |
+          T=plugins/devops-toolkit/hooks/tests/lib/guards.test.ts
+          rm -f "$T" && ln -s ../../../../../shared/hooks-infra/tests/lib/input.test.ts "$T"
+          bash scripts/validate-shared-test-symlinks.sh && rc=0 || rc=$?
+          [ "$rc" = "1" ] || { echo "expected exit 1, got $rc"; exit 1; }
+
   # Version consistency across plugin.json / marketplace.json / CHANGELOG /
   # README / both CLAUDE.md files. Previously enforced by neither CI nor an
   # installed git hook -- Release Checklist compliance rested on agent memory,

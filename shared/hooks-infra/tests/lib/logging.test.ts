@@ -34,6 +34,42 @@ import {
 import type { PermissionLogEntry } from '../../src/types.js';
 
 // =============================================================================
+// PLUGIN IDENTITY
+// =============================================================================
+
+/**
+ * This file is symlinked into every plugin's tests/lib/, so it runs six times
+ * under six different CLAUDE_PLUGIN_NAME values (each plugin's vitest.config.ts
+ * sets its own). logging.ts derives its log-level env var from that name; the
+ * map below states the expected name for each tree *independently* of that
+ * derivation, so changing the formula in logging.ts fails these tests rather
+ * than being silently mirrored by them. Recomputing the formula here would make
+ * the test agree with the implementation by construction — the same
+ * cannot-fail shape this file's own history is full of.
+ *
+ * Adding a plugin? Add its CLAUDE_PLUGIN_NAME here. The throw is deliberate:
+ * a missing entry should stop the suite, not fall back to a guess.
+ */
+const PLUGIN_NAME = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
+
+const LOG_LEVEL_ENV_BY_PLUGIN: Record<string, string> = {
+  plugin: 'PLUGIN_LOG_LEVEL',
+  continuity: 'CONTINUITY_LOG_LEVEL',
+  devops: 'DEVOPS_LOG_LEVEL',
+  'ai-toolkit': 'AI-TOOLKIT_LOG_LEVEL',
+  'frontend-toolkit': 'FRONTEND-TOOLKIT_LOG_LEVEL',
+  engineering: 'ENGINEERING_LOG_LEVEL',
+};
+
+const mappedLogLevelEnv = LOG_LEVEL_ENV_BY_PLUGIN[PLUGIN_NAME];
+if (!mappedLogLevelEnv) {
+  throw new Error(
+    `logging.test.ts: no log-level env var mapped for CLAUDE_PLUGIN_NAME="${PLUGIN_NAME}". Add an entry to LOG_LEVEL_ENV_BY_PLUGIN in this file.`
+  );
+}
+const LOG_LEVEL_ENV = mappedLogLevelEnv;
+
+// =============================================================================
 // TEST HELPERS
 // =============================================================================
 
@@ -120,70 +156,70 @@ describe('logging module', () => {
   // ===========================================================================
 
   describe('getCurrentLogLevel', () => {
-    it('should default to warn when PLUGIN_LOG_LEVEL is not set', () => {
-      delete process.env['PLUGIN_LOG_LEVEL'];
+    it(`should default to warn when ${LOG_LEVEL_ENV} is not set`, () => {
+      delete process.env[LOG_LEVEL_ENV];
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('warn');
     });
 
-    it('should return debug when PLUGIN_LOG_LEVEL=debug', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+    it(`should return debug when ${LOG_LEVEL_ENV}=debug`, () => {
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('debug');
     });
 
-    it('should return info when PLUGIN_LOG_LEVEL=info', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'info';
+    it(`should return info when ${LOG_LEVEL_ENV}=info`, () => {
+      process.env[LOG_LEVEL_ENV] = 'info';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('info');
     });
 
-    it('should return warn when PLUGIN_LOG_LEVEL=warn', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'warn';
+    it(`should return warn when ${LOG_LEVEL_ENV}=warn`, () => {
+      process.env[LOG_LEVEL_ENV] = 'warn';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('warn');
     });
 
-    it('should return error when PLUGIN_LOG_LEVEL=error', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'error';
+    it(`should return error when ${LOG_LEVEL_ENV}=error`, () => {
+      process.env[LOG_LEVEL_ENV] = 'error';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('error');
     });
 
     it('should default to warn for invalid log level', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'invalid';
+      process.env[LOG_LEVEL_ENV] = 'invalid';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('warn');
     });
 
     it('should handle case-insensitive log levels', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'DEBUG';
+      process.env[LOG_LEVEL_ENV] = 'DEBUG';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('debug');
 
-      process.env['PLUGIN_LOG_LEVEL'] = 'Info';
+      process.env[LOG_LEVEL_ENV] = 'Info';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('info');
     });
 
     it('should cache the log level', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('debug');
 
       // Changing env after first call should not affect cached value
-      process.env['PLUGIN_LOG_LEVEL'] = 'error';
+      process.env[LOG_LEVEL_ENV] = 'error';
       expect(getCurrentLogLevel()).toBe('debug');
     });
   });
 
   describe('resetLogLevel', () => {
     it('should clear the cached log level', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('debug');
 
-      process.env['PLUGIN_LOG_LEVEL'] = 'error';
+      process.env[LOG_LEVEL_ENV] = 'error';
       resetLogLevel();
       expect(getCurrentLogLevel()).toBe('error');
     });
@@ -206,6 +242,29 @@ describe('logging module', () => {
     it('should return an absolute path', () => {
       const logDir = getLogDir();
       expect(path.isAbsolute(logDir)).toBe(true);
+    });
+
+    it('should use CLAUDE_PLUGIN_DATA/logs when env var is set', () => {
+      const testPluginDataDir = path.join(tmpHome, 'plugin-data');
+      process.env['CLAUDE_PLUGIN_DATA'] = testPluginDataDir;
+      resetLogDir();
+      try {
+        const logDir = getLogDir();
+        expect(logDir).toBe(path.join(testPluginDataDir, 'logs'));
+        expect(logDir).not.toContain('.claude');
+      } finally {
+        delete process.env['CLAUDE_PLUGIN_DATA'];
+        resetLogDir();
+      }
+    });
+
+    it('should fall back to HOME/.claude/logs/<plugin> when CLAUDE_PLUGIN_DATA is not set', () => {
+      delete process.env['CLAUDE_PLUGIN_DATA'];
+      resetLogDir();
+      const logDir = getLogDir();
+      expect(logDir).toContain('.claude');
+      expect(logDir).toContain('logs');
+      expect(logDir).toContain(PLUGIN_NAME);
     });
   });
 
@@ -244,7 +303,7 @@ describe('logging module', () => {
   describe('log level filtering', () => {
     describe('when log level is debug', () => {
       beforeEach(() => {
-        process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+        process.env[LOG_LEVEL_ENV] = 'debug';
         resetLogLevel();
         _initialHookLogLines = getLineCount(getHookLogPath());
       });
@@ -280,7 +339,7 @@ describe('logging module', () => {
 
     describe('when log level is info', () => {
       beforeEach(() => {
-        process.env['PLUGIN_LOG_LEVEL'] = 'info';
+        process.env[LOG_LEVEL_ENV] = 'info';
         resetLogLevel();
         _initialHookLogLines = getLineCount(getHookLogPath());
       });
@@ -313,7 +372,7 @@ describe('logging module', () => {
 
     describe('when log level is warn (default)', () => {
       beforeEach(() => {
-        process.env['PLUGIN_LOG_LEVEL'] = 'warn';
+        process.env[LOG_LEVEL_ENV] = 'warn';
         resetLogLevel();
         _initialHookLogLines = getLineCount(getHookLogPath());
       });
@@ -347,7 +406,7 @@ describe('logging module', () => {
 
     describe('when log level is error', () => {
       beforeEach(() => {
-        process.env['PLUGIN_LOG_LEVEL'] = 'error';
+        process.env[LOG_LEVEL_ENV] = 'error';
         resetLogLevel();
         _initialHookLogLines = getLineCount(getHookLogPath());
       });
@@ -387,7 +446,7 @@ describe('logging module', () => {
 
   describe('log format', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -429,7 +488,7 @@ describe('logging module', () => {
 
     describe('logWarn', () => {
       beforeEach(() => {
-        process.env['PLUGIN_LOG_LEVEL'] = 'warn';
+        process.env[LOG_LEVEL_ENV] = 'warn';
         resetLogLevel();
       });
 
@@ -511,7 +570,7 @@ describe('logging module', () => {
 
   describe('log directory creation', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -661,7 +720,7 @@ describe('logging module', () => {
     });
 
     it('should always log regardless of log level', () => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'error';
+      process.env[LOG_LEVEL_ENV] = 'error';
       resetLogLevel();
 
       logPermission('allow', 'test', 'Bash', 'sess');
@@ -741,7 +800,7 @@ describe('logging module', () => {
 
   describe('createLogger', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -807,7 +866,7 @@ describe('logging module', () => {
 
   describe('createScopedLogger', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -882,7 +941,7 @@ describe('logging module', () => {
 
   describe('file writing', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -948,7 +1007,7 @@ describe('logging module', () => {
 
   describe('multiple log entries', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 
@@ -1005,7 +1064,7 @@ describe('logging module', () => {
 
   describe('timestamps', () => {
     beforeEach(() => {
-      process.env['PLUGIN_LOG_LEVEL'] = 'debug';
+      process.env[LOG_LEVEL_ENV] = 'debug';
       resetLogLevel();
     });
 

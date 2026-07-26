@@ -14,11 +14,13 @@ import {
   outputAnswerQuestion,
   outputAsk,
   outputContextBudgeted,
+  outputDefer,
   outputDeny,
   outputPromptContext,
-  outputStopContext,
+  outputRetry,
   outputSessionTitle,
   outputSilentSuccess,
+  outputStopContext,
   outputSuccess,
   outputWarning,
   outputWarningBudgeted,
@@ -1176,6 +1178,66 @@ describe('hookEventName parameter', () => {
       expect(result.hookSpecificOutput?.hookEventName).toBe('PermissionRequest');
     });
   });
+
+  describe('outputRetry', () => {
+    it('should return exact expected structure', () => {
+      const result = outputRetry();
+      expect(result).toEqual({
+        continue: true,
+        suppressOutput: true,
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          retry: true,
+        },
+      });
+    });
+
+    it('should have continue set to true', () => {
+      expect(outputRetry().continue).toBe(true);
+    });
+
+    it('should have suppressOutput set to true', () => {
+      expect(outputRetry().suppressOutput).toBe(true);
+    });
+
+    it('should have retry set to true', () => {
+      expect(outputRetry().hookSpecificOutput?.retry).toBe(true);
+    });
+
+    it('should not have permissionDecision', () => {
+      expect(outputRetry().hookSpecificOutput?.permissionDecision).toBeUndefined();
+    });
+  });
+
+  describe('outputDefer', () => {
+    it('should return exact expected structure', () => {
+      const result = outputDefer();
+      expect(result).toEqual({
+        continue: true,
+        suppressOutput: true,
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'defer',
+        },
+      });
+    });
+
+    it('should have continue set to true', () => {
+      expect(outputDefer().continue).toBe(true);
+    });
+
+    it('should have suppressOutput set to true', () => {
+      expect(outputDefer().suppressOutput).toBe(true);
+    });
+
+    it('should have permissionDecision set to defer', () => {
+      expect(outputDefer().hookSpecificOutput?.permissionDecision).toBe('defer');
+    });
+
+    it('should not have retry', () => {
+      expect(outputDefer().hookSpecificOutput?.retry).toBeUndefined();
+    });
+  });
 });
 
 // =============================================================================
@@ -1284,7 +1346,10 @@ describe('truncateForLLM', () => {
   describe('maxLines applied before maxChars', () => {
     it('should apply maxLines first, then maxChars on the result', () => {
       // 100 lines of 20 chars each
-      const lines = Array.from({ length: 100 }, (_, i) => `line-${String(i).padStart(3, '0')}-padding`);
+      const lines = Array.from(
+        { length: 100 },
+        (_, i) => `line-${String(i).padStart(3, '0')}-padding`
+      );
       const text = lines.join('\n');
 
       // maxLines=5 reduces to ~5 lines + truncation notice, then maxChars=50 further trims
@@ -1342,7 +1407,7 @@ describe('outputWarningBudgeted', () => {
     expect(result.systemMessage?.startsWith('\u26a0 ')).toBe(true);
     // The truncated content should be shorter than original
     // systemMessage = "⚠ " + truncated(1000 -> 200)
-    expect(result.systemMessage!.length).toBeLessThan(1000);
+    expect(result.systemMessage?.length).toBeLessThan(1000);
   });
 
   it('should use default maxChars of 500', () => {
@@ -1395,8 +1460,8 @@ describe('outputContextBudgeted', () => {
     expect(result.continue).toBe(true);
     expect(result.suppressOutput).toBe(true);
     expect(result.hookSpecificOutput?.additionalContext).toBeDefined();
-    expect(result.hookSpecificOutput!.additionalContext!.length).toBeLessThan(2000);
-    expect(result.hookSpecificOutput!.additionalContext).toContain('chars omitted');
+    expect(result.hookSpecificOutput?.additionalContext?.length).toBeLessThan(2000);
+    expect(result.hookSpecificOutput?.additionalContext).toContain('chars omitted');
   });
 
   it('should use default maxChars of 1000', () => {
@@ -1520,5 +1585,161 @@ describe('outputAnswerQuestion', () => {
     const parsed = JSON.parse(json);
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(parsed.hookSpecificOutput.updatedInput.answer).toBe('confirmed');
+  });
+});
+
+// =============================================================================
+// CROSS-FUNCTION COMPARISON TESTS
+// =============================================================================
+
+describe('output function comparisons', () => {
+  describe('continue field behavior', () => {
+    it('outputSilentSuccess should have continue=true', () => {
+      expect(outputSilentSuccess().continue).toBe(true);
+    });
+
+    it('outputSuccess should have continue=true', () => {
+      expect(outputSuccess('msg').continue).toBe(true);
+    });
+
+    it('outputWarning should have continue=true', () => {
+      expect(outputWarning('msg').continue).toBe(true);
+    });
+
+    it('outputDeny should have continue=false', () => {
+      expect(outputDeny('reason').continue).toBe(false);
+    });
+
+    it('outputAllow should have continue=true', () => {
+      expect(outputAllow().continue).toBe(true);
+    });
+
+    it('outputAllowWithContext should have continue=true', () => {
+      expect(outputAllowWithContext('ctx').continue).toBe(true);
+    });
+
+    it('outputPromptContext should have continue=true', () => {
+      expect(outputPromptContext('ctx').continue).toBe(true);
+    });
+  });
+
+  describe('suppressOutput field behavior', () => {
+    it('outputSilentSuccess should suppress output', () => {
+      expect(outputSilentSuccess().suppressOutput).toBe(true);
+    });
+
+    it('outputSuccess should not suppress output', () => {
+      expect(outputSuccess('msg').suppressOutput).toBeUndefined();
+    });
+
+    it('outputWarning should not suppress output', () => {
+      expect(outputWarning('msg').suppressOutput).toBeUndefined();
+    });
+
+    it('outputDeny should not suppress output', () => {
+      expect(outputDeny('reason').suppressOutput).toBeUndefined();
+    });
+
+    it('outputAllow should suppress output', () => {
+      expect(outputAllow().suppressOutput).toBe(true);
+    });
+
+    it('outputAllowWithContext should suppress output', () => {
+      expect(outputAllowWithContext('ctx').suppressOutput).toBe(true);
+    });
+
+    it('outputPromptContext should suppress output', () => {
+      expect(outputPromptContext('ctx').suppressOutput).toBe(true);
+    });
+  });
+
+  describe('permissionDecision field behavior', () => {
+    it('outputSilentSuccess should not have permissionDecision', () => {
+      expect(outputSilentSuccess().hookSpecificOutput).toBeUndefined();
+    });
+
+    it('outputSuccess should not have permissionDecision', () => {
+      expect(outputSuccess('msg').hookSpecificOutput).toBeUndefined();
+    });
+
+    it('outputWarning should not have permissionDecision', () => {
+      expect(outputWarning('msg').hookSpecificOutput).toBeUndefined();
+    });
+
+    it('outputDeny should have permissionDecision=deny', () => {
+      expect(outputDeny('reason').hookSpecificOutput?.permissionDecision).toBe('deny');
+    });
+
+    it('outputAllow should have permissionDecision=allow', () => {
+      expect(outputAllow().hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('outputAllowWithContext should have permissionDecision=allow', () => {
+      expect(outputAllowWithContext('ctx').hookSpecificOutput?.permissionDecision).toBe('allow');
+    });
+
+    it('outputPromptContext should NOT have permissionDecision', () => {
+      expect(outputPromptContext('ctx').hookSpecificOutput?.permissionDecision).toBeUndefined();
+    });
+  });
+});
+
+// =============================================================================
+// JSON SERIALIZATION TESTS
+// =============================================================================
+
+describe('JSON serialization', () => {
+  it('all output functions should produce valid JSON', () => {
+    const outputs = [
+      outputSilentSuccess(),
+      outputSuccess('test'),
+      outputWarning('test'),
+      outputDeny('test'),
+      outputAllow(),
+      outputAllowWithContext('test'),
+      outputPromptContext('test'),
+    ];
+
+    for (const output of outputs) {
+      expect(() => JSON.stringify(output)).not.toThrow();
+    }
+  });
+
+  it('JSON round-trip should preserve structure', () => {
+    const outputs = [
+      outputSilentSuccess(),
+      outputSuccess('test message'),
+      outputWarning('warning message'),
+      outputDeny('denial reason'),
+      outputAllow(),
+      outputAllowWithContext('context info'),
+      outputPromptContext('compliance context'),
+    ];
+
+    for (const output of outputs) {
+      const json = JSON.stringify(output);
+      const parsed = JSON.parse(json);
+      expect(parsed).toEqual(output);
+    }
+  });
+
+  it('should handle JSON-unsafe characters in messages', () => {
+    const problematicStrings = [
+      'Quote: "test"',
+      "Apostrophe: 'test'",
+      'Backslash: \\test\\',
+      'Newline:\ntest',
+      'Tab:\ttest',
+      'Unicode: \u0000\u001f', // Control characters
+      'Null byte: \x00',
+    ];
+
+    for (const str of problematicStrings) {
+      // These should not throw
+      expect(() => JSON.stringify(outputSuccess(str))).not.toThrow();
+      expect(() => JSON.stringify(outputWarning(str))).not.toThrow();
+      expect(() => JSON.stringify(outputDeny(str))).not.toThrow();
+      expect(() => JSON.stringify(outputAllowWithContext(str))).not.toThrow();
+    }
   });
 });
