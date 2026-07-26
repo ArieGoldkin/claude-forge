@@ -33,27 +33,67 @@ const OPT_IN_ENV_VAR = 'CONTINUITY_PHI_OUTPUT_REDACT';
 /**
  * Extract the assistant message text from MessageDisplay hook input.
  *
- * CC v2.1.152 docs are sparse on exact field naming. Try the most
- * likely fields in order: top-level `message`, `text`, then
- * `last_assistant_message` (already typed on HookInput), and fall
- * back to `tool_input.message`. Return null if no candidate found —
- * the hook then becomes a no-op.
+ * The field is `delta`. That is not a guess — it comes from a live capture of
+ * CC 2.1.220 (2026-07-25, 41 records via a temporary dumper hook). The complete
+ * payload is: session_id, transcript_path, cwd, prompt_id, hook_event_name,
+ * turn_id, message_id, index, final, delta.
+ *
+ * This function previously tried five candidate names — `message`, `text`,
+ * `assistant_message`, `last_assistant_message`, `tool_input.message` — chosen
+ * because "CC v2.1.152 docs are sparse on exact field naming". All five appear
+ * in 0 of 41 captured records, so the hook was inert for every message it ever
+ * saw, on a PHI redaction path (#54 item 2). Two independent causes stacked:
+ * normalizeInput's allowlist stripped three of the names, AND all five names
+ * were wrong. Fixing only the first would have changed nothing.
+ *
+ * CHUNKING IS ROUTINE, NOT HYPOTHETICAL. `delta` / `index` / `final` are a
+ * streaming protocol and Claude Code emits ONE EVENT PER MARKDOWN BLOCK. At 41
+ * captured records: index runs 0-9, `final` takes both values, and the largest
+ * message arrived as 10 separate events. So this hook is invoked once per
+ * paragraph of a multi-paragraph message, with no state between invocations.
+ *
+ * An earlier draft of this comment said a multi-chunk message "was never
+ * observed"; that was true of the first 22 records and false as a general
+ * claim. The reasoning behind it — "longest delta 202 chars" — mistook a
+ * sampling artifact for a bound: every message in that sample happened to be a
+ * single short paragraph. Recorded rather than quietly corrected, because the
+ * error is the same one that produced the false timeout guarantee in PR #55:
+ * a partial capture read as a complete one.
+ *
+ * At the boundaries actually OBSERVED, per-chunk scanning is safe: all 10
+ * non-final chunks ended in a blank line and 0 of the 29 single-chunk deltas
+ * contained one, and no phi-redactor pattern can span a blank line. So the
+ * worked example an earlier draft gave here ("123-45-" | "6789") is unreachable
+ * at a `\n\n` boundary.
+ *
+ * Do NOT read that as a guarantee. Claude Code's own hook documentation
+ * describes a delta as "the newly completed LINES", which does not exclude a
+ * flush on a single newline — and two patterns use a one-character separator
+ * class that `\n` satisfies: `us-phone-parens` and `credit-card-spaced`. A card
+ * number wrapped mid-number across a line, flushed as two deltas, would display
+ * in full. Not observed; not excluded by the documented contract either.
+ *
+ * THE OUTPUT SIDE WAS ALSO WRONG, and is now fixed. This hook returned
+ * `hookSpecificOutput.transformedMessage`; Claude Code reads `displayContent`
+ * and drops unknown keys, so it redacted correctly, shipped the result under a
+ * key nothing reads, and logged "Redacted N match(es)" while the original text
+ * was displayed — an audit line asserting a redaction that never happened.
+ * See `outputMessageDisplay` in lib/output.ts.
+ *
+ * SCOPE, from Claude Code's own hook documentation: "Display-only: the stored
+ * message and what the model sees are untouched." This hook cannot remove PHI
+ * from the transcript on disk, from what is sent to the API, or from /resume —
+ * it only changes what is rendered. It also fails OPEN: a non-zero exit or a
+ * timeout displays the original delta. Defense in depth, not a compliance
+ * claim, and specifically not a control on data at rest.
+ *
+ * @returns The message text, or null if absent/empty (hook becomes a no-op)
  */
 export function extractAssistantMessage(input: HookInput): string | null {
-  const record = input as unknown as Record<string, unknown>;
+  const delta = input.delta;
 
-  const candidates = [
-    record['message'],
-    record['text'],
-    record['assistant_message'],
-    input.last_assistant_message,
-    (input.tool_input as Record<string, unknown> | undefined)?.['message'],
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.length > 0) {
-      return candidate;
-    }
+  if (typeof delta === 'string' && delta.length > 0) {
+    return delta;
   }
 
   return null;

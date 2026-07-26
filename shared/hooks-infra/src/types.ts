@@ -283,6 +283,97 @@ export interface HookInput {
     /** Optional command or routine name. */
     command?: string;
   }>;
+
+  // ===========================================================================
+  // PostToolUse / PostToolUseFailure
+  //
+  // Declared here rather than in each handler. Until #54 these three lived in a
+  // local `interface X extends HookInput { … }` in four separate hook files —
+  // the very pattern that made the allowlist defect invisible, because a local
+  // declaration type-checks whether or not normalization forwards the data.
+  // All three names captured live from CC 2.1.220 (2026-07-25).
+  // ===========================================================================
+
+  /**
+   * Tool result payload, present on PostToolUse.
+   *
+   * Captured shape for a Bash call:
+   * `{ stdout, stderr, interrupted, isImage, noOutputExpected }`.
+   * Claude Code sends no `tool_output` key on any event.
+   *
+   * `exit_code` is deliberately NOT declared: it was never observed, and while
+   * it was declared, a handler gated on it and that branch never ran (#54
+   * item 4). `output` is declared because error-warner reads it defensively for
+   * non-Bash tools, but nothing gates on it either. There is no index signature
+   * here on purpose — an undeclared field should need a visible cast rather
+   * than silently type-checking as `unknown`, which is how the last four inert
+   * handlers stayed invisible.
+   */
+  tool_response?: {
+    stdout?: string;
+    stderr?: string;
+    interrupted?: boolean;
+    isImage?: boolean;
+    noOutputExpected?: boolean;
+    /** Not observed for Bash; read defensively, never gated on. */
+    output?: string;
+  };
+
+  /** Failure description, present on PostToolUseFailure. */
+  error?: string;
+
+  /** Whether the failure was a user interrupt. Present on PostToolUseFailure. */
+  is_interrupt?: boolean;
+
+  // ===========================================================================
+  // MessageDisplay (CC v2.1.152+)
+  //
+  // Captured live from CC 2.1.220 on 2026-07-25 (41 records, one key set). Payload
+  // is exactly: session_id, transcript_path, cwd, prompt_id, hook_event_name,
+  // turn_id, message_id, index, final, delta. Note what is ABSENT: `message`,
+  // `text`, `assistant_message`, `last_assistant_message` and `tool_input` were
+  // in 0 of them. phi-output-redactor guessed four of those names and was
+  // inert on every one (#54 item 2).
+  // ===========================================================================
+
+  /**
+   * The assistant message text for this MessageDisplay event.
+   *
+   * Named `delta` because the event is part of a streaming protocol — see
+   * `index` and `final`. Claude Code emits ONE EVENT PER MARKDOWN BLOCK, so a
+   * multi-paragraph message arrives as several of these with no shared state:
+   * across 41 records `index` ran 0-9 and the largest message was 10 events.
+   * Every non-final chunk ends in a blank line; no single-chunk delta contains
+   * one. A consumer needing the whole message must buffer until `final`.
+   */
+  delta?: string;
+
+  /** Chunk ordinal within a streamed message. Observed 0-9. */
+  index?: number;
+
+  /** Whether this is the last chunk. False on every chunk but the last. */
+  final?: boolean;
+
+  /** Identifier of the assistant message this event belongs to. */
+  message_id?: string;
+
+  /** Identifier of the turn this event belongs to. */
+  turn_id?: string;
+
+  /** Identifier of the user prompt that started this turn. */
+  prompt_id?: string;
+
+  /**
+   * The user's prompt text, sent at the top level by UserPromptSubmit.
+   *
+   * Declared here as well as on `UserPromptInput` so handlers can read
+   * `input.prompt` directly. hipaa-context-injector previously reached it with
+   * `(input as unknown as Record<string, unknown>)['prompt']` — a cast that
+   * type-checks for ANY name, so a typo would have been silently inert with no
+   * gate able to see it. Adversarial review of #56 found it as the live example
+   * of that shape.
+   */
+  prompt?: string;
 }
 
 /**
@@ -549,19 +640,24 @@ export interface HookSpecificOutput {
   reloadSkills?: boolean;
 
   /**
-   * MessageDisplay hook — transformed assistant message text (CC v2.1.152+).
-   * When set, replaces the original assistant message at display time.
-   * Field name is informed by the v2.1.152 CHANGELOG description; CC will
-   * silently ignore unknown fields, so this is safe to ship across versions.
+   * MessageDisplay hook — text displayed in place of the delta (CC v2.1.152+).
+   * Omit, or return the delta unchanged, to display the original. An empty
+   * string suppresses the delta; there is no separate `hide` flag.
+   *
+   * Read out of the CC 2.1.220 binary, not inferred: the MessageDisplay branch
+   * of the hookSpecificOutput schema has exactly this one field, and the
+   * dispatch code seeds its output with the original delta and overrides it
+   * only when `displayContent !== undefined`.
+   *
+   * This replaces `transformedMessage` and `hide`, which occur 0 times in the
+   * binary. Their JSDoc read: "Field name is informed by the v2.1.152 CHANGELOG
+   * description; CC will silently ignore unknown fields, so this is safe to
+   * ship across versions." Silently ignoring an unknown field is what makes a
+   * wrong name SAFE TO SHIP AND INERT — the identical reasoning error as the
+   * input-side allowlist this release removes, on the output side. It left
+   * phi-output-redactor logging redactions Claude Code never applied.
    */
-  transformedMessage?: string;
-
-  /**
-   * MessageDisplay hook — when true, hide the assistant message at display
-   * time (CC v2.1.152+). Use sparingly; prefer transformedMessage with a
-   * placeholder for transparency.
-   */
-  hide?: boolean;
+  displayContent?: string;
 }
 
 /**

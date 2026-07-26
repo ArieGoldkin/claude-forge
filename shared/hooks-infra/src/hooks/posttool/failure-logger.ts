@@ -22,16 +22,6 @@ const HOOK_NAME = 'failure-logger';
 // TYPES
 // =============================================================================
 
-/**
- * Extended hook input for PostToolUseFailure events.
- * Claude Code includes an `error` string describing the failure.
- */
-interface FailureInput extends HookInput {
-  error?: string;
-  tool_use_id?: string;
-  is_interrupt?: boolean;
-}
-
 // =============================================================================
 // KNOWN FAILURE PATTERNS
 // =============================================================================
@@ -98,8 +88,9 @@ const KNOWN_PATTERNS: FailurePattern[] = [
  * @returns HookResult — silent success or context with hint
  */
 export async function failureLogger(input: HookInput): Promise<HookResult> {
-  const failureInput = input as FailureInput;
-  const error = failureInput.error;
+  // `error` / `is_interrupt` are declared on HookInput since #54 — no local
+  // interface, which is the pattern that hid this handler's inertness.
+  const error = input.error;
 
   // No error field means nothing useful to log
   if (!error) {

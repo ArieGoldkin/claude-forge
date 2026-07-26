@@ -140,7 +140,35 @@ function outputMessageDisplay(transformedText) {
     suppressOutput: true,
     hookSpecificOutput: {
       hookEventName: "MessageDisplay",
-      transformedMessage: transformedText
+      // `displayContent`, NOT `transformedMessage`.
+      //
+      // THIS IS THE ONE LOAD-BEARING FACT IN THIS MODULE THAT NO TEST CAN
+      // VERIFY. The suite pins the key against drift — reverting it fails three
+      // phi tests — but a test can only check what we emit, never what Claude
+      // Code consumes. `transformedMessage` was wrong for a year precisely
+      // because nothing could contradict it. So here is the reproduction, not
+      // just the conclusion (a reviewer could not re-derive it: `claude` on
+      // PATH is often a shim, and the real binary is elsewhere):
+      //
+      //   B=/opt/homebrew/Caskroom/claude-code@latest/2.1.220/claude
+      //   strings -a "$B" | grep -c transformedMessage   # -> 0
+      //   strings -a "$B" | grep -c displayContent       # -> 9
+      //   strings -a "$B" | grep displayContent          # doc string + schema
+      //
+      // The doc string reads "Output JSON with hookSpecificOutput containing
+      // displayContent to replace the delta on screen"; the schema branch for
+      // MessageDisplay has exactly this one field; and the dispatch code seeds
+      // its output with the original delta, overriding only when
+      // `displayContent !== undefined`. Re-run this against a new CC before
+      // trusting it — the version is in the path.
+      //
+      // Under the old name CC dropped the key, displayed the unredacted text,
+      // and phi-output-redactor still logged "Redacted N match(es)" — an audit
+      // line asserting a redaction that never happened, which is worse than no
+      // hook. Exactly the defect this release fixes on the INPUT side (a
+      // handler reading a name CC never sends), in the opposite direction.
+      // Found by adversarial review of #56.
+      displayContent: transformedText
     }
   };
 }
@@ -261,7 +289,7 @@ function safeJsonParse(jsonString) {
     return null;
   }
   try {
-    return JSON.parse(trimmed);
+    return JSON.parse(trimmed, (key, value) => key === "__proto__" ? void 0 : value);
   } catch {
     return null;
   }
@@ -277,7 +305,7 @@ function createDefaultInput() {
   };
 }
 function normalizeInput(raw) {
-  if (!raw || typeof raw !== "object") {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return createDefaultInput();
   }
   const obj = raw;
@@ -285,55 +313,14 @@ function normalizeInput(raw) {
   let toolInput = obj["tool_input"];
   if (toolInput === void 0 || toolInput === null) {
     toolInput = {};
-  } else if (typeof toolInput !== "object") {
+  } else if (typeof toolInput !== "object" || Array.isArray(toolInput)) {
     toolInput = {};
   }
   const sessionId = typeof obj["session_id"] === "string" && obj["session_id"] ? obj["session_id"] : getDefaultSessionId();
-  const normalized = {
-    tool_name: eventName,
-    session_id: sessionId,
-    tool_input: toolInput
-  };
-  if (obj["hook_event_name"]) {
-    normalized["hook_event_name"] = obj["hook_event_name"];
-  }
-  const passThrough = [
-    "source",
-    "model",
-    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
-    // Task* additionally send task_id / task_subject / task_description.
-    // Verified against a captured live TeammateIdle payload (2026-07-25).
-    "teammate_name",
-    "team_name",
-    "task_id",
-    "task_subject",
-    "task_description",
-    // PostToolUse / PostToolUseFailure payloads. All three captured live from
-    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
-    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
-    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
-    "tool_response",
-    "error",
-    "is_interrupt",
-    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
-    // (that was the 2.8.4 finding); kept for any event that does.
-    "agent_type",
-    "agent_id",
-    "worktree_path",
-    "worktree_branch",
-    "cwd",
-    "transcript_path",
-    "permission_mode",
-    "prompt",
-    "tool_use_id",
-    "last_assistant_message",
-    "duration_ms"
-  ];
-  for (const field of passThrough) {
-    if (obj[field] !== void 0) {
-      normalized[field] = obj[field];
-    }
-  }
+  const normalized = { ...obj };
+  normalized["tool_name"] = eventName;
+  normalized["session_id"] = sessionId;
+  normalized["tool_input"] = toolInput;
   return normalized;
 }
 function isUsableInput(input) {
@@ -455,6 +442,9 @@ function getNewString(input) {
 }
 function getField(input, field) {
   const toolInput = input.tool_input;
+  if (!Object.prototype.hasOwnProperty.call(toolInput, field)) {
+    return void 0;
+  }
   const value = toolInput[field];
   return value;
 }
@@ -4004,8 +3994,7 @@ function scanForSecrets(text) {
 async function secretDetector(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
-  const extendedInput = input;
-  const toolOutput = extendedInput.tool_response;
+  const toolOutput = input.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME16, "No tool output available");
     return outputSilentSuccess();
@@ -4436,8 +4425,7 @@ async function errorWarner(input) {
   const skipped = runGuards(input, guardBash, guardHasCommand);
   if (skipped) return skipped;
   const command = getCommand(input);
-  const extendedInput = input;
-  const toolOutput = extendedInput.tool_response;
+  const toolOutput = input.tool_response;
   if (!toolOutput) {
     logDebug(HOOK_NAME21, "No tool output available");
     return outputSilentSuccess();
@@ -4447,7 +4435,7 @@ async function errorWarner(input) {
     logDebug(HOOK_NAME21, "Empty output, skipping");
     return outputSilentSuccess();
   }
-  const hasError = toolOutput.exit_code !== void 0 && toolOutput.exit_code !== 0 || outputText.includes("Error") || outputText.includes("error") || outputText.includes("FAIL") || outputText.includes("failed") || outputText.includes("Cannot") || outputText.includes("cannot") || outputText.includes("stream abort") || outputText.includes("STREAM_ABORT");
+  const hasError = outputText.includes("Error") || outputText.includes("error") || outputText.includes("FAIL") || outputText.includes("failed") || outputText.includes("Cannot") || outputText.includes("cannot") || outputText.includes("stream abort") || outputText.includes("STREAM_ABORT");
   if (!hasError) {
     logDebug(HOOK_NAME21, "No error indicators found");
     return outputSilentSuccess();
@@ -4506,8 +4494,7 @@ var KNOWN_PATTERNS = [
   }
 ];
 async function failureLogger(input) {
-  const failureInput = input;
-  const error = failureInput.error;
+  const error = input.error;
   if (!error) {
     return outputSilentSuccess();
   }
@@ -5591,7 +5578,7 @@ var CONTEXT_RULES = [
   }
 ];
 function extractPrompt(input) {
-  const topLevel = input["prompt"];
+  const topLevel = input.prompt;
   if (typeof topLevel === "string" && topLevel.length > 0) {
     return topLevel;
   }
@@ -5635,6 +5622,22 @@ async function hipaaContextInjector(input) {
 }
 
 // src/lib/phi-redactor.ts
+function luhn(value) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 13 || digits.length > 19) return false;
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48;
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+    double = !double;
+  }
+  return sum % 10 === 0;
+}
 var DEFAULT_PHI_PATTERNS = [
   {
     id: "ssn-dashed",
@@ -5657,12 +5660,26 @@ var DEFAULT_PHI_PATTERNS = [
   },
   {
     id: "credit-card-spaced",
-    // #### #### #### #### (Visa/MC/Discover formatting)
+    // #### #### #### #### (Visa/MC/Discover formatting), Luhn-gated so that
+    // grouped non-card numbers (build ids, key fragments) are left alone.
     regex: /\b\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4}\b/g,
-    replacement: "[CC-REDACTED]"
+    replacement: "[CC-REDACTED]",
+    validate: luhn
+  },
+  {
+    id: "credit-card-plain",
+    // 13-19 unseparated digits. Only safe to include BECAUSE of the Luhn gate —
+    // without it this would match most long numeric ids. Closes a recall gap:
+    // a pasted card is at least as likely to arrive unformatted as formatted.
+    regex: /\b\d{13,19}\b/g,
+    replacement: "[CC-REDACTED]",
+    validate: luhn
   }
 ];
 function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
+  if (typeof text !== "string") {
+    return { text: "", matchedPatterns: [], totalSubstitutions: 0 };
+  }
   if (!text) {
     return { text, matchedPatterns: [], totalSubstitutions: 0 };
   }
@@ -5671,12 +5688,18 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
   let current = text;
   for (const pattern of patterns) {
     pattern.regex.lastIndex = 0;
-    const matches = current.match(pattern.regex);
-    if (matches && matches.length > 0) {
+    let substitutions = 0;
+    const next = current.replace(pattern.regex, (match) => {
+      if (pattern.validate && !pattern.validate(match)) {
+        return match;
+      }
+      substitutions++;
+      return pattern.replacement;
+    });
+    if (substitutions > 0) {
       matchedPatterns.push(pattern.id);
-      totalSubstitutions += matches.length;
-      pattern.regex.lastIndex = 0;
-      current = current.replace(pattern.regex, pattern.replacement);
+      totalSubstitutions += substitutions;
+      current = next;
     }
   }
   return { text: current, matchedPatterns, totalSubstitutions };
@@ -5686,18 +5709,9 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
 var HOOK_NAME39 = "phi-output-redactor";
 var OPT_IN_ENV_VAR = "CONTINUITY_PHI_OUTPUT_REDACT";
 function extractAssistantMessage(input) {
-  const record = input;
-  const candidates = [
-    record["message"],
-    record["text"],
-    record["assistant_message"],
-    input.last_assistant_message,
-    input.tool_input?.["message"]
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
+  const delta = input.delta;
+  if (typeof delta === "string" && delta.length > 0) {
+    return delta;
   }
   return null;
 }

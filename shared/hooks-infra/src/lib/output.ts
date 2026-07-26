@@ -403,7 +403,35 @@ export function outputMessageDisplay(transformedText: string): HookResult {
     suppressOutput: true,
     hookSpecificOutput: {
       hookEventName: 'MessageDisplay',
-      transformedMessage: transformedText,
+      // `displayContent`, NOT `transformedMessage`.
+      //
+      // THIS IS THE ONE LOAD-BEARING FACT IN THIS MODULE THAT NO TEST CAN
+      // VERIFY. The suite pins the key against drift — reverting it fails three
+      // phi tests — but a test can only check what we emit, never what Claude
+      // Code consumes. `transformedMessage` was wrong for a year precisely
+      // because nothing could contradict it. So here is the reproduction, not
+      // just the conclusion (a reviewer could not re-derive it: `claude` on
+      // PATH is often a shim, and the real binary is elsewhere):
+      //
+      //   B=/opt/homebrew/Caskroom/claude-code@latest/2.1.220/claude
+      //   strings -a "$B" | grep -c transformedMessage   # -> 0
+      //   strings -a "$B" | grep -c displayContent       # -> 9
+      //   strings -a "$B" | grep displayContent          # doc string + schema
+      //
+      // The doc string reads "Output JSON with hookSpecificOutput containing
+      // displayContent to replace the delta on screen"; the schema branch for
+      // MessageDisplay has exactly this one field; and the dispatch code seeds
+      // its output with the original delta, overriding only when
+      // `displayContent !== undefined`. Re-run this against a new CC before
+      // trusting it — the version is in the path.
+      //
+      // Under the old name CC dropped the key, displayed the unredacted text,
+      // and phi-output-redactor still logged "Redacted N match(es)" — an audit
+      // line asserting a redaction that never happened, which is worse than no
+      // hook. Exactly the defect this release fixes on the INPUT side (a
+      // handler reading a name CC never sends), in the opposite direction.
+      // Found by adversarial review of #56.
+      displayContent: transformedText,
     },
   };
 }
@@ -420,14 +448,14 @@ export function outputMessageDisplay(transformedText: string): HookResult {
  * @returns HookResult with hide directive
  */
 export function outputMessageDisplayHide(): HookResult {
-  return {
-    continue: true,
-    suppressOutput: true,
-    hookSpecificOutput: {
-      hookEventName: 'MessageDisplay',
-      hide: true,
-    },
-  };
+  // Suppression is an EMPTY `displayContent`, not a `hide` flag. The
+  // MessageDisplay branch of CC 2.1.220's hookSpecificOutput schema has exactly
+  // one field; `hide` occurs nowhere in the binary and the dispatch code has no
+  // handling for it. The previous implementation returned `{ hide: true }`, so
+  // any caller believing it had suppressed a message displayed it in full.
+  // Never reached by phi-output-redactor, but shipped. Found by adversarial
+  // review of #56.
+  return outputMessageDisplay('');
 }
 
 /**

@@ -118,7 +118,19 @@ function safeJsonParse(jsonString: string): unknown {
   }
 
   try {
-    return JSON.parse(trimmed);
+    // The reviver drops `__proto__` at EVERY depth. Returning undefined from a
+    // reviver deletes the property, so no object anywhere in the parsed tree
+    // keeps a `__proto__` own key.
+    //
+    // Scrubbing only the top level (which is what normalizeInput does) is not
+    // enough: `tool_input`, `tool_response` and any other nested object are
+    // forwarded by reference straight from the parse, so a poisoned key on one
+    // of them survives — and round-trips through `JSON.stringify`, landing in
+    // any file a hook writes. Nothing in this repo copies those objects with
+    // [[Set]] semantics today (no Object.assign, no per-key merge), so that was
+    // latent rather than live, but the normalizer should hand handlers a clean
+    // object rather than a loaded one. Found by adversarial review of #56.
+    return JSON.parse(trimmed, (key, value) => (key === '__proto__' ? undefined : value));
   } catch {
     return null;
   }
@@ -160,11 +172,20 @@ function createDefaultInput(): HookInput {
  *
  * This function normalizes both formats to a consistent HookInput.
  *
+ * Every other top-level field is forwarded verbatim. `HookInput` therefore
+ * describes the fields we have *documented*, not the fields a handler can
+ * reach — a handler may read a field the type does not declare and get real
+ * data. Prefer adding it to `HookInput` so the next author finds it.
+ *
  * @param raw - Raw parsed object from stdin
  * @returns Normalized HookInput
  */
 function normalizeInput(raw: unknown): HookInput {
-  if (!raw || typeof raw !== 'object') {
+  // `typeof [] === 'object'`, so an array payload used to pass this guard and
+  // get spread into `{"0":…,"1":…}` — a "valid" HookInput built from junk, and
+  // one own property per element for a large array. A hook payload is always a
+  // JSON object; anything else is malformed input and takes the default path.
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return createDefaultInput();
   }
 
@@ -174,11 +195,14 @@ function normalizeInput(raw: unknown): HookInput {
   // Priority: tool_name > hook_event_name (for compatibility)
   const eventName = (obj['tool_name'] || obj['hook_event_name'] || '') as string;
 
-  // Get tool_input, defaulting to empty object for lifecycle events
+  // Get tool_input, defaulting to empty object for lifecycle events.
+  // Arrays are rejected for the same reason as an array payload above: the
+  // coercion admitted them (`typeof [] === 'object'`), so `input.tool_input`
+  // could be `["command","ls"]` while isUsableInput still returned true.
   let toolInput = obj['tool_input'];
   if (toolInput === undefined || toolInput === null) {
     toolInput = {};
-  } else if (typeof toolInput !== 'object') {
+  } else if (typeof toolInput !== 'object' || Array.isArray(toolInput)) {
     toolInput = {};
   }
 
@@ -188,66 +212,46 @@ function normalizeInput(raw: unknown): HookInput {
       ? obj['session_id']
       : getDefaultSessionId();
 
-  // Build normalized input
-  const normalized: HookInput = {
-    tool_name: eventName as ToolName,
-    session_id: sessionId,
-    tool_input: toolInput as ToolInput,
-  };
-
-  // Preserve hook_event_name for lifecycle events (in case handlers need it)
-  if (obj['hook_event_name']) {
-    (normalized as unknown as Record<string, unknown>)['hook_event_name'] = obj['hook_event_name'];
-  }
-
-  // Pass through other common fields from Claude Code.
+  // FORWARD EVERY FIELD CLAUDE CODE SENT. This is a DENYLIST, not an allowlist.
   //
-  // IMPORTANT: this is an ALLOWLIST — any field absent here is silently dropped
-  // before handlers ever see it. A handler that reads a field missing from this
-  // list is inert, and fails as a plausible-looking default rather than an error.
-  // ctk 2.8.4 shipped exactly that bug: the agent-team lifecycle handlers were
-  // corrected to read `teammate_name`/`team_name`, but those names were not added
-  // here, so they were stripped and every idle still logged "unknown". When adding
-  // a field read to any handler, add it here too and cover it end-to-end.
-  const passThrough = [
-    'source',
-    'model',
-    // Agent-team lifecycle: TeammateIdle sends teammate_name + team_name;
-    // Task* additionally send task_id / task_subject / task_description.
-    // Verified against a captured live TeammateIdle payload (2026-07-25).
-    'teammate_name',
-    'team_name',
-    'task_id',
-    'task_subject',
-    'task_description',
-    // PostToolUse / PostToolUseFailure payloads. All three captured live from
-    // CC 2.1.220 (2026-07-25): PostToolUse sends `tool_response`;
-    // PostToolUseFailure sends `error` + `is_interrupt`. Neither sends
-    // `tool_output` -- three handlers read that non-existent key until 2.9.0.
-    'tool_response',
-    'error',
-    'is_interrupt',
-    // Legacy/other event names. CC does NOT send these for TeammateIdle or Task*
-    // (that was the 2.8.4 finding); kept for any event that does.
-    'agent_type',
-    'agent_id',
-    'worktree_path',
-    'worktree_branch',
-    'cwd',
-    'transcript_path',
-    'permission_mode',
-    'prompt',
-    'tool_use_id',
-    'last_assistant_message',
-    'duration_ms',
-  ];
-  for (const field of passThrough) {
-    if (obj[field] !== undefined) {
-      (normalized as unknown as Record<string, unknown>)[field] = obj[field];
-    }
-  }
+  // Until ctk 2.9.0 this function rebuilt the input from a fixed `passThrough`
+  // allowlist, so any field not named there was silently deleted before handlers
+  // ran. A handler reading a dropped field is INERT and fails as a plausible
+  // default (`f || 'unknown'`, `if (!f) return`) rather than an error — invisible
+  // to the type checker, because each such handler declared its own
+  // `interface X extends HookInput { f }` that made the read compile while
+  // normalization removed the data. That shipped three times across seven
+  // handlers (2.8.4 agent-team, 2.9.0 secret-detector / error-warner /
+  // bash-output-measurer / failure-logger), and 2.9.0's parser-based guard was
+  // defeated by six ordinary syntaxes because it matched declaration form.
+  //
+  // The allowlist enforced no security boundary — it is Claude Code's own
+  // payload either way — so it bought nothing and cost silent data loss. Only
+  // normalizeInput can end a defect caused by normalizeInput dropping data.
+  //
+  // PROTOTYPE SAFETY LIVES IN `safeJsonParse`, NOT HERE. Its reviver drops
+  // `__proto__` at every depth, so `obj` cannot carry the key at all and this
+  // copy cannot reintroduce it — spread or per-key assignment would both be
+  // safe now.
+  //
+  // This function briefly had its own `Reflect.deleteProperty(normalized,
+  // '__proto__')` backstop. It is gone because it became UNFALSIFIABLE once the
+  // reviver landed: deleting the line left every test green (measured, not
+  // assumed). Keeping it would have been a dead gate that reads as load-bearing
+  // — the same defect this release removes from error-warner, and it would have
+  // been the third test title over what is really one assertion. The reviver is
+  // covered by its own must-fail control.
+  const normalized = { ...obj } as Record<string, unknown>;
 
-  return normalized;
+  // The three normalized fields win over whatever the raw payload carried:
+  // tool_name absorbs hook_event_name, session_id falls back to the environment,
+  // and tool_input is coerced to an object. `hook_event_name` itself is now
+  // forwarded by the spread above, unconditionally rather than only when truthy.
+  normalized['tool_name'] = eventName;
+  normalized['session_id'] = sessionId;
+  normalized['tool_input'] = toolInput;
+
+  return normalized as unknown as HookInput;
 }
 
 /**
@@ -649,6 +653,15 @@ export function getField<T = unknown>(
   field: keyof ToolInput | string
 ): T | undefined {
   const toolInput = input.tool_input;
+  // Own properties only. A bare `toolInput[field]` resolves through the
+  // prototype chain, so `getField(input, 'constructor')` returned a truthy
+  // native function even for an empty tool_input — making `if (getField(input,
+  // name))` true for names the payload never sent. Latent (every in-repo call
+  // site passes a literal), but forwarding-everything makes "what can reach a
+  // handler" the load-bearing question. Found by adversarial review of #56.
+  if (!Object.prototype.hasOwnProperty.call(toolInput, field)) {
+    return undefined;
+  }
   const value = toolInput[field as keyof ToolInput];
   return value as T | undefined;
 }

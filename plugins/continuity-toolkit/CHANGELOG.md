@@ -2,6 +2,146 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.10.0] - 2026-07-25 — the allowlist is gone; a fifth inert handler was inert twice over
+
+`dist` is rebuilt (shared library + hook source changed).
+
+Closes the defect class that produced 2.8.4, 2.8.5 and 2.9.0. Each of those
+releases fixed the *instances* — a handler reading a field the normalizer had
+already deleted — by adding names to an allowlist. This removes the allowlist.
+
+### Changed — `normalizeInput` forwards instead of allowlisting
+
+- **`lib/input.ts` now forwards every top-level field Claude Code sends** and
+  denies exactly one (`__proto__`). Previously it rebuilt the input from a fixed
+  `passThrough` array, so any field not named there was silently deleted before
+  handlers ran. A handler reading a dropped field was **inert** and degraded to a
+  plausible default (`f || 'unknown'`, `if (!f) return`) rather than erroring —
+  invisible to the type checker, because each such handler declared its own
+  `interface X extends HookInput { f }`.
+- The allowlist enforced no security boundary; it is Claude Code's own payload
+  either way. It bought nothing and cost silent data loss.
+- 2.9.0's structural guard is **replaced**. It parsed one declaration syntax and
+  the review of #53 defeated it with six ordinary ones (type alias, second base
+  type, indirect base, inline cast, bracket access, destructuring). Its
+  replacement, `tests/lib/input-field-forwarding.test.ts`, asserts behaviour
+  through `parseHookInput`, so no syntax can evade the forwarding checks.
+- **But forwarding does not close the whole class, and an earlier draft of this
+  entry wrongly implied it did.** The defect has two halves: (a) the normalizer
+  drops a field the handler reads, and (b) the handler reads a name Claude Code
+  never sends. Forwarding fixes (a) only. 2.9.0's own defect — three handlers
+  reading `tool_output` — is (b), and under a denylist `tool_output` is forwarded
+  happily while the handler stays inert. The old guard caught that as a
+  side-effect of checking declared names against a capture-curated allowlist.
+  Two things now cover (b) instead, and between them they are stricter:
+  - **The compiler.** With every local `interface X extends HookInput` deleted
+    and no index signature on `HookInput`, a handler reading `input.tool_output`
+    is a build error (`TS2339`), not a silent `undefined`.
+  - **A one-rule guard** asserting no hook source re-declares `HookInput`
+    locally — the form in which all seven historical instances were written, and
+    the one path the compiler cannot see. Add the field to `HookInput` instead,
+    next to the capture that justifies it.
+- **Prototype-pollution guard, at parse time.** Forwarding introduces a vector
+  the allowlist was safe from by accident: a payload carrying `__proto__` under a
+  per-key assignment loop swaps the object's prototype and injects fields a
+  handler then reads (verified — `input.injected` reads `PWNED`). `safeJsonParse`
+  now uses a `JSON.parse` reviver that drops `__proto__` at **every depth**.
+  - A first cut scrubbed only the top level. Adversarial review showed that left
+    every **nested** object — `tool_input`, `tool_response` — holding an own
+    `__proto__` data property forwarded straight from the parse, which
+    round-trips through `JSON.stringify` into any file a hook writes. Latent
+    rather than live (nothing in-repo copies those with `[[Set]]` semantics), but
+    the normalizer should hand handlers a clean object.
+  - An array payload (`[1,2,3]`) used to pass the object guard and spread into
+    `{"0":…,"1":…}` — a "valid" `HookInput` built from junk, one own property per
+    element. Now rejected, as is an array `tool_input`.
+  - `getField()` resolved through the prototype chain, so
+    `getField(input, 'constructor')` returned a truthy native function for an
+    empty `tool_input`. Own-property check added.
+
+### Fixed — `phi-output-redactor` was inert for two independent reasons
+
+- **The field is `delta`.** Captured live from CC 2.1.220 (41 records, one key
+  set across all of them, temporary
+  dumper hook). The full MessageDisplay payload is `session_id`,
+  `transcript_path`, `cwd`, `prompt_id`, `hook_event_name`, `turn_id`,
+  `message_id`, `index`, `final`, `delta`.
+- The handler tried five candidate names — `message`, `text`,
+  `assistant_message`, `last_assistant_message`, `tool_input.message` — chosen
+  because "docs are sparse on exact field naming". **All five appear in 0 of them.** So the allowlist stripped three of them *and* every name
+  was wrong: fixing only the normalizer would have changed nothing. This is a
+  PHI redaction path, opt-in via `CONTINUITY_PHI_OUTPUT_REDACT=1`.
+- Its test suite was fully green throughout, because every test built a
+  `HookInput` by hand and asserted a shape that does not exist. The tests now
+  drive raw captured JSON through `parseHookInput`.
+- **Chunking is routine.** `delta`/`index`/`final` are a streaming protocol and
+  CC emits **one event per markdown block** — across 41 records `index` ran 0-9
+  and the largest message arrived as 10 separate events. The hook is invoked once
+  per paragraph, with no state between invocations.
+  - At every boundary OBSERVED, per-chunk scanning is safe: all non-final chunks
+    ended in a blank line, no single-chunk delta contained one, and no
+    phi-redactor pattern can span a blank line. Not a guarantee, though — CC's
+    own doc calls a delta "the newly completed **lines**", which does not exclude
+    a single-newline flush, and two patterns (`us-phone-parens`,
+    `credit-card-spaced`) use a one-character separator class that `\n`
+    satisfies. A card wrapped mid-number across a line would display in full.
+  - **The output side was wrong too — see below.** It is now fixed and verified
+    end-to-end, not merely asserted.
+  - An earlier draft of this entry called chunking unobserved and reasoned from
+    "longest delta 202 chars". That was a sampling artifact: the first 22 records
+    were all single short paragraphs. Caught by adversarial review; recorded
+    rather than quietly corrected, because it is the same partial-capture error
+    that produced the false timeout guarantee in PR #55.
+
+### Changed — redaction quality (all from adversarial review)
+
+- **Credit-card patterns are now Luhn-gated**, and a `validate` hook on
+  `PhiPattern` provides the mechanism. A grouped non-card number
+  (`build 1234-5678-9012-3456`) is no longer redacted. This is a filter, not a
+  proof — roughly 1 grouped 16-digit number in 10 passes Luhn by chance, and a
+  test pins that honestly rather than claiming precision the gate cannot give.
+- **New `credit-card-plain` pattern** for 13-19 unseparated digits, closing a
+  recall gap (a pasted card is at least as likely to arrive unformatted). Only
+  safe *because* of the Luhn gate.
+- `totalSubstitutions` now counts substitutions **actually applied**, not regex
+  matches. With a `validate` veto the two differ, and the count feeds the hook's
+  `Redacted N match(es)` log line — reporting vetoed matches would assert
+  redactions that never happened, the same class as the `displayContent` defect.
+- **`redactPhi` fails closed on non-string input.** It threw
+  `current.match is not a function` for a number/object/array, and returned
+  `{ text: null }` for null — a value its own `text: string` type says cannot
+  exist. Unusable input now yields empty text, never the uninspected original.
+- **The module's "very low false-positive rates" claim was false and is
+  corrected in place.** `commits 100-200-3000` → `[PHONE-REDACTED]` and
+  `build 123-45-6789` → `[SSN-REDACTED]`; nothing in a regex separates those
+  from the real thing. Documented with the reasoning: a false positive costs
+  confusion on a display-only transform, a false negative costs unredacted PHI
+  on screen, and the bias is deliberate.
+
+### Fixed — dead code that looked load-bearing
+
+- `error-warner` gated on `tool_response.exit_code`, which the captured Bash
+  payload does not carry, so that branch never ran and detection always rested
+  entirely on the substring heuristics after it. Removed, with the reason
+  recorded inline. Its test asserted `output` + `exit_code` — two fields CC never
+  sends — and passed identically with both stripped.
+
+### Changed — shared types absorb what handlers were re-declaring
+
+- `tool_response`, `error` and `is_interrupt` move onto `HookInput`. Four
+  handlers each carried a local `interface X extends HookInput` for them — the
+  exact pattern that made the original defect invisible. All four local
+  interfaces are gone.
+- `HookInput` gains the captured MessageDisplay fields (`delta`, `index`,
+  `final`, `message_id`, `turn_id`, `prompt_id`).
+- `effort`, `background_tasks` and `session_crons` were declared on `HookInput`
+  but were never in the allowlist, so a handler following types.ts's own advice
+  ("Stop hooks observing a non-empty array should NOT deregister session state")
+  would have read an empty value. They now arrive.
+- `tool_response` deliberately has **no index signature** and does not declare
+  `exit_code`: an undeclared field should require a visible cast rather than
+  silently type-check as `unknown`.
+
 ## [2.9.0] - 2026-07-25 — four more handlers were inert, including a security control; plus a structural guard so the class stops recurring
 
 `dist` is rebuilt (shared library + hook source changed).
