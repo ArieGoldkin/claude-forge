@@ -129,7 +129,21 @@ denied shapes are the natural first moves. Tracked as #65.
 - Metrics from `tools/adw-metrics/measure-run.mjs`, whose window filter is verified by a crippled-copy
   control (removing the window comparison makes its self-test exit 1 with Control A failing 4/4).
 - The fix's correctness rests on 6643 passing tests **plus** a must-fail control (reverting one side
-  of the change kills 38 tests), not on a green suite alone.
-- **AC2 is only partially met.** It requires an adversarial-verifier pass on the returned fix. PR #70
-  received one (5 claims, 2 refuted); **PR #72 did not** — it was merged without an independent pass.
-  That gate is owed, not waived.
+  of the change kills 38 tests), not on a green suite alone — **but that control covers only the code
+  half.** The documentation edit, which the fix itself argues is the more important half, has **zero**
+  coverage: corrupting the documented variable name leaves atk (765), shared (1217) and
+  `validate-versions.sh` all at exit 0. Tracked as #74.
+- **AC2 is now met, and the pass refuted three of five claims.** PR #70's review refuted 2 of 5;
+  **PR #72's refuted 3 of 5** — two MAJOR:
+  - *the change is tested* — REFUTED, per the line above;
+  - *"Option 3 is not needed"* — REFUTED. A **second, independent** derivation of the env var exists
+    at `shared/hooks-infra/src/types.ts:1070` (`getHookEnvironment`), public API in all five plugins,
+    with zero test references. The decision was taken against one of two sites (#74).
+  - *no log relocation* — REFUTED **as stated**, right answer via wrong reasoning. No regression
+    shipped, because `0c35a2c` touches no wrapper. The correct invariant is: **the production log
+    directory is safe iff `run-hook-wrapper.sh` is unchanged**, *not* because `CLAUDE_PLUGIN_DATA`
+    takes precedence. This matters — the wrong reason would have cleared the dangerous variant of
+    this fix, where the wrappers change to match the tests and real users' logs move (#75).
+- **Pattern worth carrying into Phase 2**: all three refutations were absence-or-coverage claims made
+  from reading a single file. That failure mode has now cost four claims across two reviews. Any
+  claim of the form "X does not exist" or "X is covered" needs a system-wide search before it ships.
