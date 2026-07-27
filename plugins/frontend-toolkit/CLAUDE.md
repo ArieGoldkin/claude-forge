@@ -1,7 +1,7 @@
 # ftk — Frontend Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: ftk (formerly `frontend-toolkit`, renamed in v2.0.0)
-> **Version**: 2.3.10
+> **Version**: 2.3.11
 
 ## Overview
 
@@ -29,5 +29,5 @@ npm run lint
 ## Environment Variables
 
 - `CLAUDE_PLUGIN_NAME` - Set to "frontend" by run-hook-wrapper.sh (used for log-dir naming; kept short, unchanged by the ftk rename)
-- `FRONTEND_TOOLKIT_LOG_LEVEL` - Log level: debug|info|warn|error (default: warn)
+- `FRONTEND_LOG_LEVEL` - Log level: debug|info|warn|error (default: warn)
 - `STITCH_API_KEY` - Google Stitch API key (via 1Password, required for /stitch skill)

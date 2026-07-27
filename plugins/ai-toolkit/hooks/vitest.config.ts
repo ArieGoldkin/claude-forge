@@ -8,7 +8,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     env: {
-      CLAUDE_PLUGIN_NAME: 'ai-toolkit',
+      CLAUDE_PLUGIN_NAME: 'ai',
     },
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
