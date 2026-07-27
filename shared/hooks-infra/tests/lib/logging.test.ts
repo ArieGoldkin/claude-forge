@@ -55,13 +55,24 @@ import type { PermissionLogEntry } from '../../src/types.js';
  * Adding a plugin? Add its directory here. The throw is deliberate: an unmapped
  * tree should stop the suite, not fall back to a guess.
  *
- * KNOWN DRIFT (#63): `ai-toolkit` and `frontend-toolkit` run their tests
- * under `ai-toolkit`/`frontend-toolkit`, but their run-hook-wrapper.sh exports
- * `ai`/`frontend` in production. The values below are what the TEST trees
- * actually set, so they are recorded as-is rather than aspirationally — do not
- * "fix" them here without changing the wrappers, or the suites will fail. Note
- * also that a hyphenated name yields a log-level env var that is not a valid
- * shell identifier, which is further evidence these two are unintended.
+ * DRIFT RESOLVED (#63, 2026-07-27). `ai-toolkit` and `frontend-toolkit` used to
+ * test under `ai-toolkit`/`frontend-toolkit` while their wrappers exported
+ * `ai`/`frontend`, so this table recorded the TEST values with a drift note. The
+ * vitest configs now set the production names and the table states them, so all
+ * five trees are self-consistent again.
+ *
+ * What the investigation found, and why the fix was larger than the issue's
+ * recommended option: there were THREE names per plugin, not two. Each CLAUDE.md
+ * documented a THIRD form (`AI_TOOLKIT_LOG_LEVEL`, `FRONTEND_TOOLKIT_LOG_LEVEL`)
+ * that matched neither production nor the tests — and the docs are what users
+ * follow. Measured: those documented names appeared in ZERO files repo-wide,
+ * against 17/8/7 for the three plugins whose names never drifted. Aligning the
+ * tests alone would have left users exporting a variable nothing reads, so the
+ * docs were corrected in the same change.
+ *
+ * Deriving the env var separately from the directory was considered and is NOT
+ * needed: `ai`/`frontend` are already valid shell identifiers. The invalid-
+ * identifier problem existed only in the hyphenated test identity removed here.
  */
 interface TreeIdentity {
   /** Expected CLAUDE_PLUGIN_NAME for this tree. */
@@ -89,14 +100,14 @@ const IDENTITY_BY_TREE: Record<string, TreeIdentity> = {
     logDirName: 'devops',
   },
   'ai-toolkit/hooks': {
-    pluginName: 'ai-toolkit',
-    logLevelEnv: 'AI-TOOLKIT_LOG_LEVEL',
-    logDirName: 'ai-toolkit',
+    pluginName: 'ai',
+    logLevelEnv: 'AI_LOG_LEVEL',
+    logDirName: 'ai',
   },
   'frontend-toolkit/hooks': {
-    pluginName: 'frontend-toolkit',
-    logLevelEnv: 'FRONTEND-TOOLKIT_LOG_LEVEL',
-    logDirName: 'frontend-toolkit',
+    pluginName: 'frontend',
+    logLevelEnv: 'FRONTEND_LOG_LEVEL',
+    logDirName: 'frontend',
   },
   'engineering-toolkit/hooks': {
     pluginName: 'engineering',

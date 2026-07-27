@@ -8,7 +8,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     env: {
-      CLAUDE_PLUGIN_NAME: 'frontend-toolkit',
+      CLAUDE_PLUGIN_NAME: 'frontend',
     },
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],

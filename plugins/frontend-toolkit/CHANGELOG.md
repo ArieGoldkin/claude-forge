@@ -2,6 +2,22 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.11] - 2026-07-27 — the documented log-level variable was a third name that nothing read
+
+Docs + test config. No skill, agent, command or hook behaviour changed.
+
+### Fixed
+
+**`FRONTEND_TOOLKIT_LOG_LEVEL` → `FRONTEND_LOG_LEVEL` in `CLAUDE.md`, and the test identity aligned to production** (closes #63 for ftk).
+
+Issue #63 reported two disagreeing names — production (`frontend`, via `run-hook-wrapper.sh`) versus tests (`frontend-toolkit`, via `vitest.config.ts`). Investigation found a **third**: `CLAUDE.md` documented `FRONTEND_TOOLKIT_LOG_LEVEL`, matching neither. Since `logging.ts:122` builds the variable as `${CLAUDE_PLUGIN_NAME.toUpperCase()}_LOG_LEVEL`, production reads `FRONTEND_LOG_LEVEL` — so a user following the documentation exported a variable **nothing has ever read**.
+
+Measured, not assumed: `FRONTEND_LOG_LEVEL` appeared in **0** files repo-wide, against 17 / 8 / 7 for `CONTINUITY_` / `ENGINEERING_` / `DEVOPS_LOG_LEVEL` — the three plugins whose names never drifted.
+
+`vitest.config.ts` now sets `frontend`, so the suite verifies the identity users actually get. The issue's recommended option covered only that half; correcting the docs was added because aligning the tests alone would have left the documented control dead.
+
+Deriving the env var separately from the log directory was considered and rejected — `frontend` is already a valid shell identifier, and the invalid-identifier problem existed only in the hyphenated test-only name now removed.
+
 ## [2.3.10] - 2026-07-09 — prune dead session-loader.ts (cross-fork adoption)
 
 ### Removed
