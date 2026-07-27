@@ -5,5 +5,5 @@
 ## Environment
 
 ```bash
-XTK_LOG_LEVEL           # Log level: debug|info|warn|error (default: warn)
+X-TOOLKIT_LOG_LEVEL           # Log level: debug|info|warn|error (default: warn)
 ```

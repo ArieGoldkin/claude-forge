@@ -20,7 +20,14 @@ import {
   getCurrentLedgerPath,
 } from '../lib/continuity.js';
 import { getProviderInfo } from '../lib/input.js';
-import { logDebug, logError, logInfo, logWarn } from '../lib/logging.js';
+import {
+  DEFAULT_LOG_LEVEL,
+  logDebug,
+  logError,
+  logInfo,
+  logLevelEnvVarName,
+  logWarn,
+} from '../lib/logging.js';
 import { outputSuccess } from '../lib/output.js';
 import type { HookInput, HookResult, SharedContext } from '../types.js';
 
@@ -227,8 +234,13 @@ function writeEnvFile(projectDir: string): void {
   try {
     const lines: string[] = [];
 
-    if (!process.env['ENGINEERING_LOG_LEVEL']) {
-      lines.push(`export ENGINEERING_LOG_LEVEL=${shellEscape('warn')}`);
+    // Derived, not hardcoded — see the matching note in ctk's session-loader.
+    // This copy is not currently bundled (etk does not register this hook), so
+    // it was dormant rather than shipped; fixed together so registering it later
+    // cannot silently reintroduce the drift. #74.
+    const logLevelVar = logLevelEnvVarName();
+    if (!process.env[logLevelVar]) {
+      lines.push(`export ${logLevelVar}=${shellEscape(DEFAULT_LOG_LEVEL)}`);
     }
 
     if (!process.env['CLAUDE_PROJECT_DIR'] && projectDir !== '.') {

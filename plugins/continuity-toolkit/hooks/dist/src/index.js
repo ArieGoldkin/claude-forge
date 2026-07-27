@@ -1807,8 +1807,9 @@ function writeEnvFile(projectDir) {
   }
   try {
     const lines = [];
-    if (!process.env["CONTINUITY_LOG_LEVEL"]) {
-      lines.push(`export CONTINUITY_LOG_LEVEL=${shellEscape("warn")}`);
+    const logLevelVar = logLevelEnvVarName();
+    if (!process.env[logLevelVar]) {
+      lines.push(`export ${logLevelVar}=${shellEscape(DEFAULT_LOG_LEVEL)}`);
     }
     if (!process.env["CLAUDE_PROJECT_DIR"] && projectDir !== ".") {
       lines.push(`export CLAUDE_PROJECT_DIR=${shellEscape(projectDir)}`);

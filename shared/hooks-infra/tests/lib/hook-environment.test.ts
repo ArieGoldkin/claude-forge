@@ -10,18 +10,34 @@
  * lower-cased nor validated the value, so `<PLUGIN>_LOG_LEVEL=BOGUS` returned
  * `'BOGUS'` typed as a LogLevel while the logger fell back to 'warn'.
  *
- * This suite is deliberately IDENTITY-INDEPENDENT. logging.test.ts is
- * parameterised by tree (six identities off one file) because the logger
- * captures CLAUDE_PLUGIN_NAME at module load. getHookEnvironment() reads it at
- * CALL time, so these tests can set the name themselves and assert the same
- * expectations in all six trees. The one place the tree's own identity is used
- * (the no-argument default) reads it from process.env rather than a table, so
- * this file needs no per-tree mapping.
+ * This suite is IDENTITY-INDEPENDENT IN OUTCOME — the same assertions pass in
+ * all six trees, so it needs no per-tree mapping table (logging.test.ts has one
+ * because the logger captures CLAUDE_PLUGIN_NAME at module load, while
+ * getHookEnvironment() reads it at call time).
+ *
+ * It is NOT identity-independent in DETECTION POWER, and that distinction is
+ * load-bearing. The no-argument default tests below can only distinguish a
+ * hardcoded default from the real captured name in a tree whose name differs
+ * from the hardcoded one: mutating the default to `'plugin'` is an EQUIVALENT
+ * MUTANT in shared/hooks-infra (which runs as 'plugin') while going red in every
+ * plugin tree. Consequence: the CI `shared-tests` job alone cannot catch that
+ * regression — only the per-plugin matrix can. Do not "simplify" CI on the
+ * assumption that the shared run covers this file.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getPluginName, logLevelEnvVarName, resolveLogLevel } from '../../src/lib/logging.js';
 import { getHookEnvironment } from '../../src/types.js';
+
+/**
+ * The plugin name as it stood when the modules under test were imported.
+ *
+ * Captured at file scope, before any test mutates the environment, so it equals
+ * the value lib/logging.ts captured into its module-level PLUGIN_NAME. This is
+ * what lets the load-time-capture test below assert the invariant without
+ * hardcoding a per-tree table.
+ */
+const LOAD_TIME_PLUGIN_NAME = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
 
 /** Every environment variable this suite touches, saved and restored verbatim. */
 const MANAGED_VARS = [
@@ -109,6 +125,24 @@ describe('logLevelEnvVarName', () => {
     expect(logLevelEnvVarName()).toBe(`${configured.toUpperCase()}_LOG_LEVEL`);
   });
 
+  it('should bind the default plugin name at module load, NOT at call time', () => {
+    // Pins the invariant lib/logging.ts documents on its PLUGIN_NAME const: the
+    // logger's identity is fixed for the lifetime of a hook process, which is
+    // what keeps its log directory stable. Changing the default parameter to a
+    // call-time `getPluginName()` reads identically in every other test in this
+    // file — it was the one mutation the suite could not detect.
+    process.env['CLAUDE_PLUGIN_NAME'] = 'a-different-plugin-entirely';
+
+    expect(logLevelEnvVarName()).toBe(`${LOAD_TIME_PLUGIN_NAME.toUpperCase()}_LOG_LEVEL`);
+    expect(resolveLogLevel()).toBe('warn');
+
+    // ...while the call-time reader DOES observe the change. The divergence is
+    // deliberate; asserting both halves is what makes it a contract rather than
+    // an accident.
+    expect(getPluginName()).toBe('a-different-plugin-entirely');
+    expect(logLevelEnvVarName(getPluginName())).toBe('A-DIFFERENT-PLUGIN-ENTIRELY_LOG_LEVEL');
+  });
+
   it('should NOT normalise a name that is not a valid shell identifier', () => {
     // The constraint is enforced upstream by scripts/validate-versions.sh, not
     // papered over here. Normalising would let `ai-toolkit` work by accident
@@ -141,12 +175,29 @@ describe('resolveLogLevel', () => {
   });
 
   it('should fall back to warn for inherited Object.prototype keys', () => {
-    // `'toString' in LOG_LEVEL_VALUES` is true through the prototype chain. The
-    // pre-#74 `in` check accepted these, then indexed to undefined — which
-    // silences every log line rather than falling back to 'warn'.
-    for (const key of ['toString', 'constructor', 'valueOf', 'hasOwnProperty']) {
+    // Only prototype keys that are ALREADY lower-case can reach the membership
+    // test, because the value is lower-cased first. These two are the whole
+    // reachable set, and each defeats the pre-#74 `in` check differently:
+    //   constructor -> `in` true, indexes to the Object constructor (a function)
+    //   __proto__   -> `in` true, indexes to Object.prototype (an object)
+    // Neither is undefined. The damage is in shouldLog(), where `number >= fn`
+    // and `number >= object` both coerce to NaN and compare false — silencing
+    // every log line. Object.hasOwn is false for both.
+    for (const key of ['constructor', '__proto__']) {
       setLogLevelFor('testplugin', key);
       expect(resolveLogLevel('testplugin')).toBe('warn');
+    }
+  });
+
+  it('should reject mixed-case prototype keys via lower-casing, not via hasOwn', () => {
+    // Kept to pin WHY these are safe, which is not the same reason as above:
+    // `toString` arrives as `tostring`, which is not a key under either check.
+    // An earlier version of this suite listed them alongside `constructor` as
+    // if they exercised the prototype-chain fix. They never did.
+    for (const key of ['toString', 'valueOf', 'hasOwnProperty']) {
+      setLogLevelFor('testplugin', key);
+      expect(resolveLogLevel('testplugin')).toBe('warn');
+      expect(key.toLowerCase() in ({ debug: 0, info: 1, warn: 2, error: 3 } as const)).toBe(false);
     }
   });
 

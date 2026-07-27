@@ -136,8 +136,32 @@ print(m.group(1) if m else 'NOT_FOUND')
   # tools/ mentioned LOG_LEVEL at all. These checks are that missing signal.
   WRAPPER="$plugin_dir/hooks/bin/run-hook-wrapper.sh"
   VITEST_CONFIG="$plugin_dir/hooks/vitest.config.ts"
+
+  # A plugin that ships hooks MUST have a wrapper. Without this, deleting or
+  # renaming the wrapper made all of check 6 evaporate at exit 0 with no SKIP
+  # line -- and CHECKED still incremented, so the "validated 0 plugins" guard
+  # never fired either. A wrapper that exists but does not export FAILs loudly;
+  # one that does not exist must not be quieter than that.
+  if [[ -d "$plugin_dir/hooks" ]] && [[ ! -f "$WRAPPER" ]]; then
+    echo "  FAIL  $PLUGIN_NAME: has hooks/ but no $WRAPPER"
+    echo "        Fix: add the wrapper, or move the hooks out -- check 6 cannot verify"
+    echo "             the log-level identity of a plugin whose production name is unknowable"
+    FAILED=1
+    continue
+  fi
+
   if [[ -f "$WRAPPER" ]]; then
-    HOOK_NAME=$(sed -n 's/^[[:space:]]*export[[:space:]][[:space:]]*CLAUDE_PLUGIN_NAME="\([^"]*\)".*/\1/p' "$WRAPPER" | head -1)
+    # Extraction mirrors SHELL semantics deliberately:
+    #   * comments stripped first, so a commented-out line cannot be picked up;
+    #   * `export NAME=v`, `export NAME="v"`, `export NAME='v'` and a bare
+    #     `NAME=v` all recognised -- rejecting the quoting styles a POSIX shell
+    #     accepts produced false failures on valid wrappers;
+    #   * `tail -1`, NOT `head -1`. With two assignments the shell keeps the
+    #     LAST one, so reading the first validated a name that never reaches
+    #     production -- a wrong identity passing at exit 0.
+    HOOK_NAME=$(sed -E '/^[[:space:]]*#/d' "$WRAPPER" \
+      | sed -n -E "s/^[[:space:]]*(export[[:space:]]+)?CLAUDE_PLUGIN_NAME=[\"']?([^\"'#[:space:]]*)[\"']?.*/\2/p" \
+      | tail -1)
 
     if [[ -z "$HOOK_NAME" ]]; then
       echo "  FAIL  $PLUGIN_NAME: $WRAPPER does not export CLAUDE_PLUGIN_NAME"
@@ -163,9 +187,33 @@ print(m.group(1) if m else 'NOT_FOUND')
     EXPECTED_LOG_VAR="$(printf '%s' "$HOOK_NAME" | tr '[:lower:]' '[:upper:]')_LOG_LEVEL"
 
     # 6b. Tests must run under the PRODUCTION identity. This is #63 exactly.
+    # Matched anywhere in the file rather than anchored to its own line: a
+    # single-line `defineConfig({test:{env:{CLAUDE_PLUGIN_NAME:'x'}}})` defeated
+    # a line-anchored pattern, which then read as "absent" and skipped. Backticks
+    # are accepted alongside both quote styles for the same reason.
     if [[ -f "$VITEST_CONFIG" ]]; then
-      TEST_NAME=$(sed -n "s/^[[:space:]]*CLAUDE_PLUGIN_NAME:[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/p" "$VITEST_CONFIG" | head -1)
-      if [[ -n "$TEST_NAME" ]] && [[ "$TEST_NAME" != "$HOOK_NAME" ]]; then
+      TEST_NAME=$(sed -E '/^[[:space:]]*\/\//d' "$VITEST_CONFIG" \
+        | grep -oE "CLAUDE_PLUGIN_NAME:[[:space:]]*['\"\`][^'\"\`]*['\"\`]" \
+        | tail -1 \
+        | sed -E "s/.*['\"\`]([^'\"\`]*)['\"\`][[:space:]]*$/\1/" || true)
+
+      # Present-but-unparseable must FAIL, not skip. Treating an empty
+      # extraction as "nothing to check" is how a defeated pattern turns into
+      # a green build.
+      if [[ -z "$TEST_NAME" ]] && grep -q "CLAUDE_PLUGIN_NAME" "$VITEST_CONFIG"; then
+        echo "  FAIL  $PLUGIN_NAME: $VITEST_CONFIG sets CLAUDE_PLUGIN_NAME but its value could not be read"
+        echo "        Fix: write it as CLAUDE_PLUGIN_NAME: '$HOOK_NAME' so the identity is verifiable"
+        FAILED=1
+        continue
+      fi
+      if [[ -z "$TEST_NAME" ]]; then
+        echo "  FAIL  $PLUGIN_NAME: $VITEST_CONFIG does not set CLAUDE_PLUGIN_NAME"
+        echo "        Fix: add env: { CLAUDE_PLUGIN_NAME: '$HOOK_NAME' } -- otherwise the suite"
+        echo "             runs as 'plugin' and verifies an identity no user ever gets (#63)"
+        FAILED=1
+        continue
+      fi
+      if [[ "$TEST_NAME" != "$HOOK_NAME" ]]; then
         echo "  FAIL  $PLUGIN_NAME: vitest.config.ts runs as \"$TEST_NAME\" but production runs as \"$HOOK_NAME\""
         echo "        Fix: set CLAUDE_PLUGIN_NAME: '$HOOK_NAME' in $VITEST_CONFIG"
         FAILED=1
@@ -174,16 +222,67 @@ print(m.group(1) if m else 'NOT_FOUND')
     fi
 
     # 6c. CLAUDE.md must document EXACTLY the variable production reads.
-    # Set equality, not mere presence: #63's docs named a variable that existed
-    # nowhere, so a "the right name appears somewhere" check would have passed
-    # with the wrong name sitting right beside it.
-    if [[ -f "$CLAUDE_MD" ]]; then
-      DOC_VARS=$(grep -oE '[A-Za-z_][A-Za-z0-9_]*_LOG_LEVEL' "$CLAUDE_MD" | sort -u || true)
+    #
+    # Set equality rather than presence. To be accurate about why: a plain
+    # presence check WOULD have caught #63, whose docs named only the wrong
+    # variable and never mentioned the right one. Set equality is chosen because
+    # it is strictly stronger on a case #63 did not exercise — docs that add the
+    # correct name while LEAVING the wrong one in place, which is the likely
+    # shape of a partial fix. That case is pinned by the bad-logvar fixture.
+    # Scans EVERY .md under the plugin, not just CLAUDE.md. Scoping this to
+    # CLAUDE.md left ctk's docs/plugin-hook-system.md outside the guard -- the
+    # one plugin with a second document telling users which variable to export.
+    # CHANGELOG.md is excluded by design: it is a historical record and
+    # legitimately names the wrong variables that past releases fixed.
+    DOC_VARS=$(find "$plugin_dir" -type f -name '*.md' ! -name 'CHANGELOG.md' -print0 2>/dev/null \
+      | xargs -0 grep -ohE '[A-Za-z_][A-Za-z0-9_]*_LOG_LEVEL' 2>/dev/null \
+      | sort -u || true)
+    if [[ -n "$DOC_VARS" ]] || [[ -f "$CLAUDE_MD" ]]; then
       if [[ "$DOC_VARS" != "$EXPECTED_LOG_VAR" ]]; then
-        echo "  FAIL  $PLUGIN_NAME: CLAUDE.md documents [${DOC_VARS//$'\n'/, }] but production reads $EXPECTED_LOG_VAR"
-        echo "        Fix: document exactly $EXPECTED_LOG_VAR in $CLAUDE_MD"
-        echo "             (derived from CLAUDE_PLUGIN_NAME=\"$HOOK_NAME\" in $WRAPPER)"
+        echo "  FAIL  $PLUGIN_NAME: docs name [${DOC_VARS//$'\n'/, }] but production reads $EXPECTED_LOG_VAR"
+        echo "        Fix: every .md under $plugin_dir (except CHANGELOG.md) must name"
+        echo "             exactly $EXPECTED_LOG_VAR -- derived from CLAUDE_PLUGIN_NAME=\"$HOOK_NAME\" in $WRAPPER"
         FAILED=1
+        continue
+      fi
+    fi
+
+    # 6d. Plugin-owned SOURCE must not hardcode a different plugin's variable.
+    # Checks 6a-6c cover the wrapper, the test config and the docs -- and missed
+    # a fourth site: ctk's session-loader.ts hardcodes `CONTINUITY_LOG_LEVEL`
+    # and writes `export CONTINUITY_LOG_LEVEL=...` into CLAUDE_ENV_FILE, which
+    # the session then sources. That name is shipped in ctk's bundle and is
+    # coupled to the wrapper by nothing but coincidence, so a rename would drift
+    # exactly the way #63 did.
+    #
+    # `-type f` deliberately excludes symlinks: src/lib and types.ts are
+    # symlinked from shared/ into every plugin and legitimately mention
+    # CONTINUITY_LOG_LEVEL in a docstring. Following them would fail all four
+    # non-ctk plugins on shared content they do not own.
+    if [[ -d "$plugin_dir/hooks/src" ]]; then
+      # Local flag, NOT $FAILED: that one persists across plugins, so testing it
+      # here would skip the OK line of every plugin following an earlier failure.
+      SRC_DRIFT=0
+      while IFS= read -r src_file; do
+        # Match env-var NAME STRINGS only, in the two shapes the defect takes:
+        #   'NAME' / "NAME"   -- e.g. process.env['CONTINUITY_LOG_LEVEL']
+        #   export NAME=      -- e.g. `export CONTINUITY_LOG_LEVEL=${...}`
+        # A bare identifier must NOT match: the imported symbol DEFAULT_LOG_LEVEL
+        # is identifier-shaped and ends in _LOG_LEVEL, and matching it made this
+        # check fail the very file it had just been used to fix.
+        SRC_VARS=$( { grep -oE "['\"][A-Za-z_][A-Za-z0-9_]*_LOG_LEVEL['\"]" "$src_file" | tr -d "'\"";
+                      grep -oE "export[[:space:]]+[A-Za-z_][A-Za-z0-9_]*_LOG_LEVEL" "$src_file" | sed -E 's/^export[[:space:]]+//'; } \
+                    | sort -u || true)
+        if [[ -n "$SRC_VARS" ]] && [[ "$SRC_VARS" != "$EXPECTED_LOG_VAR" ]]; then
+          echo "  FAIL  $PLUGIN_NAME: $src_file hardcodes [${SRC_VARS//$'\n'/, }] but production reads $EXPECTED_LOG_VAR"
+          echo "        Fix: derive the name via logLevelEnvVarName() from lib/logging.js"
+          echo "             rather than writing a literal that nothing keeps in step with the wrapper"
+          FAILED=1
+          SRC_DRIFT=1
+          break
+        fi
+      done < <(find "$plugin_dir/hooks/src" -type f -name '*.ts' 2>/dev/null | sort)
+      if [[ "$SRC_DRIFT" -eq 1 ]]; then
         continue
       fi
     fi

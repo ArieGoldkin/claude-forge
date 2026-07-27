@@ -112,8 +112,12 @@ const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
 
 /**
  * Level used when the environment variable is unset or holds an invalid value.
+ *
+ * Exported because ctk's session-loader writes this default into CLAUDE_ENV_FILE.
+ * It hardcoded `'warn'`, so raising the default here would have been silently
+ * overridden by the stale literal the session then sourced.
  */
-const DEFAULT_LOG_LEVEL: LogLevel = 'warn';
+export const DEFAULT_LOG_LEVEL: LogLevel = 'warn';
 
 // =============================================================================
 // INTERNAL STATE
@@ -159,9 +163,18 @@ export function logLevelEnvVarName(pluginName: string = PLUGIN_NAME): string {
 /**
  * Type guard for a log level, own-properties only.
  *
- * `'toString' in LOG_LEVEL_VALUES` is true via the prototype chain, so an `in`
- * check would accept `LOG_LEVEL=toString` and then index to undefined — which
- * silences every log line instead of falling back to 'warn'.
+ * The previous check was `value in LOG_LEVEL_VALUES`, which consults the
+ * prototype chain. Because the caller lower-cases first, the reachable inputs
+ * are only the prototype keys that are already lower-case: `constructor` and
+ * `__proto__`. (`toString` arrives as `tostring` and misses under either check —
+ * it was never the bug.)
+ *
+ * Neither indexes to undefined: `in` returning true means the property IS
+ * reachable, so `LOG_LEVEL_VALUES['constructor']` is the Object constructor and
+ * `LOG_LEVEL_VALUES['__proto__']` is Object.prototype. The damage is downstream
+ * in shouldLog(), where `number >= function` and `number >= object` both coerce
+ * to NaN and compare false — silencing every log line rather than falling back
+ * to 'warn'. Object.hasOwn is false for both.
  */
 function isLogLevel(value: string): value is LogLevel {
   return Object.hasOwn(LOG_LEVEL_VALUES, value);
