@@ -13,6 +13,11 @@
  * @module hooks/types
  */
 
+// The only runtime dependency of this module, used by getHookEnvironment()
+// below. lib/logging.ts imports back from here with `import type`, which is
+// erased at compile time — the emitted modules are not circular.
+import { getPluginName, resolveLogLevel } from './lib/logging.js';
+
 // =============================================================================
 // TOOL TYPES
 // =============================================================================
@@ -1064,16 +1069,20 @@ export interface HookEnvironment {
  *
  * Log level is resolved from `${PLUGIN_NAME}_LOG_LEVEL` where PLUGIN_NAME
  * comes from CLAUDE_PLUGIN_NAME (defaulting to 'plugin' when unset).
+ *
+ * The name derivation and the level resolution both live in lib/logging.ts.
+ * This function used to rebuild them inline (#74): the copy was untested, and
+ * it also differed in behaviour — it neither lower-cased nor validated the
+ * value, so `AI_LOG_LEVEL=BOGUS` returned `'BOGUS'` typed as a LogLevel while
+ * the logger itself fell back to 'warn'. One variable, two answers.
  */
 export function getHookEnvironment(): HookEnvironment {
-  const pluginName = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
-  const envVar = `${pluginName.toUpperCase()}_LOG_LEVEL`;
   return {
     projectDir: process.env['CLAUDE_PROJECT_DIR'] || process.cwd(),
     pluginRoot: process.env['CLAUDE_PLUGIN_ROOT'] || '',
     sessionId:
       process.env['CLAUDE_CODE_SESSION_ID'] || process.env['CLAUDE_SESSION_ID'] || 'unknown',
-    logLevel: (process.env[envVar] as HookEnvironment['logLevel']) || 'warn',
+    logLevel: resolveLogLevel(getPluginName()),
   };
 }
 

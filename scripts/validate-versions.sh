@@ -14,6 +14,8 @@
 #   4. README.md plugin table has the correct version
 #   5. root CLAUDE.md tree comment "(vX.Y.Z, installed as <short>)" matches
 #      (Release Checklist item 6)
+#   6. log-level env var identity agrees across wrapper / vitest.config / CLAUDE.md,
+#      and the plugin name is a valid shell identifier (#63, #74)
 
 set -euo pipefail
 
@@ -119,6 +121,71 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "        Fix: update '(vX.Y.Z, installed as $SHORT_NAME)' in $ROOT_CLAUDE_MD"
       FAILED=1
       continue
+    fi
+  fi
+
+  # --- Check 6: log-level env var identity (wrapper vs tests vs CLAUDE.md) ---
+  # Issue #63 shipped THREE disagreeing names for ONE variable: production read
+  # `AI_LOG_LEVEL` (wrapper sets CLAUDE_PLUGIN_NAME="ai"), tests ran as
+  # `ai-toolkit`, and CLAUDE.md documented `AI_TOOLKIT_LOG_LEVEL` -- so a user
+  # following the documentation exported a variable nothing has ever read.
+  #
+  # Issue #74 then found there was no signal for any of it: corrupting the
+  # documented name left the plugin suite (765 tests), the shared suite (1217)
+  # and this script all at exit 0, and nothing under scripts/, .github/ or
+  # tools/ mentioned LOG_LEVEL at all. These checks are that missing signal.
+  WRAPPER="$plugin_dir/hooks/bin/run-hook-wrapper.sh"
+  VITEST_CONFIG="$plugin_dir/hooks/vitest.config.ts"
+  if [[ -f "$WRAPPER" ]]; then
+    HOOK_NAME=$(sed -n 's/^[[:space:]]*export[[:space:]][[:space:]]*CLAUDE_PLUGIN_NAME="\([^"]*\)".*/\1/p' "$WRAPPER" | head -1)
+
+    if [[ -z "$HOOK_NAME" ]]; then
+      echo "  FAIL  $PLUGIN_NAME: $WRAPPER does not export CLAUDE_PLUGIN_NAME"
+      echo "        Fix: add 'export CLAUDE_PLUGIN_NAME=\"<short-name>\"' -- without it logging"
+      echo "             silently falls back to the name 'plugin' for every hook in this plugin"
+      FAILED=1
+      continue
+    fi
+
+    # 6a. The name is upper-cased into a SHELL variable name, so it must be a
+    # valid shell identifier. `export AI-TOOLKIT_LOG_LEVEL=debug` is rejected by
+    # sh as "not a valid identifier" while Node's process.env accepts the key
+    # happily -- a knob that can be read but never set. Root CLAUDE.md's "Adding
+    # a New Plugin" states the constraint; this is where it is enforced.
+    if ! [[ "$HOOK_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "  FAIL  $PLUGIN_NAME: CLAUDE_PLUGIN_NAME=\"$HOOK_NAME\" is not a valid shell identifier"
+      echo "        Fix: use only [A-Za-z_][A-Za-z0-9_]* in $WRAPPER --"
+      echo "             the name is upper-cased into \${NAME}_LOG_LEVEL, which a POSIX shell must be able to export"
+      FAILED=1
+      continue
+    fi
+
+    EXPECTED_LOG_VAR="$(printf '%s' "$HOOK_NAME" | tr '[:lower:]' '[:upper:]')_LOG_LEVEL"
+
+    # 6b. Tests must run under the PRODUCTION identity. This is #63 exactly.
+    if [[ -f "$VITEST_CONFIG" ]]; then
+      TEST_NAME=$(sed -n "s/^[[:space:]]*CLAUDE_PLUGIN_NAME:[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/p" "$VITEST_CONFIG" | head -1)
+      if [[ -n "$TEST_NAME" ]] && [[ "$TEST_NAME" != "$HOOK_NAME" ]]; then
+        echo "  FAIL  $PLUGIN_NAME: vitest.config.ts runs as \"$TEST_NAME\" but production runs as \"$HOOK_NAME\""
+        echo "        Fix: set CLAUDE_PLUGIN_NAME: '$HOOK_NAME' in $VITEST_CONFIG"
+        FAILED=1
+        continue
+      fi
+    fi
+
+    # 6c. CLAUDE.md must document EXACTLY the variable production reads.
+    # Set equality, not mere presence: #63's docs named a variable that existed
+    # nowhere, so a "the right name appears somewhere" check would have passed
+    # with the wrong name sitting right beside it.
+    if [[ -f "$CLAUDE_MD" ]]; then
+      DOC_VARS=$(grep -oE '[A-Za-z_][A-Za-z0-9_]*_LOG_LEVEL' "$CLAUDE_MD" | sort -u || true)
+      if [[ "$DOC_VARS" != "$EXPECTED_LOG_VAR" ]]; then
+        echo "  FAIL  $PLUGIN_NAME: CLAUDE.md documents [${DOC_VARS//$'\n'/, }] but production reads $EXPECTED_LOG_VAR"
+        echo "        Fix: document exactly $EXPECTED_LOG_VAR in $CLAUDE_MD"
+        echo "             (derived from CLAUDE_PLUGIN_NAME=\"$HOOK_NAME\" in $WRAPPER)"
+        FAILED=1
+        continue
+      fi
     fi
   fi
 
