@@ -19,8 +19,13 @@ Investigate and fix a bug from a Jira ticket or free-text description.
 
 Extract from `$ARGUMENTS`:
 - **Jira key** (e.g., `PROJ-123`) - if provided
+- **GitHub issue** (e.g., `#123`, a bare `123`, or an issue URL) - if provided
 - **Flags**: `--dry-run` (investigate only, no code changes)
-- **Free text** - if no Jira key, treat as bug description
+- **Free text** - if neither a Jira key nor a GitHub issue, treat as bug description
+
+A bare number is a GitHub issue, not free text. Reading `123` as a bug description
+silently drops the whole context-gathering step and leaves the model working from a
+two-character string, with no error to signal it.
 
 ---
 
@@ -43,11 +48,31 @@ Extract from the ticket:
 - **Comments**: additional context from reporters or other engineers
 - **Attachments/links**: screenshots, related tickets
 
+### If GitHub issue provided:
+
+Read the issue with the `gh` CLI — no MCP server is involved:
+
+```bash
+gh issue view <number> --json title,body,comments,labels,state,url
+```
+
+Extract the same fields the Jira branch does, from their GitHub equivalents:
+- **Summary**: `title`
+- **Description**: `body` — full context, steps to reproduce, expected vs actual
+- **Priority**: `labels` (GitHub has no priority field; a `P0`-`P3` or `high`/`low` label is the
+  closest equivalent, and there may be none — do not invent a severity)
+- **Comments**: `comments` — later comments frequently amend or overturn the body, so read them
+  before acting on the body alone
+- **Links**: `url`, plus any issue or PR references in the body
+
+If `gh` is unavailable or unauthenticated, say so and fall back to treating the argument as free
+text — do not silently proceed as if the issue had been read.
+
 ### If free text provided:
 
-Use the text directly as the bug description. Skip Jira enrichment.
+Use the text directly as the bug description. Skip ticket enrichment.
 
-### For both:
+### For all three:
 
 Collect from the codebase:
 - **Recent deploys**: `git log --oneline --since="7 days ago" -- <affected_files>`

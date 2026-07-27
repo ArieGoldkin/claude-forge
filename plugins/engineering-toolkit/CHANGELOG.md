@@ -2,6 +2,36 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.16.0] - 2026-07-27 — `/etk:fix-bug` can finally read the tickets it can already file PRs against
+
+Command only — one file. No skill, agent or hook behaviour changed.
+
+### Added
+
+**A GitHub-issue input path for `/etk:fix-bug`** (closes #69). The command could already *open* a
+GitHub PR — `prepare-pr` was made VCS-agnostic in 2.9.0 — but its input side had never followed.
+Phase 1 recognised exactly a Jira key or free text, and Phase 2 branched two ways, neither of them
+GitHub. A census of the whole command for `gh`/`github`/`glab`/`gitlab` returned two hits, both on
+the output side.
+
+The practical failure was silent, which is why it survived: `/etk:fix-bug 63` parsed `63` as *free
+text*, skipped context-gathering entirely, and left the model reasoning from a two-character string
+with no error to signal it. Phase 1 now reads `#123`, a bare number, or an issue URL as a ticket
+reference, and Phase 2 gains an "If GitHub issue provided" branch using
+`gh issue view <n> --json title,body,comments,labels,state,url` that extracts the same five fields
+the Jira branch does.
+
+Two deliberate refusals in that branch: **priority is not invented** when no label carries one
+(GitHub has no priority field), and an unavailable or unauthenticated `gh` **says so and falls back**
+rather than proceeding as though the issue had been read — the silent-degradation mode this fix
+exists to remove.
+
+Found while planning #47 (T4, Gate 1 pilot), which #58 had amended to run against a real GitHub
+issue — making this a hard blocker on the pilot as scoped rather than a convenience.
+
+**Verification caveat, stated rather than implied:** commands are markdown and no unit test can
+cover this. It is verified by running it.
+
 ## [2.15.1] - 2026-07-19 — L3 promotion freeze, because a promotion gate that reads "correct on review" is unfalsifiable when reviews go missing
 
 Docs only — one reference file. No skill, agent, command or hook behaviour changed.
