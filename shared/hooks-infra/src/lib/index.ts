@@ -75,6 +75,9 @@ export {
   getHookLogPath,
   getPermissionLogPath,
   getLogDir,
+  getPluginName,
+  logLevelEnvVarName,
+  resolveLogLevel,
 } from './logging.js';
 
 // Path utility functions (security-critical for ME-001 symlink bypass prevention)

@@ -37,13 +37,13 @@ claude-forge/
 │   │   ├── lifecycle/          # pre-compact-saver, session-end
 │   │   ├── permission/         # auto-approve-safe-bash, auto-approve-project-writes, etc.
 │   │   └── prompt/             # context-monitor, hipaa-context-injector
-│   └── tests/lib/              # 11 shared library test files
+│   └── tests/lib/              # 12 shared library test files (the set every plugin must link)
 ├── plugins/
-│   ├── continuity-toolkit/     # Session continuity management (v2.10.0, installed as ctk)
-│   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.10, installed as dtk)
-│   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.9, installed as atk)
-│   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.11, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.16.0, installed as etk)
+│   ├── continuity-toolkit/     # Session continuity management (v2.10.1, installed as ctk)
+│   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.11, installed as dtk)
+│   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.10, installed as atk)
+│   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.12, installed as ftk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.16.1, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -468,9 +468,14 @@ Since CC v2.1.172 subagents can spawn their own subagents; v2.1.180 raised the l
    ln -s ../../../../shared/hooks-infra/src/types.ts src/types.ts
    ```
 3. Add `preserveSymlinks: true` to `tsup.config.ts`
-4. Set `CLAUDE_PLUGIN_NAME` in `run-hook-wrapper.sh`
-5. Set `CLAUDE_PLUGIN_NAME` in `vitest.config.ts` env
-6. Add the plugin's source directory to the `plugins` (and `validate`) matrix in `.github/workflows/ci.yml`
+4. Set `CLAUDE_PLUGIN_NAME` in `run-hook-wrapper.sh` — **must be a valid shell identifier** (see below)
+5. Set `CLAUDE_PLUGIN_NAME` in `vitest.config.ts` env — **to the same value as step 4**
+6. Document `<UPPER(CLAUDE_PLUGIN_NAME)>_LOG_LEVEL` in `plugins/{name}/CLAUDE.md`, and no other `*_LOG_LEVEL` name
+7. Add the plugin's source directory to the `plugins` (and `validate`) matrix in `.github/workflows/ci.yml`
+
+> **⚠ `CLAUDE_PLUGIN_NAME` must match `[A-Za-z_][A-Za-z0-9_]*`.** It is the plugin's *short* name (`ai`, `continuity`, `devops`, `engineering`, `frontend`) — **not** the hyphenated directory name that `{name}` stands for everywhere else in this procedure. The value is upper-cased into a shell variable name (`ai` → `AI_LOG_LEVEL`), so a hyphen produces `AI-TOOLKIT_LOG_LEVEL`, which **POSIX `sh` refuses to export** ("not a valid identifier") while Node's `process.env` accepts the key happily — a log-level knob that can be read but never set. The name is deliberately **not** normalised in code: normalising would let a violating name work by accident and re-open the gap between the log directory name and the variable name.
+>
+> Steps 4–6 are three views of **one** identity — production, tests, docs. Letting them drift is issue **#63**, where all three disagreed and users were told to export a variable nothing had ever read. `scripts/validate-versions.sh` (check 6, CI job `versions`) now enforces all three plus the identifier constraint; negative fixtures live in `tests/fixtures/versions/bad-{logvar,plugin-id,test-identity}/`.
 
 ## Release Checklist (Bumping a Plugin Version)
 

@@ -24,7 +24,14 @@ import {
 import { formatHandoffSummary, validateHandoff } from '../lib/handoff-schema.js';
 import { getProviderInfo } from '../lib/input.js';
 import { acquireLock, releaseLock } from '../lib/lock.js';
-import { logDebug, logError, logInfo, logWarn } from '../lib/logging.js';
+import {
+  DEFAULT_LOG_LEVEL,
+  logDebug,
+  logError,
+  logInfo,
+  logLevelEnvVarName,
+  logWarn,
+} from '../lib/logging.js';
 import { outputSuccess } from '../lib/output.js';
 import { ensureSessionDir, evictOldSessions } from '../lib/read-cache/index.js';
 import { buildWindowTitleSequence } from '../lib/terminal-sequence.js';
@@ -176,8 +183,15 @@ function writeEnvFile(projectDir: string): void {
   try {
     const lines: string[] = [];
 
-    if (!process.env['CONTINUITY_LOG_LEVEL']) {
-      lines.push(`export CONTINUITY_LOG_LEVEL=${shellEscape('warn')}`);
+    // Derived, not hardcoded. Both halves used to be literals here — the name
+    // (`CONTINUITY_LOG_LEVEL`) and the default (`'warn'`) — while the logger
+    // derived the name from CLAUDE_PLUGIN_NAME and owned the default. Since this
+    // value is appended to CLAUDE_ENV_FILE and then sourced into the session, a
+    // stale literal would win over a changed default for every later hook
+    // process: the variable is SET, so resolveLogLevel() returns it. #74.
+    const logLevelVar = logLevelEnvVarName();
+    if (!process.env[logLevelVar]) {
+      lines.push(`export ${logLevelVar}=${shellEscape(DEFAULT_LOG_LEVEL)}`);
     }
 
     if (!process.env['CLAUDE_PROJECT_DIR'] && projectDir !== '.') {

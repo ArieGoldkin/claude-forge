@@ -308,7 +308,10 @@ function getProviderInfo() {
     defaultHaikuModel
   };
 }
-var PLUGIN_NAME = process.env["CLAUDE_PLUGIN_NAME"] || "plugin";
+function getPluginName() {
+  return process.env["CLAUDE_PLUGIN_NAME"] || "plugin";
+}
+var PLUGIN_NAME = getPluginName();
 function computeLogDir() {
   const pluginDataDir = process.env["CLAUDE_PLUGIN_DATA"];
   return pluginDataDir ? path.join(pluginDataDir, "logs") : path.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
@@ -334,19 +337,24 @@ var LOG_LEVEL_VALUES = {
   warn: 2,
   error: 3
 };
+var DEFAULT_LOG_LEVEL = "warn";
 var currentLogLevel = null;
 var logDirCreated = false;
+function logLevelEnvVarName(pluginName = PLUGIN_NAME) {
+  return `${pluginName.toUpperCase()}_LOG_LEVEL`;
+}
+function isLogLevel(value) {
+  return Object.hasOwn(LOG_LEVEL_VALUES, value);
+}
+function resolveLogLevel(pluginName = PLUGIN_NAME) {
+  const envLevel = process.env[logLevelEnvVarName(pluginName)]?.toLowerCase();
+  return envLevel && isLogLevel(envLevel) ? envLevel : DEFAULT_LOG_LEVEL;
+}
 function getLogLevel() {
   if (currentLogLevel !== null) {
     return currentLogLevel;
   }
-  const envVarName = `${PLUGIN_NAME.toUpperCase()}_LOG_LEVEL`;
-  const envLevel = process.env[envVarName]?.toLowerCase();
-  if (envLevel && envLevel in LOG_LEVEL_VALUES) {
-    currentLogLevel = envLevel;
-  } else {
-    currentLogLevel = "warn";
-  }
+  currentLogLevel = resolveLogLevel();
   return currentLogLevel;
 }
 function shouldLog(level) {
@@ -502,13 +510,11 @@ function isUserPromptInput(input) {
   return typeof input === "object" && input !== null && "prompt" in input && typeof input.prompt === "string";
 }
 function getHookEnvironment() {
-  const pluginName = process.env["CLAUDE_PLUGIN_NAME"] || "plugin";
-  const envVar = `${pluginName.toUpperCase()}_LOG_LEVEL`;
   return {
     projectDir: process.env["CLAUDE_PROJECT_DIR"] || process.cwd(),
     pluginRoot: process.env["CLAUDE_PLUGIN_ROOT"] || "",
     sessionId: process.env["CLAUDE_CODE_SESSION_ID"] || process.env["CLAUDE_SESSION_ID"] || "unknown",
-    logLevel: process.env[envVar] || "warn"
+    logLevel: resolveLogLevel(getPluginName())
   };
 }
 var HOOK_NAME = "continuity-recommendation";

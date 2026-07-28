@@ -178,6 +178,16 @@ jobs:
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-marketplace"
       - name: bad-changelog fixture must fail
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-changelog"
+      # Check 6 (#63/#74): the log-level variable's name must agree across the
+      # wrapper, vitest.config.ts and CLAUDE.md. Check 6 skips a plugin with no
+      # wrapper, so without these fixtures deleting the whole block would leave
+      # the real-repo run at exit 0 and CI green.
+      - name: bad-logvar fixture must fail (docs name a variable production never reads)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-logvar"
+      - name: bad-plugin-id fixture must fail (name is not a valid shell identifier)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-plugin-id"
+      - name: bad-test-identity fixture must fail (tests run as a different plugin than production)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-test-identity"
 
   # Static plugin-structure validation via the Claude Code CLI. Non-blocking
   # (mirrors the GitLab `allow_failure: true`): the CLI install/validate path

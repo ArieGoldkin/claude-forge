@@ -22,10 +22,30 @@ import type { AgentContext, HookLogger, LogLevel, PermissionLogEntry } from '../
 // =============================================================================
 
 /**
- * Plugin name from environment, defaulting to 'plugin' when unset.
- * Each plugin's run-hook-wrapper.sh sets this to the specific plugin name.
+ * Read the plugin name from the environment, defaulting to 'plugin' when unset.
+ *
+ * Each plugin's run-hook-wrapper.sh sets CLAUDE_PLUGIN_NAME to its own short
+ * name (`ai`, `continuity`, `devops`, `engineering`, `frontend`).
+ *
+ * This is the single definition of the `|| 'plugin'` fallback. `getHookEnvironment()`
+ * in types.ts calls it at request time; this module captures it once at load
+ * (see PLUGIN_NAME below). The two timings are deliberate, the fallback is not
+ * duplicated.
+ *
+ * @returns The plugin name, or 'plugin' when CLAUDE_PLUGIN_NAME is unset
  */
-const PLUGIN_NAME = process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
+export function getPluginName(): string {
+  return process.env['CLAUDE_PLUGIN_NAME'] || 'plugin';
+}
+
+/**
+ * Plugin name captured at module load.
+ *
+ * Load-time capture is what makes the log directory stable for the lifetime of
+ * a hook process. Do not convert this to a call-time read without checking
+ * resetLogDir()/resetLogLevel() callers.
+ */
+const PLUGIN_NAME = getPluginName();
 
 /**
  * Compute the log directory path.
@@ -90,6 +110,15 @@ const LOG_LEVEL_VALUES: Record<LogLevel, number> = {
   error: 3,
 };
 
+/**
+ * Level used when the environment variable is unset or holds an invalid value.
+ *
+ * Exported because ctk's session-loader writes this default into CLAUDE_ENV_FILE.
+ * It hardcoded `'warn'`, so raising the default here would have been silently
+ * overridden by the stale literal the session then sourced.
+ */
+export const DEFAULT_LOG_LEVEL: LogLevel = 'warn';
+
 // =============================================================================
 // INTERNAL STATE
 // =============================================================================
@@ -109,7 +138,65 @@ let logDirCreated = false;
 // =============================================================================
 
 /**
- * Get the current log level from environment variable.
+ * Derive the log-level environment variable name for a plugin.
+ *
+ * SINGLE SOURCE OF TRUTH for this rule (#74). It previously lived here *and*
+ * inside getHookEnvironment() in types.ts, where it had no test coverage; the
+ * two copies were free to drift the way #63's three names did.
+ *
+ * Plugin names are required to be valid shell identifiers — `[A-Za-z_][A-Za-z0-9_]*`
+ * — because this name is exported by a POSIX shell. `export AI-TOOLKIT_LOG_LEVEL=debug`
+ * is rejected by sh as "not a valid identifier" while Node's process.env accepts
+ * the key happily, so a hyphenated plugin name yields a knob that can be read
+ * but never set. The constraint is enforced by scripts/validate-versions.sh and
+ * stated in root CLAUDE.md's "Adding a New Plugin" procedure. This function does
+ * NOT normalise — normalising here would let a violating name work by accident
+ * and re-open the gap between the log directory name and the variable name.
+ *
+ * @param pluginName - Plugin name; defaults to this process's plugin
+ * @returns The environment variable name, e.g. `CONTINUITY_LOG_LEVEL`
+ */
+export function logLevelEnvVarName(pluginName: string = PLUGIN_NAME): string {
+  return `${pluginName.toUpperCase()}_LOG_LEVEL`;
+}
+
+/**
+ * Type guard for a log level, own-properties only.
+ *
+ * The previous check was `value in LOG_LEVEL_VALUES`, which consults the
+ * prototype chain. Because the caller lower-cases first, the reachable inputs
+ * are only the prototype keys that are already lower-case: `constructor` and
+ * `__proto__`. (`toString` arrives as `tostring` and misses under either check —
+ * it was never the bug.)
+ *
+ * Neither indexes to undefined: `in` returning true means the property IS
+ * reachable, so `LOG_LEVEL_VALUES['constructor']` is the Object constructor and
+ * `LOG_LEVEL_VALUES['__proto__']` is Object.prototype. The damage is downstream
+ * in shouldLog(), where `number >= function` and `number >= object` both coerce
+ * to NaN and compare false — silencing every log line rather than falling back
+ * to 'warn'. Object.hasOwn is false for both.
+ */
+function isLogLevel(value: string): value is LogLevel {
+  return Object.hasOwn(LOG_LEVEL_VALUES, value);
+}
+
+/**
+ * Resolve a log level from the environment, uncached.
+ *
+ * Case-insensitive; falls back to 'warn' when unset or not a valid level.
+ * Shared with getHookEnvironment() in types.ts so that one variable cannot
+ * resolve to two different levels depending on which reader is asked.
+ *
+ * @param pluginName - Plugin name; defaults to this process's plugin
+ * @returns The resolved log level
+ */
+export function resolveLogLevel(pluginName: string = PLUGIN_NAME): LogLevel {
+  const envLevel = process.env[logLevelEnvVarName(pluginName)]?.toLowerCase();
+  return envLevel && isLogLevel(envLevel) ? envLevel : DEFAULT_LOG_LEVEL;
+}
+
+/**
+ * Get the current log level from environment variable, cached.
  * Defaults to 'warn' if not set or invalid.
  *
  * @returns The current log level
@@ -119,14 +206,7 @@ function getLogLevel(): LogLevel {
     return currentLogLevel;
   }
 
-  const envVarName = `${PLUGIN_NAME.toUpperCase()}_LOG_LEVEL`;
-  const envLevel = process.env[envVarName]?.toLowerCase();
-  if (envLevel && envLevel in LOG_LEVEL_VALUES) {
-    currentLogLevel = envLevel as LogLevel;
-  } else {
-    currentLogLevel = 'warn';
-  }
-
+  currentLogLevel = resolveLogLevel();
   return currentLogLevel;
 }
 

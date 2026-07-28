@@ -1,0 +1,6 @@
+{
+  "name": "fixture-marketplace",
+  "plugins": [
+    { "name": "xtk", "source": "./plugins/x-toolkit", "version": "1.2.0" }
+  ]
+}
