@@ -403,9 +403,6 @@ function getAgentType(input) {
 function getWorktreePath(input) {
   return input.worktree_path;
 }
-function getWorktreeBranch(input) {
-  return input.worktree_branch;
-}
 function getDurationMs(input) {
   return input.duration_ms;
 }
@@ -3245,8 +3242,8 @@ var SAFE_EXTENSIONS = [
 ];
 function isProtectedDirectory(normalizedPath) {
   const lower = normalizedPath.toLowerCase();
-  const path27 = lower.endsWith("/") ? lower : `${lower}/`;
-  return PROTECTED_DIRS.some((dir) => path27.includes(`/${dir}`) || path27.startsWith(dir));
+  const path26 = lower.endsWith("/") ? lower : `${lower}/`;
+  return PROTECTED_DIRS.some((dir) => path26.includes(`/${dir}`) || path26.startsWith(dir));
 }
 function isProtectedFile(normalizedPath) {
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(normalizedPath));
@@ -5043,66 +5040,20 @@ async function taskCreatedLogger(input) {
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME28 = "worktree-create";
-async function worktreeCreate(input) {
-  const worktreePath = input.worktree_path || input.cwd || ".";
-  const worktreeBranch = input.worktree_branch || "unknown";
-  const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME28, `Worktree created: path=${worktreePath}, branch=${worktreeBranch}`);
-  try {
-    const contextDir = path2.join(worktreePath, CONTINUITY_DIRS.context);
-    if (!fs6.existsSync(contextDir)) {
-      fs6.mkdirSync(contextDir, { recursive: true });
-    }
-    const contextFile = path2.join(contextDir, "shared-context.json");
-    if (!fs6.existsSync(contextFile)) {
-      const timestamp = formatTimestamp();
-      const worktreeContext = {
-        version: "1.0.0",
-        timestamp,
-        worktree: {
-          path: worktreePath,
-          branch: worktreeBranch,
-          main_project: mainProjectDir,
-          created_at: timestamp
-        },
-        session_heartbeat: {
-          last_activity: timestamp,
-          session_start: timestamp,
-          was_cleanly_ended: false
-        },
-        dirty_tracking: {
-          files_edited_count: 0,
-          files_edited_this_session: [],
-          threshold_warning: 15,
-          threshold_auto_suggest: 25
-        }
-      };
-      fs6.writeFileSync(contextFile, `${JSON.stringify(worktreeContext, null, 2)}
-`);
-      logInfo(HOOK_NAME28, `Initialized continuity context for worktree: ${worktreeBranch}`);
-    } else {
-      logDebug(HOOK_NAME28, "Worktree context already exists, skipping initialization");
-    }
-  } catch (error) {
-    logError(HOOK_NAME28, `Failed to initialize worktree context: ${error}`);
-  }
-  return outputSilentSuccess();
-}
-var HOOK_NAME29 = "worktree-remove";
+var HOOK_NAME28 = "worktree-remove";
 var MAX_LOCK_ATTEMPTS3 = 20;
 async function worktreeRemove(input) {
   const worktreePath = input.worktree_path || "unknown";
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  logDebug(HOOK_NAME29, `Worktree removed: path=${worktreePath}`);
+  logDebug(HOOK_NAME28, `Worktree removed: path=${worktreePath}`);
   const contextFile = path2.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME29, "No main context file found, nothing to update");
+    logDebug(HOOK_NAME28, "No main context file found, nothing to update");
     return outputSilentSuccess();
   }
   const lockDir = `${contextFile}.lock`;
   if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS3)) {
-    logError(HOOK_NAME29, "Failed to acquire lock, skipping context update");
+    logError(HOOK_NAME28, "Failed to acquire lock, skipping context update");
     return outputSilentSuccess();
   }
   try {
@@ -5111,7 +5062,7 @@ async function worktreeRemove(input) {
     try {
       context = JSON.parse(raw);
     } catch {
-      logError(HOOK_NAME29, "Context file contains invalid JSON, skipping update");
+      logError(HOOK_NAME28, "Context file contains invalid JSON, skipping update");
       return outputSilentSuccess();
     }
     const timestamp = formatTimestamp();
@@ -5125,7 +5076,54 @@ async function worktreeRemove(input) {
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME29, `Worktree removal recorded: ${worktreePath}`);
+    logInfo(HOOK_NAME28, `Worktree removal recorded: ${worktreePath}`);
+  } catch (error) {
+    logError(HOOK_NAME28, `Failed to update context file: ${error}`);
+  } finally {
+    releaseLock(lockDir);
+  }
+  return outputSilentSuccess();
+}
+var HOOK_NAME29 = "stop-state-saver";
+var MAX_LOCK_ATTEMPTS4 = 20;
+async function stopStateSaver(input) {
+  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
+  const lastMessage = input.last_assistant_message || "";
+  const source = input.source || "unknown";
+  logDebug(HOOK_NAME29, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
+  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs6.existsSync(contextFile)) {
+    logDebug(HOOK_NAME29, "No context file found, nothing to update");
+    return outputSilentSuccess();
+  }
+  const lockDir = `${contextFile}.lock`;
+  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS4)) {
+    logError(HOOK_NAME29, "Failed to acquire lock, skipping context update");
+    return outputSilentSuccess();
+  }
+  try {
+    const raw = fs6.readFileSync(contextFile, "utf8");
+    let context;
+    try {
+      context = JSON.parse(raw);
+    } catch {
+      logError(HOOK_NAME29, "Context file contains invalid JSON, skipping update");
+      return outputSilentSuccess();
+    }
+    const timestamp = formatTimestamp();
+    const heartbeat = context["session_heartbeat"] || {};
+    heartbeat["last_activity"] = timestamp;
+    context["session_heartbeat"] = heartbeat;
+    context["last_stop"] = {
+      source,
+      last_message: lastMessage ? truncateForLLM(lastMessage, { maxChars: 500 }) : "",
+      timestamp
+    };
+    const tempFile = `${contextFile}.tmp`;
+    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+`);
+    fs6.renameSync(tempFile, contextFile);
+    logInfo(HOOK_NAME29, `Stop state captured (reason: ${source})`);
   } catch (error) {
     logError(HOOK_NAME29, `Failed to update context file: ${error}`);
   } finally {
@@ -5133,20 +5131,20 @@ async function worktreeRemove(input) {
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME30 = "stop-state-saver";
-var MAX_LOCK_ATTEMPTS4 = 20;
-async function stopStateSaver(input) {
+var HOOK_NAME30 = "stop-failure-handler";
+var MAX_LOCK_ATTEMPTS5 = 20;
+async function stopFailureHandler(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const lastMessage = input.last_assistant_message || "";
-  const source = input.source || "unknown";
-  logDebug(HOOK_NAME30, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
+  const sessionId = input.session_id || "unknown";
+  const errorType = input.source || "unknown";
+  logWarn(HOOK_NAME30, `API failure: type=${errorType}, session=${sessionId}`);
   const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs6.existsSync(contextFile)) {
-    logDebug(HOOK_NAME30, "No context file found, nothing to update");
+    logInfo(HOOK_NAME30, "No context file found, logging failure without context update");
     return outputSilentSuccess();
   }
   const lockDir = `${contextFile}.lock`;
-  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS4)) {
+  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS5)) {
     logError(HOOK_NAME30, "Failed to acquire lock, skipping context update");
     return outputSilentSuccess();
   }
@@ -5163,53 +5161,6 @@ async function stopStateSaver(input) {
     const heartbeat = context["session_heartbeat"] || {};
     heartbeat["last_activity"] = timestamp;
     context["session_heartbeat"] = heartbeat;
-    context["last_stop"] = {
-      source,
-      last_message: lastMessage ? truncateForLLM(lastMessage, { maxChars: 500 }) : "",
-      timestamp
-    };
-    const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
-`);
-    fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME30, `Stop state captured (reason: ${source})`);
-  } catch (error) {
-    logError(HOOK_NAME30, `Failed to update context file: ${error}`);
-  } finally {
-    releaseLock(lockDir);
-  }
-  return outputSilentSuccess();
-}
-var HOOK_NAME31 = "stop-failure-handler";
-var MAX_LOCK_ATTEMPTS5 = 20;
-async function stopFailureHandler(input) {
-  const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
-  const sessionId = input.session_id || "unknown";
-  const errorType = input.source || "unknown";
-  logWarn(HOOK_NAME31, `API failure: type=${errorType}, session=${sessionId}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
-    logInfo(HOOK_NAME31, "No context file found, logging failure without context update");
-    return outputSilentSuccess();
-  }
-  const lockDir = `${contextFile}.lock`;
-  if (!await acquireLock(lockDir, MAX_LOCK_ATTEMPTS5)) {
-    logError(HOOK_NAME31, "Failed to acquire lock, skipping context update");
-    return outputSilentSuccess();
-  }
-  try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
-    let context;
-    try {
-      context = JSON.parse(raw);
-    } catch {
-      logError(HOOK_NAME31, "Context file contains invalid JSON, skipping update");
-      return outputSilentSuccess();
-    }
-    const timestamp = formatTimestamp();
-    const heartbeat = context["session_heartbeat"] || {};
-    heartbeat["last_activity"] = timestamp;
-    context["session_heartbeat"] = heartbeat;
     context["last_api_error"] = {
       error_type: errorType,
       session_id: sessionId,
@@ -5219,15 +5170,15 @@ async function stopFailureHandler(input) {
     fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
     fs6.renameSync(tempFile, contextFile);
-    logInfo(HOOK_NAME31, `API failure recorded (type: ${errorType})`);
+    logInfo(HOOK_NAME30, `API failure recorded (type: ${errorType})`);
   } catch (error) {
-    logError(HOOK_NAME31, `Failed to update context file: ${error}`);
+    logError(HOOK_NAME30, `Failed to update context file: ${error}`);
   } finally {
     releaseLock(lockDir);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME32 = "review-logger";
+var HOOK_NAME31 = "review-logger";
 var MAX_LOG_SIZE = 200 * 1024;
 var REVIEW_COMMAND_PATTERN = /glab\s+mr\s+(note|approve)\s+(\d+)/;
 var DISCUSSION_COMMAND_PATTERN = /glab\s+api\b[\s\S]*?merge_requests\/(\d+)\/discussions/;
@@ -5280,13 +5231,13 @@ async function reviewLogger(input) {
     const logPath = getReviewLogPath();
     rotateIfNeeded(logPath);
     appendReviewEntry(logPath, entry);
-    logDebug(HOOK_NAME32, `Logged review: MR !${mrNumber} (${commandType})`);
+    logDebug(HOOK_NAME31, `Logged review: MR !${mrNumber} (${commandType})`);
   } catch (error) {
-    logError(HOOK_NAME32, `Failed to log review: ${error}`);
+    logError(HOOK_NAME31, `Failed to log review: ${error}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME33 = "denial-logger";
+var HOOK_NAME32 = "denial-logger";
 async function denialLogger(input) {
   try {
     const projectDir = getProjectDir();
@@ -5302,13 +5253,13 @@ async function denialLogger(input) {
     const logFile = path2.join(feedbackDir, "denials.jsonl");
     fs6.appendFileSync(logFile, `${JSON.stringify(entry)}
 `);
-    logInfo(HOOK_NAME33, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
+    logInfo(HOOK_NAME32, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
   } catch (err) {
-    logError(HOOK_NAME33, `Failed to log denial: ${err}`);
+    logError(HOOK_NAME32, `Failed to log denial: ${err}`);
   }
   return outputSilentSuccess();
 }
-var HOOK_NAME34 = "denial-notification";
+var HOOK_NAME33 = "denial-notification";
 var DENIAL_THRESHOLD = 3;
 var WINDOW_MS = 6e4;
 var COOLDOWN_MS = 3e5;
@@ -5323,7 +5274,7 @@ function sendNotification(title, message) {
       { timeout: 3e3 }
     );
   } catch {
-    logWarn(HOOK_NAME34, "Failed to send desktop notification");
+    logWarn(HOOK_NAME33, "Failed to send desktop notification");
   }
 }
 async function denialNotification(input) {
@@ -5332,12 +5283,12 @@ async function denialNotification(input) {
   while (denialTimestamps.length > 0 && (denialTimestamps[0] ?? 0) < now - WINDOW_MS) {
     denialTimestamps.shift();
   }
-  logDebug(HOOK_NAME34, `Denials in window: ${denialTimestamps.length}/${DENIAL_THRESHOLD}`);
+  logDebug(HOOK_NAME33, `Denials in window: ${denialTimestamps.length}/${DENIAL_THRESHOLD}`);
   if (denialTimestamps.length < DENIAL_THRESHOLD) {
     return outputSilentSuccess();
   }
   if (now - lastNotificationTime < COOLDOWN_MS) {
-    logDebug(HOOK_NAME34, "Notification cooldown active, skipping");
+    logDebug(HOOK_NAME33, "Notification cooldown active, skipping");
     return outputSilentSuccess();
   }
   const toolName = input.tool_name || "unknown";
@@ -5347,12 +5298,12 @@ async function denialNotification(input) {
     `${denialTimestamps.length} denials in 60s. Latest: ${toolName} ${detail}. Check /permissions.`
   );
   lastNotificationTime = now;
-  logInfo(HOOK_NAME34, `Notification sent: ${denialTimestamps.length} denials in window`);
+  logInfo(HOOK_NAME33, `Notification sent: ${denialTimestamps.length} denials in window`);
   return outputSilentSuccess();
 }
 
 // src/permissiondenied/project-write-retry.ts
-var HOOK_NAME35 = "project-write-retry";
+var HOOK_NAME34 = "project-write-retry";
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit"]);
 async function projectWriteRetry(input) {
   if (!WRITE_TOOLS.has(input.tool_name)) {
@@ -5360,24 +5311,24 @@ async function projectWriteRetry(input) {
   }
   const filePath = getFilePath(input);
   if (!filePath) {
-    logDebug(HOOK_NAME35, "No file_path in input, skipping");
+    logDebug(HOOK_NAME34, "No file_path in input, skipping");
     return outputSilentSuccess();
   }
   if (!isWithinProject(filePath)) {
-    logDebug(HOOK_NAME35, `Outside project: ${filePath}`);
+    logDebug(HOOK_NAME34, `Outside project: ${filePath}`);
     return outputSilentSuccess();
   }
   const protectedResult = isProtectedPath(filePath);
   if (protectedResult.isProtected) {
-    logDebug(HOOK_NAME35, `Protected file (${protectedResult.category}): ${filePath}`);
+    logDebug(HOOK_NAME34, `Protected file (${protectedResult.category}): ${filePath}`);
     return outputSilentSuccess();
   }
-  logInfo(HOOK_NAME35, `Retrying in-project write: ${filePath}`);
+  logInfo(HOOK_NAME34, `Retrying in-project write: ${filePath}`);
   return outputRetry();
 }
 
 // src/permissiondenied/safe-command-retry.ts
-var HOOK_NAME36 = "safe-command-retry";
+var HOOK_NAME35 = "safe-command-retry";
 var MAX_RETRIES_PER_PREFIX = 3;
 var SAFE_RETRY_PREFIXES = [
   "ls ",
@@ -5453,40 +5404,40 @@ async function safeCommandRetry(input) {
   }
   const { safe, prefix } = isSafeToRetry(command);
   if (!safe) {
-    logDebug(HOOK_NAME36, `Not a safe command, skipping retry: ${command.slice(0, 60)}`);
+    logDebug(HOOK_NAME35, `Not a safe command, skipping retry: ${command.slice(0, 60)}`);
     return outputSilentSuccess();
   }
   const currentCount = retryCounters.get(prefix) || 0;
   if (currentCount >= MAX_RETRIES_PER_PREFIX) {
     logWarn(
-      HOOK_NAME36,
+      HOOK_NAME35,
       `Rate limit reached for prefix "${prefix.trim()}" (${MAX_RETRIES_PER_PREFIX} retries)`
     );
     return outputSilentSuccess();
   }
   retryCounters.set(prefix, currentCount + 1);
   logInfo(
-    HOOK_NAME36,
+    HOOK_NAME35,
     `Retrying safe command (${currentCount + 1}/${MAX_RETRIES_PER_PREFIX}): ${command.slice(0, 80)}`
   );
   return outputRetry();
 }
 
 // src/permissiondenied/permissiondenied-combined.ts
-var HOOK_NAME37 = "permissiondenied-combined";
+var HOOK_NAME36 = "permissiondenied-combined";
 function isRetryDecision(result) {
   return result.hookSpecificOutput?.retry === true;
 }
 async function permissionDeniedCombined(input) {
   logDebug(
-    HOOK_NAME37,
+    HOOK_NAME36,
     `Denial event: ${input.tool_name} \u2014 ${(input.tool_input?.command || input.tool_input?.file_path || "").slice(0, 80)}`
   );
   const retryHooks = [safeCommandRetry, projectWriteRetry];
   for (const hook of retryHooks) {
     const result = await hook(input);
     if (isRetryDecision(result)) {
-      logInfo(HOOK_NAME37, `Retry granted by ${hook.name}`);
+      logInfo(HOOK_NAME36, `Retry granted by ${hook.name}`);
       Promise.all([denialNotification(input).catch(() => {
       }), denialLogger(input).catch(() => {
       })]);
@@ -5499,12 +5450,12 @@ async function permissionDeniedCombined(input) {
     denialLogger(input).catch(() => {
     })
   ]);
-  logDebug(HOOK_NAME37, "No retry \u2014 denial logged");
+  logDebug(HOOK_NAME36, "No retry \u2014 denial logged");
   return outputSilentSuccess();
 }
 
 // src/prompt/hipaa-context-injector.ts
-var HOOK_NAME38 = "hipaa-context-injector";
+var HOOK_NAME37 = "hipaa-context-injector";
 var MAX_RULES_PER_PROMPT = 3;
 var CONTEXT_RULES = [
   {
@@ -5611,17 +5562,17 @@ function findMatchingRules(prompt) {
 async function hipaaContextInjector(input) {
   const prompt = extractPrompt(input);
   if (!prompt) {
-    logDebug(HOOK_NAME38, "No prompt text found, skipping");
+    logDebug(HOOK_NAME37, "No prompt text found, skipping");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME38, `Scanning prompt (${prompt.length} chars)`);
+  logDebug(HOOK_NAME37, `Scanning prompt (${prompt.length} chars)`);
   const matchedRules = findMatchingRules(prompt);
   if (matchedRules.length === 0) {
-    logDebug(HOOK_NAME38, "No keyword matches");
+    logDebug(HOOK_NAME37, "No keyword matches");
     return outputSilentSuccess();
   }
   const ruleIds = matchedRules.map((r) => r.id);
-  logInfo(HOOK_NAME38, `Matched ${matchedRules.length} rule(s): ${ruleIds.join(", ")}`);
+  logInfo(HOOK_NAME37, `Matched ${matchedRules.length} rule(s): ${ruleIds.join(", ")}`);
   const context = matchedRules.map((r) => r.context).join("\n");
   return outputPromptContext(context);
 }
@@ -5711,7 +5662,7 @@ function redactPhi(text, patterns = DEFAULT_PHI_PATTERNS) {
 }
 
 // src/messagedisplay/phi-output-redactor.ts
-var HOOK_NAME39 = "phi-output-redactor";
+var HOOK_NAME38 = "phi-output-redactor";
 var OPT_IN_ENV_VAR = "CONTINUITY_PHI_OUTPUT_REDACT";
 function extractAssistantMessage(input) {
   const delta = input.delta;
@@ -5722,26 +5673,26 @@ function extractAssistantMessage(input) {
 }
 async function phiOutputRedactor(input) {
   if (process.env[OPT_IN_ENV_VAR] !== "1") {
-    logDebug(HOOK_NAME39, "Opt-in not set, skipping");
+    logDebug(HOOK_NAME38, "Opt-in not set, skipping");
     return outputSilentSuccess();
   }
   const message = extractAssistantMessage(input);
   if (!message) {
-    logDebug(HOOK_NAME39, "No assistant message text found, skipping");
+    logDebug(HOOK_NAME38, "No assistant message text found, skipping");
     return outputSilentSuccess();
   }
   const result = redactPhi(message);
   if (result.totalSubstitutions === 0) {
-    logDebug(HOOK_NAME39, `No PHI patterns matched in ${message.length}-char message`);
+    logDebug(HOOK_NAME38, `No PHI patterns matched in ${message.length}-char message`);
     return outputSilentSuccess();
   }
   logInfo(
-    HOOK_NAME39,
+    HOOK_NAME38,
     `Redacted ${result.totalSubstitutions} match(es) across ${result.matchedPatterns.length} pattern(s): ${result.matchedPatterns.join(", ")}`
   );
   return outputMessageDisplay(result.text);
 }
-var HOOK_NAME40 = "session-title";
+var HOOK_NAME39 = "session-title";
 function getGitBranch(cwd) {
   try {
     const branch = execSync("git rev-parse --abbrev-ref HEAD", {
@@ -5761,10 +5712,10 @@ function getGitBranch(cwd) {
 function sessionTitle(input) {
   const branch = getGitBranch(input.cwd);
   if (!branch) {
-    logDebug(HOOK_NAME40, "No git branch detected, skipping session title");
+    logDebug(HOOK_NAME39, "No git branch detected, skipping session title");
     return outputSilentSuccess();
   }
-  logDebug(HOOK_NAME40, `Setting session title to branch: ${branch}`);
+  logDebug(HOOK_NAME39, `Setting session title to branch: ${branch}`);
   return outputSessionTitle(branch);
 }
 var MEASUREMENTS_FILE = "measurements.jsonl";
@@ -5860,7 +5811,7 @@ function recordBashEvent(sessionId, command, output, durationMs) {
 }
 
 // src/pretool/read-cache.ts
-var HOOK_NAME41 = "read-cache";
+var HOOK_NAME40 = "read-cache";
 async function readCacheHook(input) {
   const skipped = runGuards(input, (i) => guardTool(i, "Read"));
   if (skipped) return skipped;
@@ -5877,7 +5828,7 @@ async function readCacheHook(input) {
   try {
     stat = fs6.statSync(absPath);
   } catch (e) {
-    logDebug(HOOK_NAME41, `stat failed for ${absPath}: ${e}`);
+    logDebug(HOOK_NAME40, `stat failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
   }
   if (!stat.isFile()) {
@@ -5887,7 +5838,7 @@ async function readCacheHook(input) {
   try {
     cached = await readEntry(sessionId, absPath);
   } catch (e) {
-    logWarn(HOOK_NAME41, `cache lookup failed: ${e}`);
+    logWarn(HOOK_NAME40, `cache lookup failed: ${e}`);
     return outputSilentSuccess();
   }
   if (!cached) {
@@ -5897,26 +5848,26 @@ async function readCacheHook(input) {
   try {
     currentContent = fs6.readFileSync(absPath, "utf8");
   } catch (e) {
-    logWarn(HOOK_NAME41, `read failed for ${absPath}: ${e}`);
+    logWarn(HOOK_NAME40, `read failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
   }
   const currentHash = computeContentHash(currentContent);
   if (currentHash === cached.contentHash) {
-    logDebug(HOOK_NAME41, `unchanged via hash check: ${absPath}`);
+    logDebug(HOOK_NAME40, `unchanged via hash check: ${absPath}`);
     return outputSilentSuccess();
   }
   const delta = computeDelta(cached.cachedContent, currentContent);
   if (delta.kind !== "delta") {
     if (delta.kind === "too-large") {
       logInfo(
-        HOOK_NAME41,
+        HOOK_NAME40,
         `delta exceeds ${delta.reason} budget for ${absPath}; falling through to full read`
       );
     }
     return outputSilentSuccess();
   }
   const savedChars = Math.max(0, cached.cachedContent.length - delta.diff.length);
-  logInfo(HOOK_NAME41, `injecting delta for ${absPath} (saved ~${savedChars} chars)`);
+  logInfo(HOOK_NAME40, `injecting delta for ${absPath} (saved ~${savedChars} chars)`);
   try {
     recordReadEvent(
       sessionId,
@@ -5926,7 +5877,7 @@ async function readCacheHook(input) {
       delta.diff.length
     );
   } catch (e) {
-    logDebug(HOOK_NAME41, `measurement record failed: ${e}`);
+    logDebug(HOOK_NAME40, `measurement record failed: ${e}`);
   }
   await snapshotFileToCache(sessionId, absPath);
   const message = [
@@ -5946,7 +5897,7 @@ async function readCacheHook(input) {
     }
   };
 }
-var HOOK_NAME42 = "read-cache-writer";
+var HOOK_NAME41 = "read-cache-writer";
 async function readCacheWriterHook(input) {
   try {
     const skipped = runGuards(input, (i) => guardTool(i, "Read"));
@@ -5962,28 +5913,28 @@ async function readCacheWriterHook(input) {
       const prior = await readEntry(sessionId, absPath);
       wasMiss = !prior;
     } catch (e) {
-      logDebug(HOOK_NAME42, `measurement probe failed: ${e}`);
+      logDebug(HOOK_NAME41, `measurement probe failed: ${e}`);
     }
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
-      logDebug(HOOK_NAME42, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
+      logDebug(HOOK_NAME41, `snapshot skipped for ${absPath} (not a regular file or I/O error)`);
       return outputSilentSuccess();
     }
     if (wasMiss) {
       try {
         recordReadEvent(sessionId, absPath, "cache_miss", size);
       } catch (e) {
-        logDebug(HOOK_NAME42, `measurement record failed: ${e}`);
+        logDebug(HOOK_NAME41, `measurement record failed: ${e}`);
       }
     }
-    logDebug(HOOK_NAME42, `cached read of ${absPath} (${size} bytes)`);
+    logDebug(HOOK_NAME41, `cached read of ${absPath} (${size} bytes)`);
     return outputSilentSuccess();
   } catch (e) {
-    logWarn(HOOK_NAME42, `unexpected error: ${e}`);
+    logWarn(HOOK_NAME41, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
-var HOOK_NAME43 = "read-cache-invalidator";
+var HOOK_NAME42 = "read-cache-invalidator";
 async function readCacheInvalidatorHook(input) {
   try {
     const skipped = runGuards(input, (i) => guardTool(i, "Write", "Edit", "MultiEdit"));
@@ -5996,19 +5947,19 @@ async function readCacheInvalidatorHook(input) {
     const absPath = path2.resolve(filePath);
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
-      logDebug(HOOK_NAME43, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
+      logDebug(HOOK_NAME42, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
       return outputSilentSuccess();
     }
-    logDebug(HOOK_NAME43, `refreshed cache base for ${absPath} (${size} bytes) after mutation`);
+    logDebug(HOOK_NAME42, `refreshed cache base for ${absPath} (${size} bytes) after mutation`);
     return outputSilentSuccess();
   } catch (e) {
-    logWarn(HOOK_NAME43, `unexpected error: ${e}`);
+    logWarn(HOOK_NAME42, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
 
 // src/posttool/bash-output-measurer.ts
-var HOOK_NAME44 = "bash-output-measurer";
+var HOOK_NAME43 = "bash-output-measurer";
 function combineOutput(input) {
   const out = input.tool_response;
   if (!out) return "";
@@ -6026,10 +5977,10 @@ async function bashOutputMeasurerHook(input) {
     const output = combineOutput(input);
     const durationMs = getDurationMs(input);
     recordBashEvent(sessionId, command, output, durationMs);
-    logDebug(HOOK_NAME44, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
+    logDebug(HOOK_NAME43, `recorded bash event (cmd=${command.length}b, out=${output.length}b)`);
     return outputSilentSuccess();
   } catch (e) {
-    logDebug(HOOK_NAME44, `unexpected error: ${e}`);
+    logDebug(HOOK_NAME43, `unexpected error: ${e}`);
     return outputSilentSuccess();
   }
 }
@@ -6149,11 +6100,6 @@ registerHook(
 registerHook("lifecycle/task-completed-logger", "Log task completion metrics", taskCompletedLogger);
 registerHook("lifecycle/task-created-logger", "Log task creation events", taskCreatedLogger);
 registerHook(
-  "lifecycle/worktree-create",
-  "Initialize continuity for new worktrees",
-  worktreeCreate
-);
-registerHook(
   "lifecycle/worktree-remove",
   "Archive continuity state for removed worktrees",
   worktreeRemove
@@ -6214,6 +6160,6 @@ registerHook(
   bashOutputMeasurerHook
 );
 
-export { clearHooks, createLogger, createScopedLogger, getCommand, getContent, getCurrentLogLevel, getField, getFilePath, getHook, getHookEnvironment, getHookLogPath, getLogDir, getNewString, getOldString, getPattern, getPermissionLogPath, getProjectDir, getSessionId, getToolInput, getToolName, getWorktreeBranch, getWorktreePath, hasHook, isBashToolInput, isFileToolInput, isUserPromptInput, listHooks, logDebug, logError, logInfo, logPermission, logPermissionEntry, logWarn, outputAllow, outputAllowWithContext, outputAnswerQuestion, outputAsk, outputDefer, outputDeny, outputPromptContext, outputRetry, outputSessionTitle, outputSilentSuccess, outputStderrWarning, outputStopContext, outputSuccess, outputWarning, outputWithContext, outputWithNotification, parseHookInput, readHookInput, readHookInputAsync, registerHook, resetLogLevel, unregisterHook };
+export { clearHooks, createLogger, createScopedLogger, getCommand, getContent, getCurrentLogLevel, getField, getFilePath, getHook, getHookEnvironment, getHookLogPath, getLogDir, getNewString, getOldString, getPattern, getPermissionLogPath, getProjectDir, getSessionId, getToolInput, getToolName, getWorktreePath, hasHook, isBashToolInput, isFileToolInput, isUserPromptInput, listHooks, logDebug, logError, logInfo, logPermission, logPermissionEntry, logWarn, outputAllow, outputAllowWithContext, outputAnswerQuestion, outputAsk, outputDefer, outputDeny, outputPromptContext, outputRetry, outputSessionTitle, outputSilentSuccess, outputStderrWarning, outputStopContext, outputSuccess, outputWarning, outputWithContext, outputWithNotification, parseHookInput, readHookInput, readHookInputAsync, registerHook, resetLogLevel, unregisterHook };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

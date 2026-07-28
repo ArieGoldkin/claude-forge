@@ -13,7 +13,7 @@
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
       "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 11 skills, 12 commands, 35 hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact \u2192 SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.10.2",
+      "version": "2.11.0",
       "category": "development"
     },
     {
@@ -41,7 +41,7 @@
       "name": "etk",
       "source": "./plugins/engineering-toolkit",
       "description": "Engineering practices toolkit (etk, formerly engineering-toolkit) - 26 skills, 5 agents, 20 commands for quality, architecture, Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
-      "version": "2.16.1",
+      "version": "2.16.2",
       "category": "development"
     }
   ]

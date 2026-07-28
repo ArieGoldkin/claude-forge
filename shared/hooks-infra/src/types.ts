@@ -179,16 +179,18 @@ export interface HookInput {
   agent_id?: string;
 
   /**
-   * Worktree path when hook fires inside a git worktree.
-   * Available since Claude Code v2.1.70.
+   * Absolute path of the worktree being removed.
+   *
+   * Sent ONLY on `WorktreeRemove` (verified against the CC 2.1.220 payload builder and its
+   * schema). `WorktreeCreate` does NOT carry it — that event fires BEFORE the worktree exists
+   * and carries only `name`, the slug the hook is asked to turn into a path.
+   *
+   * Available since Claude Code v2.1.50 (v2.1.69 for plugin-supplied hooks).
+   *
+   * There is deliberately no `worktree_branch` field: that name appears ZERO times in the
+   * CC 2.1.220 binary. Reading it silently yielded `undefined` forever (issue #78).
    */
   worktree_path?: string;
-
-  /**
-   * Worktree branch name.
-   * Available since Claude Code v2.1.70.
-   */
-  worktree_branch?: string;
 
   /**
    * Last assistant message content, present in Stop/SubagentStop input.

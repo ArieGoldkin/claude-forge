@@ -516,28 +516,20 @@ export function getAgentType(input: HookInput): string | undefined {
 /**
  * Extract worktree path from hook input.
  *
- * Present when the hook fires inside a git worktree.
- * Available since Claude Code v2.1.70.
+ * Present on `WorktreeRemove` ONLY — it is the absolute path of the worktree being removed.
+ * `WorktreeCreate` does NOT send it (that event fires before the worktree exists and carries
+ * only `name`), so this returns undefined there. See issue #78.
  *
  * @param input - Hook input object
- * @returns Worktree path string or undefined if not in a worktree
+ * @returns Worktree path string, or undefined on any event other than WorktreeRemove
  */
 export function getWorktreePath(input: HookInput): string | undefined {
   return input.worktree_path;
 }
 
-/**
- * Extract worktree branch from hook input.
- *
- * Present when the hook fires inside a git worktree.
- * Available since Claude Code v2.1.70.
- *
- * @param input - Hook input object
- * @returns Worktree branch string or undefined if not in a worktree
- */
-export function getWorktreeBranch(input: HookInput): string | undefined {
-  return input.worktree_branch;
-}
+// NOTE: there is no `getWorktreeBranch`. It used to read `input.worktree_branch`, a field
+// that appears ZERO times in the CC 2.1.220 binary — it could only ever return undefined.
+// Removed in #78 rather than left as public API that silently lies.
 
 /**
  * Extract tool execution duration in milliseconds from hook input.

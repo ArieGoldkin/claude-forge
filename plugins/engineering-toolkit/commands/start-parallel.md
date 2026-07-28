@@ -231,9 +231,17 @@ git worktree list   # verify: 1 main + 3 agent worktrees
 echo "MAIN=$MAIN"
 ```
 
-ctk's `WorktreeCreate` hook fires on each, seeding continuity state in the new
-worktree — so each agent starts with its own context rather than inheriting the
-coordinator's.
+Each agent terminal then starts its **own** Claude Code session inside its own
+worktree, so each gets its own continuity state rather than inheriting the
+coordinator's — that isolation comes from being a separate session in a separate
+directory, not from any hook.
+
+> **Correction (2026-07-28).** This section previously claimed "ctk's
+> `WorktreeCreate` hook fires on each, seeding continuity state". That was wrong
+> twice: `git worktree add` run in a shell never fires CC's `WorktreeCreate`
+> event (it fires only for `--worktree`, `isolation: "worktree"`, background
+> sessions, and the `EnterWorktree` tool), and ctk's hook was itself broken and
+> has been removed. See issue #78.
 
 > **`REPO` and `MAIN` live only in THIS shell.** Every agent terminal below
 > re-derives them itself. Do not assume a variable set here is visible in
