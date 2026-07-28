@@ -47,6 +47,36 @@ import type { AgentContext, HookInput, HookResult, ToolName } from '../types.js'
 
 // Re-export protected path patterns and types from path-utils (single source of truth)
 export { ENV_PATTERNS, GIT_PATTERNS, SSH_PATTERNS, CREDENTIAL_PATTERNS, SYSTEM_DIR_PATTERNS };
+
+/**
+ * Text appended to every denial this hook emits.
+ *
+ * WHY THE RAW PATTERN IS NO LONGER SHOWN (#65). Denials used to interpolate
+ * `regex.source` into user-facing text, e.g. `Pattern matched: \/usr\/`. That
+ * made the denial message itself contain the protected literal, so quoting a
+ * denial re-triggered the block — a commit message, a ledger entry describing
+ * the trap, and an agent reporting why it stopped were all denied for repeating
+ * the reason they were denied. The pattern is still logged; it is only removed
+ * from the model-facing payload. Category and description carry the diagnosis.
+ *
+ * WHY THE GUIDANCE EXISTS. This check matches the TEXT of a command, not the
+ * resource the command resolves to, so a command that merely mentions a
+ * protected name is denied even when it touches nothing sensitive. Naming the
+ * path-based alternative converts a dead end into a next step.
+ *
+ * The "not fatal" sentence is DELIBERATE and UNPROVEN. R1 (#51) measured 7 of
+ * 12 lost subagent reports ending on a denial from this hook: the agent gets a
+ * normal error result and then stops without writing its conclusion. Repeating
+ * "continue after a denial" in the DISPATCH prompt did not prevent it, so #65
+ * proposes delivering it in the denial payload instead — at the moment of the
+ * block. This is the first delivery of that instruction, not evidence that it
+ * works. Do not record the stop-on-denial behaviour as fixed on the strength of
+ * this text; it needs a measured re-run against the R1 corpus.
+ */
+const DENIAL_GUIDANCE =
+  '\n\nThis check matches the text of the command, not the resource it resolves to. ' +
+  'To inspect a file, use the Read, Grep or Glob tools — those are checked by resolved path instead.' +
+  '\nThis denial is not fatal and does not end your task. Continue, and still write any report or checkpoint you owe.';
 export type { ProtectionCategory };
 
 // =============================================================================
@@ -522,7 +552,7 @@ function validateBashCommand(
       logWarn(HOOK_NAME, `Blocked: ${reason}`);
       logPermission('deny', reason, 'Bash', sessionId, agentContext);
       return outputDeny(
-        `BLOCKED: Dangerous command detected.\n\nCategory: ${match.pattern.category}\nReason: ${match.pattern.description}\nPattern matched: ${match.pattern.regex.source}`
+        `BLOCKED: Dangerous command detected.\n\nCategory: ${match.pattern.category}\nReason: ${match.pattern.description}${DENIAL_GUIDANCE}`
       );
     }
   }
@@ -548,7 +578,7 @@ function validateBashCommand(
       logWarn(HOOK_NAME, `Blocked: ${reason}`);
       logPermission('deny', reason, 'Bash', sessionId, agentContext);
       return outputDeny(
-        `BLOCKED: Command references protected resource.\n\nProtected resources include environment files, system directories, and SSH keys.\nPattern matched: ${sensitiveMatch.pattern}`
+        `BLOCKED: Command references protected resource.\n\nProtected resources include environment files, system directories, and key material.${DENIAL_GUIDANCE}`
       );
     }
   }
@@ -682,8 +712,7 @@ function validateFileOperation(
       return outputDeny(
         `BLOCKED: ${friendlyName} modification blocked.\n\n` +
           `File: ${filePath}\n` +
-          `Category: ${friendlyName}\n` +
-          `Pattern matched: ${match.pattern}`
+          `Category: ${friendlyName}${DENIAL_GUIDANCE}`
       );
     }
   }

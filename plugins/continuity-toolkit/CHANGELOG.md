@@ -2,6 +2,32 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.10.2] - 2026-07-28 — security-blocker denials stop quoting the literal that triggered them
+
+`security-blocker` message text only. **No matching behaviour changed** — nothing is newly blocked and nothing newly allowed.
+
+### Fixed
+
+**Denials no longer interpolate the raw regex source into model-facing text** (partial fix for #65).
+
+The message read `Pattern matched: \/etc\/`, which put the protected literal *inside the denial*. Repeating a denial therefore re-triggered it: a commit message quoting one, a ledger entry describing the trap, and an agent explaining why it stopped were each blocked for restating the reason they were blocked. Four such self-inflicted denials were recorded in a single session on 2026-07-26, and a fifth occurred while writing this change.
+
+The pattern is still logged in full — it is removed only from the payload the model sees. Category and description carry the diagnosis, and a new test asserts the load-bearing property directly: feeding a denial message back through the checker must not match.
+
+### Added
+
+**Denials now say what to do instead, and that they are not fatal.**
+
+Two sentences appended to every denial path. The first names the path-based alternative (`Read`, `Grep`, `Glob`), because this check matches command *text* rather than the resource a command resolves to — so a command that merely mentions a protected name is denied while touching nothing sensitive.
+
+The second states the denial does not end the task. This is **deliberate and unproven**: R1 (#51) measured 7 of 12 lost subagent reports ending on a denial from this hook — the agent receives a normal error result and then stops without writing its conclusion. The same instruction in the *dispatch* prompt did not prevent it, so #65 proposes delivering it in the denial payload, at the moment of the block. This ships that instruction; it is not evidence that it works, and #65 stays open pending a measured re-run against the R1 corpus.
+
+**Five tests for denial payload hygiene**, a surface that previously had none — no test asserted anything about denial message text.
+
+### Not in this release
+
+The three known **under**-blocking gaps (trailing-separator, case-sensitivity, and the two inert `envrc` lookaheads) are deliberately excluded: all three *add* blocking and must not ride along with a message change. Narrowing the match from command text to resolved target — the principled fix — remains unattempted; it needs real shell parsing, and this file's own comments record that enumerating metacharacters "is unbounded and fails silently, one character at a time".
+
 ## [2.10.1] - 2026-07-27 — one derivation for the log-level variable, and a CI check that docs match code
 
 Shared library, tests and CI. No skill, agent or command behaviour changed.

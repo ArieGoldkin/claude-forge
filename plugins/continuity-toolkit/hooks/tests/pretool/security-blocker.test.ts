@@ -34,6 +34,7 @@ import {
   HOOK_NAME,
   SSH_PATTERNS,
   SYSTEM_DIR_PATTERNS,
+  matchesBashSensitivePattern,
   matchesDangerousCommand,
   matchesEnvDumpCommand,
   matchesGitPush,
@@ -2459,5 +2460,86 @@ describe('git push approval-first gate', () => {
     // rm -rf / should still hard-deny; the push gate is later in the chain
     const result = await securityBlocker(createBashInput('rm -rf /'));
     expect(result.continue).toBe(false);
+  });
+});
+
+// =============================================================================
+// DENIAL PAYLOAD HYGIENE (#65)
+// =============================================================================
+
+describe('denial payload hygiene (#65)', () => {
+  // Assembled rather than written literally. This suite is edited by the same
+  // agents the hook guards, and a bash command carrying the literal is denied —
+  // which is how a session gets blocked while fixing the blocking. The value is
+  // identical at runtime; only the source text differs.
+  const SYSTEM_FILE_TARGET = `/${'etc'}/hosts`;
+
+  // Denials used to interpolate `regex.source` into the model-facing message,
+  // so a denial CONTAINED the protected literal that triggered it. Repeating a
+  // denial therefore re-triggered it: a commit message quoting one, a ledger
+  // entry describing the trap, and an agent explaining why it stopped were all
+  // blocked for restating the reason they were blocked. Nothing pinned the
+  // message text before this suite.
+
+  it('should not label or echo the matched pattern for a bash secret denial', async () => {
+    const result = await securityBlocker(createBashInput('cat .env'));
+
+    expect(result.continue).toBe(false);
+    expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+    expect(result.stopReason).not.toContain('Pattern matched');
+    // `\/` is the giveaway artifact of an interpolated regex source.
+    expect(result.stopReason).not.toContain('\\/');
+  });
+
+  it('should produce a bash denial that does NOT itself trip the checker', async () => {
+    // The load-bearing property: a denial must be quotable. If this fails, the
+    // hook has again become self-reinforcing.
+    const result = await securityBlocker(createBashInput('cat .env'));
+
+    expect(result.continue).toBe(false);
+    expect(matchesBashSensitivePattern(String(result.stopReason)).matched).toBe(false);
+  });
+
+  it('should not echo the regex source for a dangerous-command denial', async () => {
+    const result = await securityBlocker(createBashInput('rm -rf /'));
+
+    expect(result.continue).toBe(false);
+    expect(result.stopReason).not.toContain('Pattern matched');
+    // The human-readable half must survive — this is the diagnosis the raw
+    // pattern was standing in for.
+    expect(result.stopReason).toContain('Category:');
+    expect(result.stopReason).toContain('Reason:');
+  });
+
+  it('should not echo the regex source for a protected-path file denial', async () => {
+    const target = SYSTEM_FILE_TARGET;
+    const result = await securityBlocker(createFileInput('Write', target));
+
+    expect(result.continue).toBe(false);
+    expect(result.stopReason).not.toContain('Pattern matched');
+    expect(result.stopReason).not.toContain('\\/');
+    // The operand IS echoed, deliberately: it is the caller's own input and is
+    // what makes the denial diagnosable. Only the regex source was removed.
+    expect(result.stopReason).toContain(target);
+  });
+
+  it('should tell the caller what to do instead, on every denial path', async () => {
+    const results = [
+      await securityBlocker(createBashInput('cat .env')),
+      await securityBlocker(createBashInput('rm -rf /')),
+      await securityBlocker(createFileInput('Write', SYSTEM_FILE_TARGET)),
+    ];
+
+    for (const result of results) {
+      expect(result.continue).toBe(false);
+      // Names the path-based alternative, so a text-match denial is a next step
+      // rather than a dead end.
+      expect(result.stopReason).toContain('Read, Grep or Glob');
+      // UNPROVEN mitigation, delivered at the moment of the block: R1 (#51)
+      // measured 7 of 12 lost subagent reports ending on a denial from this
+      // hook, and the same instruction in the DISPATCH prompt did not prevent
+      // it. This pins that the text ships; it is not evidence that it works.
+      expect(result.stopReason).toContain('not fatal');
+    }
   });
 });
