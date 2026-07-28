@@ -2308,6 +2308,7 @@ function matchDangerousBash(command) {
 }
 
 // src/pretool/security-blocker.ts
+var DENIAL_GUIDANCE = "\n\nThis check matches the text of the command, not the resource it resolves to. To inspect a file, use the Read, Grep or Glob tools \u2014 those are checked by resolved path instead.\nThis denial is not fatal and does not end your task. Continue, and still write any report or checkpoint you owe.";
 var HOOK_NAME6 = "pre-tool-use-security";
 var FILE_WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit"]);
 FILESYSTEM_PATTERNS.map(
@@ -2496,15 +2497,14 @@ function validateBashCommand(command, sessionId, agentContext) {
   for (const candidate of candidates) {
     const match = matchDangerousBash(candidate);
     if (match) {
-      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}`;
+      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}. Pattern: ${match.pattern.regex.source}`;
       logWarn(HOOK_NAME6, `Blocked: ${reason}`);
       logPermission("deny", reason, "Bash", sessionId, agentContext);
       return outputDeny(
         `BLOCKED: Dangerous command detected.
 
 Category: ${match.pattern.category}
-Reason: ${match.pattern.description}
-Pattern matched: ${match.pattern.regex.source}`
+Reason: ${match.pattern.description}${DENIAL_GUIDANCE}`
       );
     }
   }
@@ -2528,8 +2528,7 @@ Pattern matched: ${match.pattern.regex.source}`
       return outputDeny(
         `BLOCKED: Command references protected resource.
 
-Protected resources include environment files, system directories, and SSH keys.
-Pattern matched: ${sensitiveMatch.pattern}`
+Protected resources include environment files, system directories, and key material.${DENIAL_GUIDANCE}`
       );
     }
   }
@@ -2591,15 +2590,14 @@ Path: ${filePath}`
     const match = matchesProtectedPath(checkPath);
     if (match.matched && match.category) {
       const friendlyName = getCategoryFriendlyName(match.category);
-      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath})`;
+      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath}). Pattern: ${match.pattern}`;
       logWarn(HOOK_NAME6, `Blocked: ${reason}`);
       logPermission("deny", reason, toolName, sessionId, agentContext);
       return outputDeny(
         `BLOCKED: ${friendlyName} modification blocked.
 
 File: ${filePath}
-Category: ${friendlyName}
-Pattern matched: ${match.pattern}`
+Category: ${friendlyName}${DENIAL_GUIDANCE}`
       );
     }
   }
