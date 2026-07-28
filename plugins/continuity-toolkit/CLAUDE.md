@@ -1,7 +1,7 @@
 # Continuity Toolkit - Claude Code Plugin
 
 > **Plugin Name**: ctk (formerly `continuity-toolkit`, renamed in v2.0.0)
-> **Version**: 2.10.2
+> **Version**: 2.11.0
 > **Last Updated**: 2026-07-19
 
 ## Overview
@@ -51,11 +51,13 @@ Session continuity and context management toolkit for Claude Code. Provides mult
 | `/setup-context-monitor` | Configure StatusLine context monitor |
 | `/web-research` | Research external websites for documentation, competitive intelligence, or market data |
 
-## Hooks (35 registered — 32 shared + 3 ctk-specific)
+## Hooks (34 registered — 31 shared + 3 ctk-specific)
 
 This plugin owns all shared hooks from `shared/hooks-infra/`. Other plugins have been stripped to only their plugin-specific hooks to prevent duplication.
 
-> **Canonical count basis**: the authoritative number is the `registerHook()` calls in `hooks/src/index.ts` — currently **35** (32 symlinked from `shared/hooks-infra/src/hooks/` + 3 ctk-specific: `hipaa-context-injector`, `phi-output-redactor`, `session-loader`). Update this basis first when the count changes; the table below is illustrative and may lag. (`grep -c 'registerHook(' hooks/src/index.ts` includes the 2 non-call occurrences — the function definition — so subtract those.)
+> **Canonical count basis**: the authoritative number is the `registerHook()` calls in `hooks/src/index.ts` — currently **34** (31 symlinked from `shared/hooks-infra/src/hooks/` + 3 ctk-specific: `hipaa-context-injector`, `phi-output-redactor`, `session-loader`). Update this basis first when the count changes; the table below is illustrative and may lag. **Count with `grep -c '^registerHook(' hooks/src/index.ts`** — anchored at line start. An unanchored `grep -c 'registerHook('` returns 2 extra: the `export function registerHook(` definition and `unregisterHook(`, which contains the name as a substring.
+
+> **No `WorktreeCreate` hook, deliberately** (issue #78). That event is a *provider*: CC reads the hook's stdout as the worktree **path**, and registering any hook there stops CC running its own `git worktree add`. ctk's observer-style hook silently disabled worktree isolation for every user. `WorktreeRemove` is a genuine observer and is unaffected. See `docs/reviews/2026-07-28_issue-78-worktreecreate-contract.md`.
 
 | Hook | Event | Purpose |
 |------|-------|---------|
@@ -83,7 +85,6 @@ This plugin owns all shared hooks from `shared/hooks-infra/`. Other plugins have
 | task-created-logger | TaskCreated | Log task creation events |
 | stop-failure-handler | StopFailure | Log API errors that terminate a turn |
 | (PostCompact HTTP) | PostCompact | Forward compaction events to session monitor |
-| worktree-create | WorktreeCreate | Initialize continuity for new worktrees |
 | worktree-remove | WorktreeRemove | Archive continuity state for removed worktrees |
 
 ## Native Settings Alternatives

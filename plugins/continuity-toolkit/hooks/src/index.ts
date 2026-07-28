@@ -88,7 +88,6 @@ export {
   getField,
   getToolInput,
   getWorktreePath,
-  getWorktreeBranch,
 } from './lib/input.js';
 
 export {
@@ -287,12 +286,11 @@ registerHook('lifecycle/task-completed-logger', 'Log task completion metrics', t
 import { taskCreatedLogger } from './lifecycle/task-created-logger.js';
 registerHook('lifecycle/task-created-logger', 'Log task creation events', taskCreatedLogger);
 
-import { worktreeCreate } from './lifecycle/worktree-create.js';
-registerHook(
-  'lifecycle/worktree-create',
-  'Initialize continuity for new worktrees',
-  worktreeCreate
-);
+// NOTE: no `WorktreeCreate` hook is registered, deliberately. That event is a PROVIDER:
+// Claude Code reads the hook's stdout as the worktree PATH and, once any hook is registered,
+// never runs its own `git worktree add`. Registering an observer-style hook there silently
+// disabled worktree isolation for every ctk user (issue #78). See
+// docs/reviews/2026-07-28_issue-78-worktreecreate-contract.md before re-adding one.
 
 import { worktreeRemove } from './lifecycle/worktree-remove.js';
 registerHook(

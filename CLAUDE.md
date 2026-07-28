@@ -39,11 +39,11 @@ claude-forge/
 │   │   └── prompt/             # context-monitor, hipaa-context-injector
 │   └── tests/lib/              # 12 shared library test files (the set every plugin must link)
 ├── plugins/
-│   ├── continuity-toolkit/     # Session continuity management (v2.10.2, installed as ctk)
+│   ├── continuity-toolkit/     # Session continuity management (v2.11.0, installed as ctk)
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.11, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.10, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.12, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.16.1, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.16.2, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -51,7 +51,7 @@ claude-forge/
 
 | Plugin | Skills | Agents | Commands | Hooks | Focus |
 |--------|--------|--------|----------|-------|-------|
-| ctk (formerly continuity-toolkit) | 11 | 1 | 12 | 35 (32 **shared** + 3 ctk-specific) | Session persistence, context monitoring, web research, shared hook owner |
+| ctk (formerly continuity-toolkit) | 11 | 1 | 12 | 34 (31 **shared** + 3 ctk-specific) | Session persistence, context monitoring, web research, shared hook owner |
 | dtk (formerly devops-toolkit) | 15 | 2 | 12 | 2 (repo-access-guard, continuity-recommendation) | Infrastructure, AWS, Terraform, CI/CD, Salesforce, Husky pre-commit |
 | atk (formerly ai-toolkit) | 16 | 1 | 25 | 1 (continuity-recommendation) | RAG, embeddings, LangGraph, LLM patterns, conversational AI, NotebookLM |
 | ftk (formerly frontend-toolkit) | 17 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
@@ -132,7 +132,7 @@ With `preserveSymlinks: true`, TypeScript resolves imports relative to the **sym
 
 | Plugin | Hooks | Notes |
 |--------|-------|-------|
-| ctk | All 32 shared hooks + 3 ctk-specific (hipaa-context-injector, phi-output-redactor, session-loader) | Canonical shared hooks owner |
+| ctk | All 31 shared hooks + 3 ctk-specific (hipaa-context-injector, phi-output-redactor, session-loader) | Canonical shared hooks owner |
 | etk | review-logger, continuity-recommendation | Domain-specific only |
 | dtk | repo-access-guard, continuity-recommendation | Domain-specific only |
 | atk | continuity-recommendation | Recommends ctk installation |

@@ -2,6 +2,23 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.16.2] - 2026-07-28 — correct a false claim about worktree continuity seeding (#78)
+
+### Fixed
+
+- **`/etk:start-parallel` Step 2 no longer claims ctk's `WorktreeCreate` hook seeds continuity state
+  in each agent worktree.** That was wrong twice over: `git worktree add` run in a shell never fires
+  CC's `WorktreeCreate` event at all (it fires only for `--worktree`, `isolation: "worktree"`,
+  background sessions, and the `EnterWorktree` tool), and ctk's hook was itself broken and has been
+  removed in ctk 2.11.0. Each agent does get its own continuity state — but because it is a separate
+  session in a separate directory, not because of any hook. An inline correction note records the
+  prior claim rather than silently deleting it.
+
+**Note on the 2.10.0 entry below** (*"ctk's `WorktreeCreate` hook fires on each, seeding per-agent
+continuity"*): that released entry carries the same false claim. It is left as-published pending the
+open decision on whether factual corrections to already-released CHANGELOG entries warrant their own
+patch bump (issue #75).
+
 ## [2.16.1] - 2026-07-27 — one derivation for the log-level variable, and a CI check that docs match code
 
 Shared library, tests and CI. No skill, agent or command behaviour changed.

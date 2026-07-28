@@ -2,6 +2,42 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.11.0] - 2026-07-28 — the WorktreeCreate hook was breaking worktree isolation for every user (closes #78)
+
+### Removed
+
+- **The `WorktreeCreate` hook and its wiring.** `WorktreeCreate` is a **provider** event, not an
+  observer: for a `type: "command"` hook Claude Code reads the **last non-empty, ANSI-stripped line of
+  stdout as the worktree path**, and once *any* hook is registered it never runs its own
+  `git worktree add`. ctk returned `outputSilentSuccess()`, so CC took `{"continue":true,…}` as a
+  relative path and failed with *"WorktreeCreate hook returned a path that is not a directory"*.
+  **Any user with ctk installed could not use worktree-isolated subagents.** Removing the wiring
+  restores CC's native behavior — the call site is `if (hasWorktreeCreateHook()) {hook} else {native git}`,
+  and that predicate counts plugin-supplied hooks.
+- **`getWorktreeBranch()`** (public API) and the **`worktree_branch`** field on `HookInput`. That name
+  appears **zero times** in the CC 2.1.220 binary; both could only ever return `undefined`.
+
+### Fixed
+
+- **`worktree_path` documented accurately.** It is sent on **`WorktreeRemove` only**. `WorktreeCreate`
+  fires *before* the worktree exists and carries just `name`, the slug the hook is asked to turn into a
+  path — so the removed hook's `input.worktree_path || input.cwd` always fell through to `cwd`, writing
+  continuity context into the **parent repo** with `branch: "unknown"`. The capability never worked in
+  any respect, not merely the stdout half. Its tests asserted the rejected output and were green
+  *because* they encoded the defect.
+- ctk `CLAUDE.md` hook table and count basis (35 → **34**; 32 → **31** shared), plus the counting
+  recipe — use `grep -c '^registerHook('`, anchored; the unanchored form counts the function
+  definition and `unregisterHook(` too.
+
+### Not changed
+
+- **`WorktreeRemove` is untouched and was never broken.** It has no decision control, its output is
+  discarded, and it genuinely receives `worktree_path`. The same silent-success payload is safe there
+  and fatal on create — the asymmetry is real.
+
+Determination, with byte offsets and verbatim sources:
+`docs/reviews/2026-07-28_issue-78-worktreecreate-contract.md`.
+
 ## [2.10.2] - 2026-07-28 — security-blocker denials stop quoting the literal that triggered them
 
 `security-blocker` message text only. **No matching behaviour changed** — nothing is newly blocked and nothing newly allowed.
