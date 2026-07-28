@@ -2641,7 +2641,7 @@ function validateBashCommand(command, sessionId, agentContext) {
   for (const candidate of candidates) {
     const match = matchDangerousBash(candidate);
     if (match) {
-      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}`;
+      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}. Pattern: ${match.pattern.regex.source}`;
       logWarn(HOOK_NAME6, `Blocked: ${reason}`);
       logPermission("deny", reason, "Bash", sessionId, agentContext);
       return outputDeny(
@@ -2734,7 +2734,7 @@ Path: ${filePath}`
     const match = matchesProtectedPath(checkPath);
     if (match.matched && match.category) {
       const friendlyName = getCategoryFriendlyName(match.category);
-      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath})`;
+      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath}). Pattern: ${match.pattern}`;
       logWarn(HOOK_NAME6, `Blocked: ${reason}`);
       logPermission("deny", reason, toolName, sessionId, agentContext);
       return outputDeny(

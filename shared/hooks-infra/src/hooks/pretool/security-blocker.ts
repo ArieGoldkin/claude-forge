@@ -54,24 +54,41 @@ export { ENV_PATTERNS, GIT_PATTERNS, SSH_PATTERNS, CREDENTIAL_PATTERNS, SYSTEM_D
  * WHY THE RAW PATTERN IS NO LONGER SHOWN (#65). Denials used to interpolate
  * `regex.source` into user-facing text, e.g. `Pattern matched: \/usr\/`. That
  * made the denial message itself contain the protected literal, so quoting a
- * denial re-triggered the block — a commit message, a ledger entry describing
- * the trap, and an agent reporting why it stopped were all denied for repeating
- * the reason they were denied. The pattern is still logged; it is only removed
- * from the model-facing payload. Category and description carry the diagnosis.
+ * denial re-triggered the block: a ledger entry describing this very trap was
+ * denied for describing it.
+ *
+ * The pattern is still logged on all three denial paths — but only ONE of them
+ * logged it before this change. On the dangerous-command and protected-path
+ * paths the `reason` string carried no pattern at all, so removing it from the
+ * payload would have destroyed the information rather than relocating it. Those
+ * two `reason` strings were extended in the same commit; that is what makes
+ * "removed from the payload, kept in the log" true rather than aspirational.
  *
  * WHY THE GUIDANCE EXISTS. This check matches the TEXT of a command, not the
  * resource the command resolves to, so a command that merely mentions a
  * protected name is denied even when it touches nothing sensitive. Naming the
  * path-based alternative converts a dead end into a next step.
  *
- * The "not fatal" sentence is DELIBERATE and UNPROVEN. R1 (#51) measured 7 of
- * 12 lost subagent reports ending on a denial from this hook: the agent gets a
- * normal error result and then stops without writing its conclusion. Repeating
- * "continue after a denial" in the DISPATCH prompt did not prevent it, so #65
- * proposes delivering it in the denial payload instead — at the moment of the
- * block. This is the first delivery of that instruction, not evidence that it
- * works. Do not record the stop-on-denial behaviour as fixed on the strength of
- * this text; it needs a measured re-run against the R1 corpus.
+ * THE "NOT FATAL" SENTENCE HELPS THE MAIN THREAD ONLY. Read R1 (#51) before
+ * changing it — two of its findings pull in different directions, and only the
+ * first is usually quoted.
+ *
+ * Finding 1: the denial is "not a kill". Every denial returns a normal error
+ * tool_result, and a MAIN-THREAD call that was denied "received the error and
+ * continued normally". For that caller this sentence is useful.
+ *
+ * Finding 4 measured the opposite for SUBAGENTS, in a controlled experiment:
+ * "zero assistant turns after the BLOCKED result ... The agent is never handed
+ * a turn in which to react. This is harness-level termination of the subagent."
+ * Those probes ignored instructions given three times that the block was
+ * expected.
+ *
+ * So for the population that motivated this — the 7-of-12 lost subagent reports
+ * — payload text is very likely INERT, because the subagent never gets a turn in
+ * which to read it. #65 proposed payload delivery on the strength of Finding 1;
+ * Finding 4 is evidence against it, not merely an absence of evidence. This is
+ * kept because it costs nothing and helps the caller that does survive. It is
+ * NOT a mitigation for the lost reports; do not cite it as one.
  */
 const DENIAL_GUIDANCE =
   '\n\nThis check matches the text of the command, not the resource it resolves to. ' +
@@ -548,7 +565,11 @@ function validateBashCommand(
   for (const candidate of candidates) {
     const match: DangerousBashMatch | null = matchDangerousBash(candidate);
     if (match) {
-      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}`;
+      // Pattern kept in the LOG. It was removed from the model-facing payload
+      // (#65), and on this path it was previously recoverable from nowhere else
+      // — so removing it there without adding it here would have destroyed the
+      // information rather than relocating it.
+      const reason = `Dangerous command detected (${match.pattern.category}): ${match.pattern.description}. Pattern: ${match.pattern.regex.source}`;
       logWarn(HOOK_NAME, `Blocked: ${reason}`);
       logPermission('deny', reason, 'Bash', sessionId, agentContext);
       return outputDeny(
@@ -706,7 +727,8 @@ function validateFileOperation(
     const match = matchesProtectedPath(checkPath);
     if (match.matched && match.category) {
       const friendlyName = getCategoryFriendlyName(match.category);
-      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath})`;
+      // Pattern kept in the LOG — see the note on the dangerous-command path.
+      const reason = `${friendlyName} modification blocked. File: ${filePath} (resolved: ${realPath}). Pattern: ${match.pattern}`;
       logWarn(HOOK_NAME, `Blocked: ${reason}`);
       logPermission('deny', reason, toolName, sessionId, agentContext);
       return outputDeny(

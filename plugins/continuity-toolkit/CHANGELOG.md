@@ -10,9 +10,11 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
 
 **Denials no longer interpolate the raw regex source into model-facing text** (partial fix for #65).
 
-The message read `Pattern matched: \/etc\/`, which put the protected literal *inside the denial*. Repeating a denial therefore re-triggered it: a commit message quoting one, a ledger entry describing the trap, and an agent explaining why it stopped were each blocked for restating the reason they were blocked. Four such self-inflicted denials were recorded in a single session on 2026-07-26, and a fifth occurred while writing this change.
+The message read `Pattern matched: \/etc\/`, which put the protected literal *inside the denial*. Repeating a denial therefore re-triggered it — the ledger entry describing this very trap was itself blocked for describing it. One further instance occurred while writing this change: a command naming the new test's fixture target was denied, and the denial handed back the substring that had caused it.
 
-The pattern is still logged in full — it is removed only from the payload the model sees. Category and description carry the diagnosis, and a new test asserts the load-bearing property directly: feeding a denial message back through the checker must not match.
+(An earlier draft of this entry claimed "four self-inflicted denials in a single session on 2026-07-26" with three exemplars. An adversarial review refuted it: that count is single-sourced to issue #65's own body, the ledger's tally for the period is three with items tracing to the 2026-07-25 R1 session, and two of the three exemplars appear in no record. More importantly the framing was **causally inflated** — of the denials that are recorded, only the ledger edit is an instance of *this* defect; the others are instances of the text-matching defect that this release does **not** fix.)
+
+The pattern is now logged on all three denial paths. Only one of them logged it before: the dangerous-command and protected-path `reason` strings carried no pattern, so removing it from the payload would have destroyed the information rather than relocating it. Both were extended here, which is what makes "removed from the payload, kept in the log" true rather than aspirational. A new test asserts the load-bearing property directly: feeding a denial back through the checker must not match.
 
 ### Added
 
@@ -20,7 +22,9 @@ The pattern is still logged in full — it is removed only from the payload the 
 
 Two sentences appended to every denial path. The first names the path-based alternative (`Read`, `Grep`, `Glob`), because this check matches command *text* rather than the resource a command resolves to — so a command that merely mentions a protected name is denied while touching nothing sensitive.
 
-The second states the denial does not end the task. This is **deliberate and unproven**: R1 (#51) measured 7 of 12 lost subagent reports ending on a denial from this hook — the agent receives a normal error result and then stops without writing its conclusion. The same instruction in the *dispatch* prompt did not prevent it, so #65 proposes delivering it in the denial payload, at the moment of the block. This ships that instruction; it is not evidence that it works, and #65 stays open pending a measured re-run against the R1 corpus.
+The second states the denial does not end the task. **This helps the main thread only, and the repo's own data argues against it helping anything else.** R1 (#51) has two findings that pull in different directions. Finding 1 — the one #65 quotes — says a denial is "not a kill" and records a main-thread call that "received the error and continued normally". Finding 4 measured subagents in a controlled experiment and found "zero assistant turns after the `BLOCKED` result … the agent is never handed a turn in which to react", with probes ignoring instructions given three times that the block was expected.
+
+So for the 7-of-12 lost subagent reports that motivated it, payload text is very likely **inert** — a subagent gets no turn in which to read it. An earlier draft of this entry called the sentence "unproven", which understated the position: this is evidence *against*, not an absence of evidence. It is kept because it costs nothing and helps the caller that does survive, and it is **not** a mitigation for the lost reports. #65 stays open.
 
 **Five tests for denial payload hygiene**, a surface that previously had none — no test asserted anything about denial message text.
 
