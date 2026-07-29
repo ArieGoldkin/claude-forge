@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Cross-plugin system diagnostics for the claude-forge ecosystem. Checks installed plugins, hook compilation, duplicate hook detection, continuity system health, environment (Node, npm, VCS CLI), and log sizes. Use when: plugins seem broken, hooks are not firing, after installing or updating plugins, or for periodic health checks. Triggers on: doctor, diagnose plugins, plugin health, hooks not working, system check, plugin status, what is installed, troubleshoot plugins"
+description: "Cross-plugin system diagnostics for the claude-forge ecosystem. Checks installed plugins, hook compilation, duplicate hook detection, continuity system health, environment (Node, npm, VCS CLI), and log sizes. Use when: plugins seem broken, hooks are not firing, skills or agents have gone missing, after installing or updating plugins, or for periodic health checks. Triggers on: doctor, diagnose plugins, plugin health, hooks not working, skills missing, plugin not loading, system check, plugin status, what is installed, troubleshoot plugins"
 effort: low
 ---
 
@@ -17,6 +17,8 @@ Cross-plugin system diagnostics for the claude-forge ecosystem. Checks what's in
 
 ## What It Does
 - Detects all installed claude-forge (marketplace cache + local dev)
+- Verifies each plugin's recorded `installPath` still exists — a dangling record means the plugin
+  does not load at all, while the cache glob and `claude plugin list` both still report it installed
 - Verifies hook compilation status (dist/bin/run-hook.js exists)
 - Counts hook registrations per plugin, checks for duplicates
 - Verifies continuity system setup (ledger, context monitor, shared-context.json)
@@ -43,6 +45,57 @@ For each short name, check:
 
 Extract version from .claude-plugin/plugin.json
 ```
+
+### Step 1a: Verify the Recorded Install Path Still Resolves
+
+**Finding a version directory does not mean the plugin loads.** The Step 1 glob matches *any*
+version folder under the plugin's cache directory, including stale ones left by earlier installs.
+Claude Code does not load "whatever the glob found" — it loads exactly the `installPath` recorded in
+`~/.claude/plugins/installed_plugins.json`. When that directory is missing, the plugin does not load
+at all — no hooks, no skills, no agents — while the glob keeps matching an old version and reports
+the plugin as installed.
+
+`claude plugin list` does not catch this either: it renders from the same metadata, so it prints
+`✔ enabled` for a plugin whose files are gone. Compare the record against the disk:
+
+```bash
+python3 -c "
+import json,os
+d=json.load(open(os.path.expanduser('~/.claude/plugins/installed_plugins.json')))
+for name,entries in sorted(d.get('plugins',{}).items()):
+    for e in entries:
+        p=e.get('installPath','')
+        print(('OK      ' if os.path.isdir(p) else 'DANGLING'), name, e.get('version'), p)
+"
+```
+
+| Result | Meaning | Report |
+|---|---|---|
+| All entries `OK` | Records resolve — the glob's answer is trustworthy | continue to Step 2 |
+| Any `DANGLING` | That plugin is **not loaded** — it is absent from this session entirely | BROKEN INSTALL — see below |
+
+On DANGLING, state the consequence rather than just the mismatch. For **ctk** specifically it is
+severe: ctk owns all shared hooks, so a dangling ctk path means `security-blocker`, the
+auto-approve permission hooks, and every lifecycle hook are silently absent — the session runs with
+no guardrails and nothing announces it.
+
+Repair with a **marketplace refresh**, which re-materializes the version directories:
+
+```bash
+claude plugin marketplace update <marketplace-name>   # e.g. claude-forge
+```
+
+`claude plugin install <plugin>` is **not** the fix — on an already-recorded plugin it returns
+"already installed" and changes nothing. Hooks only load at session start, so restart after
+repairing; skills may reappear immediately and are not evidence that hooks came back.
+
+Confirm the repair by content, never by the CLI's status line: re-run the comparison above and check
+that the plugin's skills and agents are present in the session.
+
+> Observed 2026-07-29: an in-use sweep ran 3 seconds after `SessionEnd` and left all five
+> claude-forge plugins pointing at deleted directories. The next session started with zero plugins
+> loaded, `claude plugin list` reported all five `✔ enabled`, and `/doctor`'s glob still matched the
+> stale version folders — three green signals over a total outage.
 
 ### Step 2: Verify Hook Builds
 
@@ -160,16 +213,20 @@ Present structured dashboard with:
 ```markdown
 ## Plugin System Diagnostics
 
-### Installed Plugins (X/6)
-| Plugin | Version | Hooks | Status |
-|--------|---------|-------|--------|
-| ctk | 1.3.2 | 22 built | OK |
-| etk | 1.0.4 | 2 built | OK |
+### Installed Plugins (X/5)
+| Plugin | Version | Install path | Hooks | Status |
+|--------|---------|--------------|-------|--------|
+| ctk | 1.3.2 | resolves | 22 built | OK |
+| etk | 1.0.4 | resolves | 2 built | OK |
 ...
+
+A plugin whose install path is `DANGLING` is reported BROKEN INSTALL regardless of every other
+column — it is not loaded, so its hook and build columns describe files nothing reads.
 
 ### System Checks
 | Check | Status |
 |-------|--------|
+| Install paths | All resolve / N DANGLING (plugin not loaded) |
 | Continuity setup | OK |
 | Context monitor | OK / NOT CONFIGURED / CONFLICT (statusLine runs <program>) |
 | Last session | Clean / Stale |

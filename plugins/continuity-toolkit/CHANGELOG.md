@@ -2,6 +2,44 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.12.0] - 2026-07-29 — /doctor reported healthy through a total plugin outage
+
+### Added
+
+- **`/doctor` Step 1a — the recorded install path is now verified against the disk.** Claude Code
+  loads exactly the `installPath` recorded in `~/.claude/plugins/installed_plugins.json`. When that
+  directory is missing the plugin does not load *at all* — no hooks, no skills, no agents, and no
+  error is raised. Every signal `/doctor` previously relied on stays green through this: its Step 1
+  glob (`cache/*/<plugin>/`) still matches **stale version folders** left by earlier upgrades, and
+  `claude plugin list` renders from the same metadata and prints `✔ enabled` for a plugin whose
+  files are gone. A `DANGLING` row is now reported as **BROKEN INSTALL** and outranks every other
+  column for that plugin, because its hook-build and hook-count results describe files nothing reads.
+- **The consequence is stated, not just the mismatch.** For `ctk` a dangling path is severe: ctk owns
+  all shared hooks, so `security-blocker`, the auto-approve permission hooks, and every lifecycle
+  hook are silently absent — the session runs with no guardrails and nothing announces it.
+- **The repair is named correctly.** `claude plugin marketplace update <marketplace>` is what
+  re-materializes the version directories; `claude plugin install <plugin>` returns
+  "already installed" and changes nothing. Hooks load only at session start, so a restart is
+  required — and skills reappearing is explicitly called out as *not* evidence that hooks came back.
+
+> Observed 2026-07-29: an in-use sweep ran 3 seconds after `SessionEnd` and left all five
+> claude-forge plugins pointing at deleted directories. The next session loaded zero plugins while
+> `claude plugin list` reported all five `✔ enabled` and `/doctor`'s glob still matched the stale
+> folders — three green signals over a total outage.
+
+### Fixed
+
+- `/doctor` command Step 1 no longer presents `claude plugin list` as the authoritative discovery
+  mechanism; it is now labelled a claim to be confirmed by Step 1a.
+- Broken version-extraction glob in the command's fallback scan: `"$CACHE_DIR"/*/. claude-plugin/…`
+  carried a stray space, so the path never matched and every version read came back empty.
+- The local-dev probe tested `plugins/ctk/.claude-plugin/plugin.json`, which never exists — source
+  directories use the legacy long names (`plugins/continuity-toolkit/`).
+- Removed `wtk` from the command's plugin list and output sample; no such plugin exists in this
+  monorepo. Plugin totals corrected from `6` to `5`.
+- `marketplace.json` still advertised **35 hooks** for ctk; the count has been **34** since #79
+  removed the `WorktreeCreate` hook.
+
 ## [2.11.0] - 2026-07-28 — the WorktreeCreate hook was breaking worktree isolation for every user (closes #78)
 
 ### Removed

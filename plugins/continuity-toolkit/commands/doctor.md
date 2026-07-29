@@ -12,23 +12,25 @@ Comprehensive health check across all installed claude-forge. Shows what's insta
 
 ### Step 1: Detect Installed Plugins
 
-On CC v2.1.163+, prefer the native listing as the primary discovery mechanism:
+On CC v2.1.163+ the native listing is the fastest inventory — but treat it as a **claim, not a
+verdict**. It renders from `installed_plugins.json`, so it prints `✔ enabled` even when the
+plugin's files have been deleted. Always pair it with Step 1a.
 
 ```bash
-claude plugin list --enabled 2>/dev/null || echo "native list unavailable (CC < 2.1.163)"
+claude plugin list --enabled || echo "native list unavailable (CC < 2.1.163)"
 ```
 
 Fall back to scanning known plugin directories on older CC:
 
 ```bash
 # Check marketplace cache for each plugin
-PLUGINS=("ctk" "etk" "dtk" "atk" "ftk" "wtk")
+PLUGINS=("ctk" "etk" "dtk" "atk" "ftk")
 
 for PLUGIN in "${PLUGINS[@]}"; do
   # Check marketplace cache
-  CACHE_DIR=$(find ~/.claude/plugins/cache -type d -name "$PLUGIN" 2>/dev/null | head -1)
+  CACHE_DIR=$(find ~/.claude/plugins/cache -type d -name "$PLUGIN" | head -1)
   if [ -n "$CACHE_DIR" ]; then
-    VERSION=$(cat "$CACHE_DIR"/*/. claude-plugin/plugin.json 2>/dev/null | grep version | head -1)
+    VERSION=$(grep -h '"version"' "$CACHE_DIR"/*/.claude-plugin/plugin.json | head -1)
     echo "INSTALLED: $PLUGIN ($VERSION)"
   else
     echo "NOT INSTALLED: $PLUGIN"
@@ -36,13 +38,50 @@ for PLUGIN in "${PLUGINS[@]}"; do
 done
 ```
 
+This glob matches **every** version folder ever installed, including stale ones left behind by
+earlier upgrades — which is why Step 1a is mandatory before trusting the result.
+
 Also check for local dev plugins via `--plugin-dir`:
 ```bash
-# Check if running from monorepo (local dev)
-if [ -f "plugins/ctk/.claude-plugin/plugin.json" ]; then
+# Check if running from monorepo (local dev) — source dirs use the legacy long names
+if [ -f "plugins/continuity-toolkit/.claude-plugin/plugin.json" ]; then
   echo "LOCAL DEV MODE: Running from monorepo"
 fi
 ```
+
+### Step 1a: Verify Recorded Install Paths Resolve
+
+Claude Code loads exactly the `installPath` recorded for each plugin — not whatever the glob found.
+A missing directory means the plugin is absent from the session entirely: no hooks, no skills, no
+agents, and no error.
+
+> **Why this check exists, what a dangling path costs, and how to repair it** live in the `doctor`
+> skill's Step 1a (`skills/doctor/SKILL.md`) — the single source of truth. Read it before
+> interpreting a `DANGLING` row; do not restate its reasoning here.
+
+```bash
+python3 -c "
+import json,os
+d=json.load(open(os.path.expanduser('~/.claude/plugins/installed_plugins.json')))
+bad=0
+for name,entries in sorted(d.get('plugins',{}).items()):
+    for e in entries:
+        p=e.get('installPath','')
+        ok=os.path.isdir(p)
+        bad+=0 if ok else 1
+        print(('OK      ' if ok else 'DANGLING'), name, e.get('version'), p)
+print('\nDANGLING:', bad)
+"
+```
+
+Any `DANGLING` row is a **BROKEN INSTALL** and outranks every other check for that plugin. Repair:
+
+```bash
+claude plugin marketplace update <marketplace-name>   # e.g. claude-forge
+```
+
+Then restart. See the skill's Step 1a for why `claude plugin install` does not fix this and why
+skills reappearing is not evidence that hooks came back.
 
 ### Step 2: Check Hook Build Status
 
@@ -152,16 +191,15 @@ Present results as a structured dashboard:
 ## Plugin System Diagnostics
 
 ### Installed Plugins
-| Plugin | Version | Hooks Built | Hook Count | Status |
-|--------|---------|-------------|------------|--------|
-| ctk | 1.3.2 | Yes | 22 | OK |
-| etk | 1.0.4 | Yes | 2 | OK |
-| wtk | 2.0.3 | Yes | 3 | OK |
-| dtk | 1.0.9 | Yes | 2 | OK |
-| atk | 1.0.2 | Yes | 1 | OK |
-| ftk | 1.0.2 | Yes | 1 | OK |
+| Plugin | Version | Install Path | Hooks Built | Hook Count | Status |
+|--------|---------|--------------|-------------|------------|--------|
+| ctk | 1.3.2 | resolves | Yes | 22 | OK |
+| etk | 1.0.4 | resolves | Yes | 2 | OK |
+| dtk | 1.0.9 | resolves | Yes | 2 | OK |
+| atk | 1.0.2 | resolves | Yes | 1 | OK |
+| ftk | 1.0.2 | **DANGLING** | — | — | **BROKEN INSTALL** |
 
-**Total**: 6/6 plugins installed, 31 hook registrations
+**Total**: 4/5 plugins loaded, 27 hook registrations — ftk recorded but not present on disk
 
 ### Continuity System
 | Component | Status | Details |
@@ -200,6 +238,7 @@ Present results as a structured dashboard:
 
 Generate recommendations based on findings:
 
+- **Dangling install path (highest priority)**: "{plugin} is recorded at {path}, which does not exist — it is NOT loaded this session. Repair: `claude plugin marketplace update {marketplace}`, then restart. For ctk this also means the shared security and permission hooks are absent."
 - **Plugin not installed**: "Install {plugin} for {capability}: `claude plugin install ...`"
 - **Hooks not built**: "Build hooks for {plugin}: `cd {path}/hooks && npm run build`"
 - **Continuity not set up**: "Initialize continuity: `/setup-continuity`"
