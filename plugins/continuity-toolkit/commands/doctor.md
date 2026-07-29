@@ -51,12 +51,11 @@ fi
 
 ### Step 1a: Verify Recorded Install Paths Resolve
 
-Claude Code loads exactly the `installPath` recorded for each plugin — not whatever the glob found.
-A missing directory means the plugin is absent from the session entirely: no hooks, no skills, no
-agents, and no error.
+The Step 1 glob matches any version folder, including stale ones; `installed_plugins.json` records
+one specific `installPath` per plugin. A `DANGLING` row means the two disagree.
 
-> **Why this check exists, what a dangling path costs, and how to repair it** live in the `doctor`
-> skill's Step 1a (`skills/doctor/SKILL.md`) — the single source of truth. Read it before
+> **Why this check exists, how to interpret a `DANGLING` row, and how to repair it** live in the
+> `doctor` skill's Step 1a (`skills/doctor/SKILL.md`) — the single source of truth. Read it before
 > interpreting a `DANGLING` row; do not restate its reasoning here.
 
 ```bash
@@ -74,13 +73,16 @@ print('\nDANGLING:', bad)
 "
 ```
 
-Any `DANGLING` row is a **BROKEN INSTALL** and outranks every other check for that plugin. Repair:
+A `DANGLING` row is an **INCONSISTENT RECORD**, not proof the plugin is unloaded — the two have been
+observed apart. Confirm by content (are the plugin's skills and agents present, do its hooks fire),
+then repair only if it is genuinely absent:
 
 ```bash
 claude plugin marketplace update <marketplace-name>   # e.g. claude-forge
+claude plugin install <plugin>@<marketplace-name>     # may report "already installed"
 ```
 
-Then restart. See the skill's Step 1a for why `claude plugin install` does not fix this and why
+Then restart. See the skill's Step 1a for why neither command is credited as *the* fix, and why
 skills reappearing is not evidence that hooks came back.
 
 ### Step 2: Check Hook Build Status
@@ -197,9 +199,10 @@ Present results as a structured dashboard:
 | etk | 1.0.4 | resolves | Yes | 2 | OK |
 | dtk | 1.0.9 | resolves | Yes | 2 | OK |
 | atk | 1.0.2 | resolves | Yes | 1 | OK |
-| ftk | 1.0.2 | **DANGLING** | — | — | **BROKEN INSTALL** |
+| ftk | 1.0.2 | **DANGLING** | Yes | 1 | **INCONSISTENT RECORD** — confirm load |
 
-**Total**: 4/5 plugins loaded, 27 hook registrations — ftk recorded but not present on disk
+**Total**: 5/5 plugins installed, 28 hook registrations — ftk's recorded path is missing from disk;
+verify whether its skills/agents/hooks are actually present before treating it as broken
 
 ### Continuity System
 | Component | Status | Details |
@@ -238,7 +241,7 @@ Present results as a structured dashboard:
 
 Generate recommendations based on findings:
 
-- **Dangling install path (highest priority)**: "{plugin} is recorded at {path}, which does not exist — it is NOT loaded this session. Repair: `claude plugin marketplace update {marketplace}`, then restart. For ctk this also means the shared security and permission hooks are absent."
+- **Dangling install path**: "{plugin} is recorded at {path}, which does not exist. That is an inconsistent record, not proof it is unloaded — confirm whether {plugin}'s skills, agents and hooks are actually present. If genuinely absent, repair with `claude plugin marketplace update {marketplace}` then `claude plugin install {plugin}@{marketplace}`, and restart. For ctk, genuine absence also means the shared security and permission hooks are gone."
 - **Plugin not installed**: "Install {plugin} for {capability}: `claude plugin install ...`"
 - **Hooks not built**: "Build hooks for {plugin}: `cd {path}/hooks && npm run build`"
 - **Continuity not set up**: "Initialize continuity: `/setup-continuity`"

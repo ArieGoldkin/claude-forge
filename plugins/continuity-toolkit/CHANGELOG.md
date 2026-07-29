@@ -6,26 +6,31 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
 
 ### Added
 
-- **`/doctor` Step 1a — the recorded install path is now verified against the disk.** Claude Code
-  loads exactly the `installPath` recorded in `~/.claude/plugins/installed_plugins.json`. When that
-  directory is missing the plugin does not load *at all* — no hooks, no skills, no agents, and no
-  error is raised. Every signal `/doctor` previously relied on stays green through this: its Step 1
-  glob (`cache/*/<plugin>/`) still matches **stale version folders** left by earlier upgrades, and
-  `claude plugin list` renders from the same metadata and prints `✔ enabled` for a plugin whose
-  files are gone. A `DANGLING` row is now reported as **BROKEN INSTALL** and outranks every other
-  column for that plugin, because its hook-build and hook-count results describe files nothing reads.
-- **The consequence is stated, not just the mismatch.** For `ctk` a dangling path is severe: ctk owns
-  all shared hooks, so `security-blocker`, the auto-approve permission hooks, and every lifecycle
-  hook are silently absent — the session runs with no guardrails and nothing announces it.
-- **The repair is named correctly.** `claude plugin marketplace update <marketplace>` is what
-  re-materializes the version directories; `claude plugin install <plugin>` returns
-  "already installed" and changes nothing. Hooks load only at session start, so a restart is
+- **`/doctor` Step 1a — the recorded install path is now compared against the disk.** Two of
+  `/doctor`'s existing signals are metadata-derived and cannot see the disk at all: its Step 1 glob
+  (`cache/*/<plugin>/`) matches **stale version folders** left by earlier upgrades, and
+  `claude plugin list` renders from `installed_plugins.json` and prints `✔ enabled` regardless of
+  what exists. Step 1a reports a `DANGLING` row where the record names a directory that is gone.
+- **`DANGLING` is reported as an inconsistent record, not as a verdict.** A dangling path has been
+  observed alongside a fully working plugin — on 2026-07-28 ctk's record named a nonexistent
+  `ctk/2.10.2` while 43 hook invocations fired from an existing `ctk/2.10.0`. Reporting BROKEN
+  INSTALL from that row alone would raise a false alarm and contradict the hook-build and hook-count
+  rows, which in that state are correct.
+- **Loaded-vs-not is settled by content**, the only check that separated the two observed cases: are
+  the plugin's skills and agents present, and do its hooks fire. For ctk that is the decisive signal,
+  since it owns all shared hooks — if ctk is genuinely unloaded, `security-blocker`, the auto-approve
+  permission hooks, and every lifecycle hook are absent and nothing announces it.
+- **Repair steps are given without an unproven attribution.** Both `claude plugin marketplace update`
+  and `claude plugin install` were seen to change plugin state; neither was isolated as *the* fix, so
+  both are listed with a re-check between. Hooks load only at session start, so a restart is
   required — and skills reappearing is explicitly called out as *not* evidence that hooks came back.
 
-> Observed 2026-07-29: an in-use sweep ran 3 seconds after `SessionEnd` and left all five
-> claude-forge plugins pointing at deleted directories. The next session loaded zero plugins while
-> `claude plugin list` reported all five `✔ enabled` and `/doctor`'s glob still matched the stale
-> folders — three green signals over a total outage.
+> Observed 2026-07-29: a session started with zero claude-forge plugins loaded while
+> `claude plugin list` reported all five `✔ enabled` and `/doctor`'s glob still matched stale version
+> folders. All five records were also dangling, and an in-use sweep had run 3 seconds after the prior
+> `SessionEnd` — **neither was shown to be the cause.** ctk's record was already dangling during the
+> prior session, when the plugin loaded and ran normally. The trigger remains unidentified; this
+> change surfaces the inconsistency, it does not explain the outage.
 
 ### Fixed
 
