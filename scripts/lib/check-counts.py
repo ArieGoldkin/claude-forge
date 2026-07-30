@@ -9,11 +9,14 @@ on mismatch; exits 0 and prints nothing when every declared count is correct.
 THE CONTRACT, stated precisely: *every count this repo declares must be true.*
 It is NOT "every site must declare a count" -- plugins legitimately differ in
 which docs enumerate contents (ctk's README declares none). Absence is fine;
-being wrong is not. The failure this guards against is the one measured on
-2026-07-30: etk's README declared "20 Commands" over a list of 19 against a
-truth of 21, omitting `conduct` -- the very command that release shipped --
-while every version check stayed green, because versions were all this script
-knew how to check.
+being wrong is not.
+
+Measured against etk's README at commit d15d29b, which every existing check
+passed: skills declared 20 / listed 19 / real 26; commands declared 20 / listed
+19 / real 20, naming a `review-mr` command that does not exist; and agents
+declared 5 / listed 5 / real 5 -- every number correct, and still wrong, because
+it named `logic-validator` (absent) and omitted `adversarial-verifier` (present).
+Versions were all this script knew how to check, so none of it surfaced.
 
 KNOWN GAP, deliberate: hook counts are NOT checked. Their declarations carry
 free-form riders ("34 registered - 31 shared + 3 ctk-specific", "2 (review-logger,
@@ -65,11 +68,13 @@ def declarations(text):
 
 
 # An ENUMERATED comma list: "- **21 commands**: agent-loops, allocate-tasks, ...".
-# Checked against the directory by NAME, not just by length, because the original
-# defect was a *plausible* list: etk's README said "20 Commands" over 19 names, and
-# the names themselves included a `review-mr` command that does not exist while
-# omitting `conduct`. Length alone would have passed a list with one phantom and
-# one omission -- the single most likely way for a hand-edited list to be wrong.
+# Checked against the directory by NAME, not just by length. The case that forces
+# this is etk's agents line at d15d29b: `- **5 Agents**: logic-validator, ...` --
+# declared 5, listed 5, and the directory held 5. Every number agreed. It was still
+# wrong: `logic-validator` does not exist and `adversarial-verifier` was omitted.
+# A length check, and a totals-only check, both pass that list. One phantom plus one
+# omission is the single most likely way for a hand-edited list to be wrong, and it
+# is exactly the shape that leaves every count correct.
 ENUM_LIST = re.compile(
     r"-\s*\*\*(\d+)\s+(skills|agents|commands)\*\*:\s*([^\n]+)", re.IGNORECASE
 )

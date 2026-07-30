@@ -19,12 +19,18 @@
 #   7. every DECLARED skill/agent/command count matches the filesystem
 #   8. plugin README.md "Version:" line matches plugin.json
 #
-# Checks 7 and 8 exist because checks 1-6 gate VERSIONS and nothing else, which is
-# how, on 2026-07-30, etk's README could declare "20 Commands" over a list of 19
-# against a truth of 21 -- omitting `conduct`, the command that very release
-# shipped -- name a `logic-validator` agent that does not exist, and pin
-# "Version: 2.7.1" ten minor versions stale, with every check green. A validator
-# tells you what it checks, not that you are correct.
+# Checks 7 and 8 exist because checks 1-6 gate VERSIONS and nothing else. Measured
+# on etk's README at commit d15d29b, which every check passed:
+#   * skills:   declared 20, listed 19, real count 26 -- seven skills unlisted
+#   * agents:   declared  5, listed  5, real count  5 -- and STILL wrong: it named
+#               `logic-validator`, which does not exist, and omitted
+#               `adversarial-verifier`, which does
+#   * commands: declared 20, listed 19, real count 20 -- total correct, list short,
+#               naming a `review-mr` command that does not exist
+#   * "Version: 2.7.1" against a real 2.16.2
+# The agents line is why check 7 compares enumerated lists BY NAME: every number in
+# it was right. A length-only check passes it. A validator tells you what it checks,
+# not that you are correct.
 
 set -euo pipefail
 

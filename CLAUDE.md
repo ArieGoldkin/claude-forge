@@ -495,9 +495,10 @@ Whenever you change a plugin's `dependencies` field, rename the plugin, or ship 
 every *declared* count must be updated in the same commit — `plugin.json` and `marketplace.json`
 descriptions, both root tables, and the plugin's own `CLAUDE.md`/`README.md`. Enumerated
 `- **N skills**: a, b, c` lists are checked **by name**, not just by length: a list with one phantom
-and one omission has the right total and is still wrong. That is not hypothetical — it is exactly
-how etk's README came to declare "20 Commands" over 19 names against a truth of 21, naming a
-`review-mr` command that does not exist while omitting `conduct`, the command that release shipped.
+and one omission has the right total and is still wrong. That is not hypothetical — etk's README at
+`d15d29b` declared **5 agents**, listed **5**, and the directory held **5**; every number agreed, and
+the list still named a `logic-validator` that does not exist while omitting `adversarial-verifier`
+that does. Its skills line was separately off by six (declared 20, real 26).
 Hook counts are **not** gated (their declarations carry free-form riders no safe pattern reads) —
 check them by hand against `grep -c '^registerHook(' hooks/src/index.ts`.
 
