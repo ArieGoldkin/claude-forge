@@ -2,6 +2,21 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.14.1] - 2026-07-30 — correct declared skill/command/hook counts (11 · 1 · 12 · 31)
+
+### Fixed
+
+- **`plugin.json` declared `10 skills, 1 agent, 11 commands, 28 shared hooks`; the real numbers are
+  `11 · 1 · 12` with `31` shared hooks** (34 registered total = 31 shared + 3 ctk-specific, the basis
+  already documented in ctk's CLAUDE.md). The marketplace entry, README and CLAUDE.md were already
+  correct — `plugin.json` alone had drifted, so the marketplace listing understated what ctk ships.
+
+Counts corrected against the filesystem, and pinned by a new CI gate. Until now
+`scripts/validate-versions.sh` checked *versions* and nothing else, so a declared
+count could drift indefinitely while every check stayed green. Check 7 (declared
+counts vs the real directories, plus enumerated lists by name) and check 8 (plugin
+README version) now close that hole -- see the root CLAUDE.md release checklist.
+
 ## [2.14.0] - 2026-07-30 — detect a silent total hook unload (#82, detection half)
 
 ### Added

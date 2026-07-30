@@ -16,6 +16,21 @@
 #      (Release Checklist item 6)
 #   6. log-level env var identity agrees across wrapper / vitest.config / CLAUDE.md,
 #      and the plugin name is a valid shell identifier (#63, #74)
+#   7. every DECLARED skill/agent/command count matches the filesystem
+#   8. plugin README.md "Version:" line matches plugin.json
+#
+# Checks 7 and 8 exist because checks 1-6 gate VERSIONS and nothing else. Measured
+# on etk's README at commit d15d29b, which every check passed:
+#   * skills:   declared 20, listed 19, real count 26 -- seven skills unlisted
+#   * agents:   declared  5, listed  5, real count  5 -- and STILL wrong: it named
+#               `logic-validator`, which does not exist, and omitted
+#               `adversarial-verifier`, which does
+#   * commands: declared 20, listed 19, real count 20 -- total correct, list short,
+#               naming a `review-mr` command that does not exist
+#   * "Version: 2.7.1" against a real 2.16.2
+# The agents line is why check 7 compares enumerated lists BY NAME: every number in
+# it was right. A length-only check passes it. A validator tells you what it checks,
+# not that you are correct.
 
 set -euo pipefail
 
@@ -285,6 +300,51 @@ print(m.group(1) if m else 'NOT_FOUND')
       if [[ "$SRC_DRIFT" -eq 1 ]]; then
         continue
       fi
+    fi
+  fi
+
+  # --- Check 7: declared counts vs filesystem ground truth ---
+  # Delegated to scripts/lib/check-counts.py -- the extraction needs two markdown
+  # declaration formats and per-plugin row isolation out of two shared tables,
+  # which is past what sed/grep can do without becoming unreadable. The helper
+  # prints its own FAIL lines and exits nonzero.
+  #
+  # `|| COUNT_RC=$?` rather than `if ! ...`: under `set -e` a bare call would abort
+  # the whole script on the first mismatching plugin, so later plugins would never
+  # be reported and the operator would fix them one CI run at a time.
+  COUNT_HELPER="$(cd "$(dirname "$0")" && pwd)/lib/check-counts.py"
+  if [[ -f "$COUNT_HELPER" ]]; then
+    COUNT_RC=0
+    python3 "$COUNT_HELPER" "$REPO_ROOT" "$plugin_dir" "$SHORT_NAME" || COUNT_RC=$?
+    if [[ "$COUNT_RC" -ne 0 ]]; then
+      FAILED=1
+      continue
+    fi
+  else
+    # The helper is not optional. A missing file must be louder than a passing
+    # check, or deleting it silently removes check 7 at exit 0 -- the same
+    # "quieter than a failure" hole that check 6's missing-wrapper branch closes.
+    echo "  FAIL  $PLUGIN_NAME: $COUNT_HELPER is missing -- check 7 cannot run"
+    FAILED=1
+    continue
+  fi
+
+  # --- Check 8: plugin README.md version ---
+  # Check 2 gates the plugin's CLAUDE.md but never its README, so ftk's README sat
+  # at 2.3.3 against a real 2.3.13, and atk's/dtk's at 2.0.0 against 2.0.11. A
+  # README with no version line is fine (ctk has none); a WRONG one is not.
+  PLUGIN_README="$plugin_dir/README.md"
+  if [[ -f "$PLUGIN_README" ]]; then
+    PR_VER=$(python3 -c "
+import re
+m = re.search(r'\*\*Version\*\*:\s*([\d.]+)', open('$PLUGIN_README').read())
+print(m.group(1) if m else 'NOT_FOUND')
+")
+    if [[ "$PR_VER" != "NOT_FOUND" ]] && [[ "$PR_VER" != "$PLUGIN_VER" ]]; then
+      echo "  FAIL  $PLUGIN_NAME: README.md=$PR_VER vs plugin.json=$PLUGIN_VER"
+      echo "        Fix: update '**Version**:' in $PLUGIN_README"
+      FAILED=1
+      continue
     fi
   fi
 

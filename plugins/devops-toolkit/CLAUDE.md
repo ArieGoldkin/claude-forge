@@ -1,12 +1,12 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.11
+> **Version**: 2.0.12
 > **Last Updated**: 2026-06-26
 
 ## Overview
 
-Claude Code plugin for DevOps, infrastructure, and backend development. Provides 15 skills, 2 agents, 13 commands, and 1 plugin-specific hook.
+Claude Code plugin for DevOps, infrastructure, and backend development. Provides 15 skills, 2 agents, 12 commands, and 1 plugin-specific hook.
 
 **Purpose**: Standardize AI-assisted development across infrastructure and backend projects with security guardrails, AWS/Terraform patterns, and automated developer experience.
 
@@ -26,7 +26,7 @@ devops-toolkit/
 │   └── continuity/           # Local dev state (gitignored)
 ├── skills/                    # 15 specialized skill directories
 ├── agents/                    # 2 agent markdown files
-├── commands/                  # 13 slash command definitions
+├── commands/                  # 12 slash command definitions
 ├── hooks/                     # Hook system (TypeScript)
 │   ├── hooks.json            # Hook configurations
 │   ├── bin/                  # Shell wrapper + CLI runner

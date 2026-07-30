@@ -1,7 +1,7 @@
 {
   "name": "dtk",
-  "version": "2.0.11",
-  "description": "DevOps development toolkit - 15 skills, 2 agents, 13 commands for infrastructure and backend development, including Husky pre-commit hook setup",
+  "version": "2.0.12",
+  "description": "DevOps development toolkit - 15 skills, 2 agents, 12 commands for infrastructure and backend development, including Husky pre-commit hook setup",
   "author": {
     "name": "Arie Goldkin",
     "email": "ariegoldkin88@gmail.com"

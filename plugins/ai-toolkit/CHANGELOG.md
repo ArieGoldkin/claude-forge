@@ -2,6 +2,22 @@
 
 All notable changes to the ai-toolkit (`atk`) plugin will be documented in this file.
 
+## [2.0.12] - 2026-07-30 — correct declared skill/command counts (16 · 1 · 25)
+
+### Fixed
+
+- **`plugin.json` declared `14 skills, 1 agent, 23 commands`; the real numbers are `16 · 1 · 25`.**
+  The two missing entries are `coaching-conversation-patterns` and `pgvector-search`, which PR #25
+  added to marketplace.json and CLAUDE.md but never to `plugin.json` or the README.
+- **`README.md`** carried the same stale `14 Skills` / `23 Commands` lists (both omitting those two
+  skills/commands) and pinned `**Version**: 2.0.0`, eleven patch versions stale.
+
+Counts corrected against the filesystem, and pinned by a new CI gate. Until now
+`scripts/validate-versions.sh` checked *versions* and nothing else, so a declared
+count could drift indefinitely while every check stayed green. Check 7 (declared
+counts vs the real directories, plus enumerated lists by name) and check 8 (plugin
+README version) now close that hole -- see the root CLAUDE.md release checklist.
+
 ## [2.0.11] - 2026-07-30 — correct two refuted claims in the 2.0.9 entry (#75)
 
 Documentation only. No skill, agent, command or hook behaviour changed.

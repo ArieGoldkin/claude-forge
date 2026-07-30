@@ -2,6 +2,27 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.12] - 2026-07-30 — correct declared counts and remove five phantom skills from the README
+
+### Fixed
+
+- **Command count was `13` everywhere; dtk ships `12`** — corrected in `plugin.json`, the
+  marketplace entry, `CLAUDE.md` and `README.md`.
+- **`README.md` listed five skills dtk does not ship**: `security-checklist`, `coding-standards`,
+  `testing-strategy-builder`, `code-review-playbook` and `ascii-visualizer` all belong to etk/ftk.
+  It also omitted `salesforce-integration-patterns` and `setup-pre-commit`, and declared `18` skills
+  and `3` agents against a truth of `15` and `2`.
+- **The Agents table listed `web-research-analyst`**, which is a **ctk** agent.
+- **The Commands table listed `/security-checklist` and `/coding-standards`** (etk commands) while
+  omitting `/salesforce-integration-patterns`.
+- **`README.md` pinned `**Version**: 2.0.0`**, eleven patch versions stale.
+
+Counts corrected against the filesystem, and pinned by a new CI gate. Until now
+`scripts/validate-versions.sh` checked *versions* and nothing else, so a declared
+count could drift indefinitely while every check stayed green. Check 7 (declared
+counts vs the real directories, plus enumerated lists by name) and check 8 (plugin
+README version) now close that hole -- see the root CLAUDE.md release checklist.
+
 ## [2.0.11] - 2026-07-27 — one derivation for the log-level variable, and a CI check that docs match code
 
 Shared library, tests and CI. No skill, agent or command behaviour changed.

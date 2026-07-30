@@ -4,7 +4,7 @@
 
 > **Formerly named `devops-toolkit`.** Renamed to `dtk` in v2.0.0 to shorten slash-command prefixes (e.g. `/devops-toolkit:aws-cli-toolkit` → `/dtk:aws-cli-toolkit`). The source directory remains `plugins/devops-toolkit/` for repo readability. Existing installations must uninstall `devops-toolkit@claude-forge` and reinstall as `dtk@claude-forge`.
 
-Claude Code plugin for DevOps, infrastructure, and backend development. Provides 18 specialized skills, 2 agents, 13 commands, and 1 hook (repo-access-guard) for secure, efficient development workflows.
+Claude Code plugin for DevOps, infrastructure, and backend development. Provides 15 specialized skills, 2 agents, 12 commands, and 1 hook (repo-access-guard) for secure, efficient development workflows.
 
 ## Installation
 
@@ -66,7 +66,7 @@ Add to your project's `.claude/settings.json`:
 
 ## Features
 
-### Skills (18)
+### Skills (15)
 
 Domain-specific knowledge and patterns for DevOps and backend development:
 
@@ -83,28 +83,29 @@ Domain-specific knowledge and patterns for DevOps and backend development:
 | `observability-monitoring` | Structured logging, metrics, distributed tracing, alerting |
 | `terraform-gitlab-ci` | GitLab CI/CD pipelines for Terraform with OIDC authentication |
 
-#### Cross-Cutting (3)
+#### Cross-Cutting (1)
 | Skill | Description |
 |-------|-------------|
-| `security-checklist` | OWASP Top 10, authentication patterns, security audits |
 | `performance-optimization` | Full-stack performance analysis, optimization patterns |
-| `coding-standards` | Function size, complexity thresholds, test coverage standards |
 
-#### Python/Backend (4)
+#### Python/Backend (3)
 | Skill | Description |
 |-------|-------------|
 | `postgresql-master` | Database queries, schema design, migrations, performance optimization |
 | `api-design-framework` | REST, GraphQL, gRPC API patterns, versioning |
 | `database-schema-designer` | Normalization, indexing, schema migration patterns |
-| `testing-strategy-builder` | Test planning, coverage targets, test pyramid |
 
-#### Additional Skills (2)
+#### Integration & Tooling (2)
 | Skill | Description |
 |-------|-------------|
-| `code-review-playbook` | Review processes, conventional comments, PR templates |
-| `ascii-visualizer` | ASCII diagrams for architecture, workflows, tables |
+| `salesforce-integration-patterns` | Salesforce CRM sync, case management, webhooks, bulk operations, SOQL |
+| `setup-pre-commit` | Husky pre-commit hook setup for lint, format, and test gates |
 
-### Agents (3)
+> `security-checklist`, `coding-standards`, `testing-strategy-builder`, `code-review-playbook`
+> and `ascii-visualizer` are **not** dtk skills — they ship in etk and ftk. They were listed
+> here in error until 2026-07-30; install those plugins to get them.
+
+### Agents (2)
 
 Specialized AI agents for DevOps and backend development:
 
@@ -112,13 +113,14 @@ Specialized AI agents for DevOps and backend development:
 |-------|----------------|
 | `devops-architect` | Python Lambda, PostgreSQL, REST API, AWS serverless |
 | `quality-reviewer` | Code review, security, performance, best practices |
-| `web-research-analyst` | Web research for DevOps documentation and best practices |
 
-### Commands (13)
+> `web-research-analyst` is a **ctk** agent, not a dtk one; it was listed here in error.
+
+### Commands (12)
 
 Slash commands for common workflows:
 
-#### Skill Commands (12)
+#### Skill Commands (11)
 | Command | Description |
 |---------|-------------|
 | `/aws-cli-toolkit` | AWS CLI operations guide |
@@ -130,9 +132,11 @@ Slash commands for common workflows:
 | `/terraform-gitlab-ci` | Terraform CI/CD pipeline |
 | `/terraform-aws-lambda-containers` | Lambda container deployment |
 | `/terraform-aws-modules` | Terraform module patterns |
-| `/security-checklist` | Security audit checklist |
 | `/performance-optimization` | Performance analysis |
-| `/coding-standards` | Code quality standards |
+| `/salesforce-integration-patterns` | Salesforce sync, cases, webhooks, SOQL |
+
+> `/security-checklist` and `/coding-standards` are **etk** commands, not dtk ones;
+> they were listed here in error until 2026-07-30.
 
 #### Setup (1)
 | Command | Description |
@@ -171,18 +175,17 @@ devops-toolkit/
 ├── .claude-plugin/
 │   ├── plugin.json          # Plugin manifest
 │   └── marketplace.json     # Marketplace catalog
-├── skills/                  # 18 skill directories
+├── skills/                  # 15 skill directories
 │   ├── devops-deployment/
 │   ├── terraform-aws-modules/
 │   ├── postgresql-master/
-│   └── ... (15 more)
-├── agents/                  # 3 agent definitions
-│   ├── devops-architect.md
-│   ├── quality-reviewer.md
-│   └── web-research-analyst.md
-├── commands/                # 13 slash commands
-│   ├── devops-deployment.md
 │   └── ... (12 more)
+├── agents/                  # 2 agent definitions
+│   ├── devops-architect.md
+│   └── quality-reviewer.md
+├── commands/                # 12 slash commands
+│   ├── devops-deployment.md
+│   └── ... (11 more)
 ├── hooks/                   # TypeScript hook system
 │   ├── hooks.json
 │   ├── src/
@@ -245,5 +248,5 @@ MIT — see [LICENSE](../../LICENSE).
 
 ---
 
-**Version**: 2.0.0
+**Version**: 2.0.12
 **Maintained by**: Arie Goldkin

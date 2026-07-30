@@ -39,9 +39,9 @@ claude-forge/
 │   │   └── prompt/             # context-monitor, hipaa-context-injector
 │   └── tests/lib/              # 12 shared library test files (the set every plugin must link)
 ├── plugins/
-│   ├── continuity-toolkit/     # Session continuity management (v2.14.0, installed as ctk)
-│   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.11, installed as dtk)
-│   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.11, installed as atk)
+│   ├── continuity-toolkit/     # Session continuity management (v2.14.1, installed as ctk)
+│   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.12, installed as dtk)
+│   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.12, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.13, installed as ftk)
 │   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.17.1, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
@@ -489,6 +489,18 @@ Whenever you change a plugin's `dependencies` field, rename the plugin, or ship 
 4. `plugins/{name}/CLAUDE.md` `> Version:` header line if present
 5. `README.md` (root) plugin table — version column for that row
 6. `CLAUDE.md` (root) plugin tree comment (line ~42-48) — `(vX.Y.Z, installed as ...)`
+7. `plugins/{name}/README.md` `**Version**:` line if present — **CI-enforced** (check 8)
+
+**Counts are CI-enforced too (check 7).** If the change adds or removes a skill, agent, or command,
+every *declared* count must be updated in the same commit — `plugin.json` and `marketplace.json`
+descriptions, both root tables, and the plugin's own `CLAUDE.md`/`README.md`. Enumerated
+`- **N skills**: a, b, c` lists are checked **by name**, not just by length: a list with one phantom
+and one omission has the right total and is still wrong. That is not hypothetical — etk's README at
+`d15d29b` declared **5 agents**, listed **5**, and the directory held **5**; every number agreed, and
+the list still named a `logic-validator` that does not exist while omitting `adversarial-verifier`
+that does. Its skills line was separately off by six (declared 20, real 26).
+Hook counts are **not** gated (their declarations carry free-form riders no safe pattern reads) —
+check them by hand against `grep -c '^registerHook(' hooks/src/index.ts`.
 
 **Skill quality gate (recurring — added 2026-06-30)**: if the bump touches any `skills/**/SKILL.md`, run **`/etk:audit-skill`** over the changed skills first and triage its flags (CSO compliance · >150-line progressive-disclosure review · no-op/sediment · completion criteria). This is the *recurring* trigger for the pruning discipline in "Skill body hygiene" above — sediment is the default fate without one, and a release is the natural cadence. The audit only flags; a human decides each cut. (Deferred hardening: a scheduled `/loop` sweep or a CI lint — a CI gate needs an `ANTHROPIC_API_KEY` because the audit is model-invoked, the same blocker as the deferred runtime-smoke job.)
 
