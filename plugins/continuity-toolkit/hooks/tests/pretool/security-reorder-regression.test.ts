@@ -132,7 +132,7 @@ describe('P0 regression — write-combined secret gate runs before auto-approve'
 
   it('C5 hardcoded AWS key in a normal source file is BLOCKED', async () => {
     const r = await writeCombined(write('src/config.ts', `const k = "${REAL_LOOKING_AWS_KEY}";`));
-    expect(r.continue).toBe(false); // deny — secret scan now runs first
+    expect(r.hookSpecificOutput?.permissionDecision).toBe('deny'); // deny — secret scan now runs first
   });
 
   it('MultiEdit secret payload is scanned (was previously skipped)', async () => {
@@ -144,7 +144,7 @@ describe('P0 regression — write-combined secret gate runs before auto-approve'
       },
     };
     const r = await writeCombined(input);
-    expect(r.continue).toBe(false);
+    expect(r.hookSpecificOutput?.permissionDecision).toBe('deny');
   });
 
   it('canonical AWS doc example key is NOT blocked (review !207 #2 allowlist)', async () => {

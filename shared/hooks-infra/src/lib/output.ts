@@ -77,19 +77,23 @@ export function outputWarning(message: string): HookResult {
 }
 
 /**
- * Output deny/block - stop the operation with reason.
+ * Output deny/block - block the tool call, WITHOUT stopping the agent's turn.
  *
- * Use this when the hook determines an operation should be blocked.
- * The reason is included both as stopReason and in hookSpecificOutput
- * for permission hooks.
+ * Use this when the hook determines an operation should be blocked. The reason
+ * is included both as stopReason and in hookSpecificOutput for permission hooks.
+ *
+ * The denial is carried by `permissionDecision: 'deny'` alone — deliberately NOT
+ * by `continue: false`, which per CC's hook docs "takes precedence over any
+ * event-specific decision fields" and ends the agent's turn outright. See the
+ * inline note in the body for the measurement behind that (#65).
  *
  * @param reason - The reason for blocking the operation
- * @returns HookResult with continue=false and denial information
+ * @returns HookResult with continue=true and a deny decision
  *
  * @example
  * ```typescript
  * console.log(JSON.stringify(outputDeny("Access to .env files is not allowed")));
- * // Output: {"continue":false,"stopReason":"Access to .env files is not allowed",
+ * // Output: {"continue":true,"stopReason":"Access to .env files is not allowed",
  * //          "hookSpecificOutput":{"permissionDecision":"deny",
  * //                                "permissionDecisionReason":"Access to .env files is not allowed"}}
  * ```
@@ -99,7 +103,25 @@ export function outputDeny(
   hookEventName: 'PreToolUse' | 'PermissionRequest' = 'PreToolUse'
 ): HookResult {
   return {
-    continue: false,
+    // NOT `continue: false` (#65). Per CC's hook docs, `continue: false` "takes
+    // precedence over any event-specific decision fields" and stops the agent
+    // processing entirely — which is what killed dispatched subagents the moment
+    // they touched a protected literal. The denial is carried by
+    // `permissionDecision` alone, which blocks the tool call and lets the agent
+    // receive the reason and carry on.
+    //
+    // The tool STILL does not execute. `isDenyDecision` above treats
+    // permissionDecision:'deny' as blocking regardless of `continue`, and the
+    // combined wrappers short-circuit on it before any auto-approve path
+    // (single-sourced in ctk 2.12.1 precisely so this change is safe).
+    //
+    // Measured: a two-cell experiment where both agents hit a real denial and
+    // were told writing their report was mandatory — the continue:false cell
+    // died between two writes, the continue:true cell survived and reported.
+    //
+    // `stopReason` is retained: CC ignores it when continue is true, but our own
+    // hooks and tests read it as the human-readable denial text.
+    continue: true,
     stopReason: reason,
     hookSpecificOutput: {
       hookEventName,

@@ -162,7 +162,7 @@ describe('writeCombined', () => {
 
       const result = await writeCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toBe('Denied by profile');
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       // security-blocker now runs first, so it has fired before profile denies
@@ -175,7 +175,7 @@ describe('writeCombined', () => {
 
       const result = await writeCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toBe('Protected file blocked');
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       // security-blocker runs FIRST and short-circuits — auto-approve / profile never run
@@ -304,7 +304,7 @@ describe('writeCombined', () => {
 
       const result = await writeCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toContain('secrets');
       expect(result.stopReason).toContain('AWS Access Key ID');
     });
@@ -325,7 +325,7 @@ describe('writeCombined', () => {
 
       const result = await writeCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toContain('Private Key');
     });
 

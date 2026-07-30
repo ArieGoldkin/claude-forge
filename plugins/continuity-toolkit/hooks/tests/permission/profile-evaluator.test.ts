@@ -147,7 +147,7 @@ describe('profileEvaluator', () => {
       const input = createBashInput('rm -rf /');
       const result = await profileEvaluator(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toContain('denied');
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
     });

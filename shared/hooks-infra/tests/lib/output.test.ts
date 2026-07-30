@@ -305,7 +305,7 @@ describe('outputDeny', () => {
     const result = outputDeny('Access denied');
 
     expect(result).toEqual({
-      continue: false,
+      continue: true,
       stopReason: 'Access denied',
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -315,9 +315,19 @@ describe('outputDeny', () => {
     });
   });
 
-  it('should have continue set to false', () => {
+  it('should NOT set continue:false — a deny blocks the tool, not the turn (#65)', () => {
+    // The denial is carried by permissionDecision alone. Per CC's hook docs,
+    // `continue: false` "takes precedence over any event-specific decision
+    // fields" and stops the agent entirely — which is what killed dispatched
+    // subagents mid-task (measured: 7 of 12 historically lost reports; a
+    // two-cell experiment where the continue:false cell died between two
+    // writes it was told were mandatory and the continue:true cell survived).
+    //
+    // The tool call is still blocked: `isDenyDecision` (lib/output.ts) treats
+    // permissionDecision:'deny' as blocking regardless of `continue`.
     const result = outputDeny('reason');
-    expect(result.continue).toBe(false);
+    expect(result.continue).toBe(true);
+    expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
   });
 
   it('should include reason as stopReason', () => {
@@ -393,7 +403,7 @@ describe('outputDeny', () => {
 
     expect(() => JSON.parse(json)).not.toThrow();
     const parsed = JSON.parse(json);
-    expect(parsed.continue).toBe(false);
+    expect(parsed.continue).toBe(true);
     expect(parsed.stopReason).toBe('Test denial');
     expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(parsed.hookSpecificOutput.permissionDecisionReason).toBe('Test denial');
@@ -772,8 +782,9 @@ describe('output function comparisons', () => {
       expect(outputWarning('msg').continue).toBe(true);
     });
 
-    it('outputDeny should have continue=false', () => {
-      expect(outputDeny('reason').continue).toBe(false);
+    it('outputDeny should have continue=true (deny blocks the tool, not the turn)', () => {
+      expect(outputDeny('reason').continue).toBe(true);
+      expect(outputDeny('reason').hookSpecificOutput?.permissionDecision).toBe('deny');
     });
 
     it('outputAllow should have continue=true', () => {

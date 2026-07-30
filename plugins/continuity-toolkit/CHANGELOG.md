@@ -2,6 +2,103 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.13.0] - 2026-07-30 — a denial no longer kills the agent it denies (#65 approach 7A)
+
+### Changed
+
+- **`outputDeny` no longer sets `continue: false`.** The denial is now carried by
+  `permissionDecision: 'deny'` alone. Per CC's hook docs, `continue: false` *"takes precedence over
+  any event-specific decision fields"* and stops the agent processing **entirely** — so every
+  security denial ended the turn of whatever was running, and a dispatched subagent died on the spot
+  rather than finishing and reporting.
+
+**The command is still blocked.** `permissionDecision: 'deny'` blocks the tool call; only the
+turn-termination is removed. `isDenyDecision` (2.12.1) treats a deny as blocking regardless of
+`continue`, and the combined wrappers short-circuit on it before any auto-approve path — which is
+exactly why 2.12.1 had to land first.
+
+### Why — measured, not argued
+
+Two-cell controlled experiment. Both cells hit a **real** denial and were told explicitly that the
+denial was expected, non-fatal, and that writing their report was their single most important
+obligation:
+
+| Cell | Shape | wrote `before` | wrote `after` | Outcome |
+|---|---|:--:|:--:|---|
+| control | `continue:false` + deny | yes | **no** | died mid-task |
+| treatment | `continue:true` + deny | yes | yes | survived, received the injected diff |
+
+The control died anyway — independently confirming R1's finding that instructions in the *dispatch
+prompt* cannot rescue a `continue:false` denial. Cost this addresses: **7 of 12** historically lost
+subagent reports ended on a denial from this hook, and `/etk:review-mr` had never completed a run.
+
+A first attempt at the treatment cell was **void** — the delta-cache never fired because the target
+file was unchanged, and the agent correctly reported its own cell invalid instead of claiming a
+result. Protocol corrected (read → *Bash*-append → read) so the denial actually fired.
+
+### Test migration
+
+**128 assertions** moved from `expect(result.continue).toBe(false)` to
+`expect(result.hookSpecificOutput?.permissionDecision).toBe('deny')` across 5 files, plus 7
+individually-handled sites (inline awaits, a JSON round-trip, a `toMatchObject`, and the symlinked
+`output.test.ts` contract). The pinned property changes from *"the turn stopped"* — a mechanism — to
+*"the command did not execute"*, which is what actually matters.
+
+`stopReason` is retained throughout: CC ignores it when `continue` is true, but our own hooks and 51
+assertions read it as the human-readable denial text. That kept 51 sites out of the migration.
+
+**`run-hook`'s exit code for a denial changes 1 → 0** (it maps `result.continue ? 0 : 1`) — and it
+turns out **nothing ever saw it**: `run-hook-wrapper.sh` discards the status (`|| true`) and always
+`exit 0`, so Claude Code decides from the emitted JSON exclusively. Its stale JSDoc was corrected.
+
+### The tradeoff this makes — stated explicitly
+
+`continue: false` blocked **event-agnostically** and, per the docs, took precedence over
+event-specific fields. `permissionDecision: 'deny'` does not: it is honoured only by the events that
+implement it. So the failure mode moves from **fail-closed to fail-open** — if a future CC release
+changed or ignored `permissionDecision` handling, a denial would degrade to an allow rather than to a
+stop. That risk is not theoretical here: this repo shipped a `hookSpecificOutput` field CC silently
+ignored for a year. The tradeoff is judged worth it (the alternative kills every dispatched agent),
+but it is a real reduction in defence depth and is recorded rather than implied.
+
+### Verification
+
+Two mutation controls, both required to fail and both did:
+
+| Mutation | Result |
+|---|---|
+| `deny` → `allow` | **192 tests fail** — the migrated assertions still catch a loss of blocking |
+| `continue:true` → `false` | **49 ctk + 4 shared tests fail** — the non-terminal contract is pinned |
+
+**A review of the first draft of this migration caught a real defect in it.** The mechanical rewrite
+replaced the `continue` assertion in tests that *already* asserted `permissionDecision`, producing
+**47 adjacent duplicate assertions** while ~119 denial tests silently lost the `continue` dimension
+altogether — so the very property this release exists to guarantee was pinned by only **3** tests.
+Fixed by converting each duplicate into the missing `expect(result.continue).toBe(true)` rather than
+just deleting it, which *recovers* the lost dimension: the `continue:true → false` mutation now fails
+**49** tests instead of 3. Each affected test asserts both halves — blocked, and not terminated.
+
+Test totals, measured per tree (the trees are **not** uniform — `shared/hooks-infra` runs 1248):
+
+| Tree | Tests |
+|---|---|
+| `shared/hooks-infra` | 1248 |
+| ctk | **2396** (+1: the new regression test) |
+| dtk · atk · ftk · etk | 796 each |
+| **total** | **6828** (base `7c66170` = 6827) |
+
+Typecheck clean. Lint clean in all 5 plugins via their own `npm run lint`. `validate-versions`,
+`validate-manifest-shape`, `validate-shared-test-symlinks` all exit 0. `dist` rebuilt for all five
+plugins; only ctk's bundle changes materially (the rest are sourcemap-only, correct tree-shaking).
+
+### Not yet proven
+
+The spike demonstrated survival for a **`Read`** denied by **`read-cache`**. That this hook's
+**Bash** denials are now survivable in a real dispatch follows from the shared `outputDeny` contract
+but has **not** been observed end-to-end — it needs this release installed and a subagent dispatched
+against it. When that is run, check hook **liveness first**: an unnoticed plugin outage (#82) already
+made one null result look like evidence this session.
+
 ## [2.12.1] - 2026-07-30 — a denial expressed the documented way was not recognised as a denial
 
 ### Fixed

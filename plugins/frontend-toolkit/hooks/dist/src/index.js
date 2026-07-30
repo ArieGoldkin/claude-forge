@@ -25,7 +25,25 @@ function outputWarning(message) {
 }
 function outputDeny(reason, hookEventName = "PreToolUse") {
   return {
-    continue: false,
+    // NOT `continue: false` (#65). Per CC's hook docs, `continue: false` "takes
+    // precedence over any event-specific decision fields" and stops the agent
+    // processing entirely — which is what killed dispatched subagents the moment
+    // they touched a protected literal. The denial is carried by
+    // `permissionDecision` alone, which blocks the tool call and lets the agent
+    // receive the reason and carry on.
+    //
+    // The tool STILL does not execute. `isDenyDecision` above treats
+    // permissionDecision:'deny' as blocking regardless of `continue`, and the
+    // combined wrappers short-circuit on it before any auto-approve path
+    // (single-sourced in ctk 2.12.1 precisely so this change is safe).
+    //
+    // Measured: a two-cell experiment where both agents hit a real denial and
+    // were told writing their report was mandatory — the continue:false cell
+    // died between two writes, the continue:true cell survived and reported.
+    //
+    // `stopReason` is retained: CC ignores it when continue is true, but our own
+    // hooks and tests read it as the human-readable denial text.
+    continue: true,
     stopReason: reason,
     hookSpecificOutput: {
       hookEventName,

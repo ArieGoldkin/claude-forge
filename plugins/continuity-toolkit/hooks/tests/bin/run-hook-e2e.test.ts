@@ -103,7 +103,11 @@ describe('run-hook.ts E2E', () => {
     expect(parsed).toHaveProperty('continue');
   });
 
-  it('should return exit code 1 when security-blocker blocks a dangerous command', () => {
+  it('should exit 0 and emit a deny decision when security-blocker blocks a dangerous command', () => {
+    // #65: the denial is carried by permissionDecision, NOT by continue:false, so
+    // the wrapper's exit code is now 0 (run-hook maps `result.continue ? 0 : 1`).
+    // The command is still blocked — CC reads the JSON decision, and this is the
+    // same shape read-cache has shipped in production all along.
     const input = JSON.stringify({
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /' },
@@ -111,9 +115,10 @@ describe('run-hook.ts E2E', () => {
 
     const { stdout, exitCode } = runHook('pretool/security-blocker', input);
 
-    expect(exitCode).toBe(1);
+    expect(exitCode).toBe(0);
     const parsed = JSON.parse(stdout);
-    expect(parsed.continue).toBe(false);
+    expect(parsed.continue).toBe(true);
+    expect(parsed.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(parsed.stopReason).toBeTruthy();
   });
 
