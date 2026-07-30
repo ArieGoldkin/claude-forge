@@ -2,6 +2,58 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.12.1] - 2026-07-30 — a denial expressed the documented way was not recognised as a denial
+
+### Fixed
+
+- **`isDenyDecision` ignored `permissionDecision: 'deny'`.** Three combined hooks —
+  `bash-combined`, `write-combined`, `permission-request-combined` — each carried a private copy
+  that tested **only** `continue === false`. A denial expressed the other documented way
+  (`permissionDecision: 'deny'` with `continue: true`, which blocks the tool call while letting the
+  agent continue) was therefore **not** classified as blocking, so execution fell through to the
+  auto-approve fast path. That is precisely the outcome `isBlockingDecision`'s own comment says the
+  short-circuit exists to prevent: *"so a dangerous command can never be silently auto-approved past
+  the security blocker."*
+- **Not hypothetical.** `read-cache` already returns exactly that shape
+  (`read-cache.ts:157-167`). It escapes today only because it is wired to `Read`, which none of the
+  three wrappers cover — a latent trap, one refactor away from becoming a live auto-allow.
+- **Now single-sourced.** `isDenyDecision` is exported from `lib/output.ts`, the module that already
+  owns what a denial *looks like*, and the three private copies are deleted. Three copies is how the
+  gap opened; a behaviour change was an N-place edit.
+
+Widening is **strictly safe**: the predicate can classify *more* results as denials, never fewer, so
+enforcement can only get stronger.
+
+### Why this landed first (issue #65 groundwork)
+
+Measured this session with a two-cell controlled experiment, both cells hitting a real denial and
+differing only in the `continue` field:
+
+| Cell | Shape | Wrote `before` | Wrote `after` | Outcome |
+|---|---|---|---|---|
+| control | `continue:false` + deny | yes | **no** | subagent **died** mid-task |
+| treatment | `continue:true` + deny | yes | yes | subagent **survived**, got the diff |
+
+Both agents were told explicitly that the denial was expected, non-fatal, and that writing the
+`after` file was their single most important obligation. The control died anyway — independently
+confirming R1's finding that dispatch-prompt instructions do not rescue a `continue:false` denial,
+and matching CC's documented behaviour that `continue: false` *"takes precedence over any
+event-specific decision fields."*
+
+Dropping `continue: false` from security denials is therefore the fix for subagent death (7 of 12
+historically lost reports) — but it is **unsafe until this release lands**, because before it, a
+`continue:true` denial would have been auto-approved. That change is deliberately **not** in this
+release.
+
+### Verification
+
+Mutation control: neutering `isDenyDecision` to `return false` turns 5 tests red across 2 files.
+Noted honestly — `permission-request-combined.test.ts` stayed green under that mutation, so its deny
+path has **no coverage**; that gap is pre-existing and untouched here. 6,827 tests pass across all
+six trees (+1, the new regression test, ctk-local). Typecheck and Biome clean. `dist` rebuilt for all
+five plugins: ctk's bundle changes; the other four are sourcemap-only (tree-shaking drops the unused
+export).
+
 ## [2.12.0] - 2026-07-29 — /doctor reported healthy through a total plugin outage
 
 ### Added

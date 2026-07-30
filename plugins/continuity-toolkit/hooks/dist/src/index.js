@@ -37,6 +37,9 @@ function outputDeny(reason, hookEventName = "PreToolUse") {
     }
   };
 }
+function isDenyDecision(result) {
+  return result.continue === false || result.hookSpecificOutput?.permissionDecision === "deny";
+}
 function outputAllow(hookEventName = "PreToolUse") {
   return {
     continue: true,
@@ -3454,9 +3457,6 @@ function patchHookEventName(result) {
 function isAllowDecision(result) {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === "allow";
 }
-function isDenyDecision(result) {
-  return result.continue === false;
-}
 async function permissionRequestCombined(input) {
   const toolName = getToolName(input);
   logDebug(HOOK_NAME11, `Evaluating permission request for ${toolName}`);
@@ -3758,14 +3758,11 @@ var HOOK_NAME14 = "bash-combined";
 function isAllowDecision2(result) {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === "allow";
 }
-function isDenyDecision2(result) {
-  return result.continue === false;
-}
 function isWarning(result) {
   return result.continue === true && result.systemMessage !== void 0;
 }
 function isBlockingDecision(result) {
-  return isDenyDecision2(result) || result.hookSpecificOutput?.permissionDecision === "ask";
+  return isDenyDecision(result) || result.hookSpecificOutput?.permissionDecision === "ask";
 }
 async function bashCombined(input) {
   const skipped = runGuards(input, guardBash);
@@ -3802,7 +3799,7 @@ async function bashCombined(input) {
     logInfo(HOOK_NAME14, "Allowed by profile");
     return profileResult;
   }
-  if (isDenyDecision2(profileResult)) {
+  if (isDenyDecision(profileResult)) {
     logInfo(HOOK_NAME14, "Denied by profile");
     return profileResult;
   }
@@ -4043,9 +4040,6 @@ var ARCHITECTURE_FILES = [
 function isAllowDecision3(result) {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === "allow";
 }
-function isDenyDecision3(result) {
-  return result.continue === false;
-}
 function gatherWriteContent(input) {
   const parts = [];
   const content = getContent(input);
@@ -4066,7 +4060,7 @@ async function writeCombined(input) {
   logDebug(HOOK_NAME17, "Starting combined Write/Edit validation");
   logDebug(HOOK_NAME17, "Running: security-blocker");
   const securityResult = await securityBlocker(input);
-  if (isDenyDecision3(securityResult)) {
+  if (isDenyDecision(securityResult)) {
     logInfo(HOOK_NAME17, "Blocked by security check");
     return securityResult;
   }
@@ -4094,7 +4088,7 @@ async function writeCombined(input) {
     logInfo(HOOK_NAME17, "Allowed by profile");
     return profileResult;
   }
-  if (isDenyDecision3(profileResult)) {
+  if (isDenyDecision(profileResult)) {
     logInfo(HOOK_NAME17, "Denied by profile");
     return profileResult;
   }

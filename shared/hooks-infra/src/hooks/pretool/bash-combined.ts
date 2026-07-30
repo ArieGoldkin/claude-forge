@@ -21,7 +21,12 @@
 import { guardBash, runGuards } from '../lib/guards.js';
 import { getCommand, stripProxyPrefix } from '../lib/input.js';
 import { logDebug, logInfo, logWarn } from '../lib/logging.js';
-import { outputDeny, outputSilentSuccess, outputWithNotification } from '../lib/output.js';
+import {
+  isDenyDecision,
+  outputDeny,
+  outputSilentSuccess,
+  outputWithNotification,
+} from '../lib/output.js';
 import { autoApproveSafeBash } from '../permission/auto-approve-safe-bash.js';
 import { profileEvaluator } from '../permission/profile-evaluator.js';
 import type { HookInput, HookResult } from '../types.js';
@@ -37,12 +42,10 @@ function isAllowDecision(result: HookResult): boolean {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === 'allow';
 }
 
-/**
- * Check if a hook result is a deny decision.
- */
-function isDenyDecision(result: HookResult): boolean {
-  return result.continue === false;
-}
+// `isDenyDecision` is imported from lib/output.js — it is the single
+// definition of what counts as a denial. See #65: a private copy here tested
+// only `continue === false` and let a permissionDecision-only deny fall
+// through to the auto-approve fast path.
 
 /**
  * Check if a hook result is a warning (continue with message).
