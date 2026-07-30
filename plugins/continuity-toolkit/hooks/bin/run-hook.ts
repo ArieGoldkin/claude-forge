@@ -10,8 +10,13 @@
  *
  * The hook receives JSON input from stdin and outputs JSON to stdout.
  * Exit codes:
- *   0 - Hook completed successfully (continue=true)
- *   1 - Hook blocked operation (continue=false)
+ *   0 - Hook completed successfully (continue=true) — INCLUDING a denial, which
+ *       since #65 is carried by hookSpecificOutput.permissionDecision:'deny'
+ *       rather than continue:false, so a blocked operation now exits 0
+ *   1 - Handler returned continue=false (no shared hook does this any more)
+ *
+ * Note: run-hook-wrapper.sh discards this exit code and always exits 0, so
+ * Claude Code decides from the emitted JSON, never from the process status.
  *
  * Environment:
  *   CLAUDE_PLUGIN_ROOT - Required. Path to the plugin root directory.

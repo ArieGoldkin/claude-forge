@@ -47,8 +47,19 @@ individually-handled sites (inline awaits, a JSON round-trip, a `toMatchObject`,
 `stopReason` is retained throughout: CC ignores it when `continue` is true, but our own hooks and 51
 assertions read it as the human-readable denial text. That kept 51 sites out of the migration.
 
-**`run-hook`'s exit code for a denial changes 1 → 0** (it maps `result.continue ? 0 : 1`). CC reads
-the JSON decision, and this is the same shape `read-cache` has shipped in production all along.
+**`run-hook`'s exit code for a denial changes 1 → 0** (it maps `result.continue ? 0 : 1`) — and it
+turns out **nothing ever saw it**: `run-hook-wrapper.sh` discards the status (`|| true`) and always
+`exit 0`, so Claude Code decides from the emitted JSON exclusively. Its stale JSDoc was corrected.
+
+### The tradeoff this makes — stated explicitly
+
+`continue: false` blocked **event-agnostically** and, per the docs, took precedence over
+event-specific fields. `permissionDecision: 'deny'` does not: it is honoured only by the events that
+implement it. So the failure mode moves from **fail-closed to fail-open** — if a future CC release
+changed or ignored `permissionDecision` handling, a denial would degrade to an allow rather than to a
+stop. That risk is not theoretical here: this repo shipped a `hookSpecificOutput` field CC silently
+ignored for a year. The tradeoff is judged worth it (the alternative kills every dispatched agent),
+but it is a real reduction in defence depth and is recorded rather than implied.
 
 ### Verification
 
@@ -57,12 +68,28 @@ Two mutation controls, both required to fail and both did:
 | Mutation | Result |
 |---|---|
 | `deny` → `allow` | **192 tests fail** — the migrated assertions still catch a loss of blocking |
-| `continue:true` → `false` | 3 ctk + 4 shared tests fail — the new contract is pinned on both sides |
+| `continue:true` → `false` | **49 ctk + 4 shared tests fail** — the non-terminal contract is pinned |
 
-6,828 tests pass across all six trees (+1 vs baseline: the new hook-level regression test, ctk-local;
-every other tree unchanged). Typecheck clean. Lint clean in all 5 plugins via their own `npm run
-lint`. `validate-versions`, `validate-manifest-shape`, `validate-shared-test-symlinks` all exit 0.
-`dist` rebuilt for all five plugins.
+**A review of the first draft of this migration caught a real defect in it.** The mechanical rewrite
+replaced the `continue` assertion in tests that *already* asserted `permissionDecision`, producing
+**47 adjacent duplicate assertions** while ~119 denial tests silently lost the `continue` dimension
+altogether — so the very property this release exists to guarantee was pinned by only **3** tests.
+Fixed by converting each duplicate into the missing `expect(result.continue).toBe(true)` rather than
+just deleting it, which *recovers* the lost dimension: the `continue:true → false` mutation now fails
+**49** tests instead of 3. Each affected test asserts both halves — blocked, and not terminated.
+
+Test totals, measured per tree (the trees are **not** uniform — `shared/hooks-infra` runs 1248):
+
+| Tree | Tests |
+|---|---|
+| `shared/hooks-infra` | 1248 |
+| ctk | **2396** (+1: the new regression test) |
+| dtk · atk · ftk · etk | 796 each |
+| **total** | **6828** (base `7c66170` = 6827) |
+
+Typecheck clean. Lint clean in all 5 plugins via their own `npm run lint`. `validate-versions`,
+`validate-manifest-shape`, `validate-shared-test-symlinks` all exit 0. `dist` rebuilt for all five
+plugins; only ctk's bundle changes materially (the rest are sourcemap-only, correct tree-shaking).
 
 ### Not yet proven
 

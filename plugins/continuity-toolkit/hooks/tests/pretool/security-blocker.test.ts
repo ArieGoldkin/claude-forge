@@ -790,7 +790,7 @@ describe('securityBlocker - Bash commands', () => {
       const result = await securityBlocker(createBashInput('rm -rf ~'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     // CC v2.1.162 alignment: $HOME spellings must hit the same deny patterns
@@ -799,35 +799,35 @@ describe('securityBlocker - Bash commands', () => {
       const result = await securityBlocker(createBashInput('rm -rf $HOME'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block rm -rf ${HOME}', async () => {
       const result = await securityBlocker(createBashInput('rm -rf ${HOME}'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block split-flag rm -r -f $HOME', async () => {
       const result = await securityBlocker(createBashInput('rm -r -f $HOME'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block chmod -R 777 $HOME', async () => {
       const result = await securityBlocker(createBashInput('chmod -R 777 $HOME'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block wrapped sh -c with $HOME target', async () => {
       const result = await securityBlocker(createBashInput("sh -c 'rm -rf $HOME'"));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     // Review !209 findings #1 + #5: separator-glued, quoted, and wrapper-brace forms
@@ -835,56 +835,56 @@ describe('securityBlocker - Bash commands', () => {
       const result = await securityBlocker(createBashInput('rm -rf $HOME;ls'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block quoted rm -rf "$HOME"', async () => {
       const result = await securityBlocker(createBashInput('rm -rf "$HOME"'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block wrapped sh -c with brace form ${HOME}', async () => {
       const result = await securityBlocker(createBashInput("sh -c 'rm -rf ${HOME}'"));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block sudo rm -rf /', async () => {
       const result = await securityBlocker(createBashInput('sudo rm -rf /'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block dd of=/dev/sda', async () => {
       const result = await securityBlocker(createBashInput('dd if=/dev/zero of=/dev/sda'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block mkfs.ext4', async () => {
       const result = await securityBlocker(createBashInput('mkfs.ext4 /dev/sda1'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block fork bomb', async () => {
       const result = await securityBlocker(createBashInput(':(){:|:&};:'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block chmod -R 777 /', async () => {
       const result = await securityBlocker(createBashInput('chmod -R 777 /'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -902,21 +902,21 @@ describe('securityBlocker - Bash commands', () => {
       const result = await securityBlocker(createBashInput('cat /etc/passwd'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block commands referencing .ssh/id_', async () => {
       const result = await securityBlocker(createBashInput('cat ~/.ssh/id_rsa'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block commands referencing /root/', async () => {
       const result = await securityBlocker(createBashInput('ls /root/.bashrc'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -942,21 +942,21 @@ describe('securityBlocker - Bash commands', () => {
       const result = await securityBlocker(createBashInput('set'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block export -p', async () => {
       const result = await securityBlocker(createBashInput('export -p'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block env piped to sort', async () => {
       const result = await securityBlocker(createBashInput('env | sort'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should allow set -e (shell option)', async () => {
@@ -1015,7 +1015,7 @@ describe('securityBlocker - Bash commands', () => {
       // tolerates an absolute-path prefix, so this is caught on its own merits.
       const result = await securityBlocker(createBashInput('/usr/bin/env'));
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should allow export VAR=val', async () => {
@@ -1103,21 +1103,21 @@ describe('securityBlocker - File operations', () => {
       const result = await securityBlocker(createFileInput('Edit', '.env.local'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block MultiEdit to .envrc', async () => {
       const result = await securityBlocker(createFileInput('MultiEdit', '.envrc'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to nested .env file', async () => {
       const result = await securityBlocker(createFileInput('Write', 'config/.env'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -1134,7 +1134,7 @@ describe('securityBlocker - File operations', () => {
       const result = await securityBlocker(createFileInput('Edit', '.gitconfig'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should allow Write to .gitignore', async () => {
@@ -1158,28 +1158,28 @@ describe('securityBlocker - File operations', () => {
       const result = await securityBlocker(createFileInput('Edit', '.ssh/id_ed25519'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to .ssh/known_hosts', async () => {
       const result = await securityBlocker(createFileInput('Write', '.ssh/known_hosts'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to .ssh/authorized_keys', async () => {
       const result = await securityBlocker(createFileInput('Write', '.ssh/authorized_keys'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to .ssh/server.pem', async () => {
       const result = await securityBlocker(createFileInput('Write', '.ssh/server.pem'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -1196,35 +1196,35 @@ describe('securityBlocker - File operations', () => {
       const result = await securityBlocker(createFileInput('Edit', '.npmrc'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to secrets.yml', async () => {
       const result = await securityBlocker(createFileInput('Write', 'secrets.yml'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to credentials.json', async () => {
       const result = await securityBlocker(createFileInput('Write', 'credentials.json'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to .kube/config', async () => {
       const result = await securityBlocker(createFileInput('Write', '.kube/config'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to .docker/config.json', async () => {
       const result = await securityBlocker(createFileInput('Write', '.docker/config.json'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -1241,56 +1241,56 @@ describe('securityBlocker - File operations', () => {
       const result = await securityBlocker(createFileInput('Write', '/usr/bin/node'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /var/log/syslog', async () => {
       const result = await securityBlocker(createFileInput('Write', '/var/log/syslog'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /sys/class', async () => {
       const result = await securityBlocker(createFileInput('Write', '/sys/class/net'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /proc/', async () => {
       const result = await securityBlocker(createFileInput('Write', '/proc/cpuinfo'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /boot/', async () => {
       const result = await securityBlocker(createFileInput('Write', '/boot/grub/grub.cfg'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /root/', async () => {
       const result = await securityBlocker(createFileInput('Write', '/root/.bashrc'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /private/etc/ (macOS)', async () => {
       const result = await securityBlocker(createFileInput('Write', '/private/etc/hosts'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
 
     it('should block Write to /private/var/ (macOS)', async () => {
       const result = await securityBlocker(createFileInput('Write', '/private/var/log'));
 
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     });
   });
 
@@ -1404,7 +1404,7 @@ describe('securityBlocker - Symlink bypass detection (ME-001) - CRITICAL', () =>
 
       // Must block because the resolved path is /etc/passwd
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
       expect(result.stopReason).toContain('System directory');
     }
   );
@@ -1420,7 +1420,7 @@ describe('securityBlocker - Symlink bypass detection (ME-001) - CRITICAL', () =>
 
       // Must block because the resolved path is SSH key
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     }
   );
 
@@ -1439,7 +1439,7 @@ describe('securityBlocker - Symlink bypass detection (ME-001) - CRITICAL', () =>
 
       // Must block because the resolved path is a .env file
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     } finally {
       cleanupTempDir(outsideDir);
     }
@@ -1489,7 +1489,7 @@ describe('securityBlocker - Symlink bypass detection (ME-001) - CRITICAL', () =>
 
       // Must block because resolved path is /etc/passwd
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(result.continue).toBe(true);
     }
   );
 });
@@ -2515,7 +2515,7 @@ describe('denial payload hygiene (#65)', () => {
     const result = await securityBlocker(createBashInput('cat .env'));
 
     expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-    expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+    expect(result.continue).toBe(true);
     expect(result.stopReason).not.toContain('Pattern matched');
     // `\/` is the giveaway artifact of an interpolated regex source.
     expect(result.stopReason).not.toContain('\\/');
