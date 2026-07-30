@@ -189,8 +189,21 @@ jobs:
       # green -- the same hole the bad-logvar fixtures exist to close for check 6.
       # Each fixture differs from `good` by exactly ONE line and passes again when
       # that line is corrected, so it can only be failing for its own reason.
-      - name: bad-counts fixture must fail (declared count disagrees with the filesystem)
+      # Check 7 reads SIX sites. One fixture per site, because a fixture that only
+      # covers plugin.json pins "check 7 exists", not "each extractor works" -- the
+      # same whole-vs-parts gap the check itself was written to close. Verified by a
+      # crippled-check matrix: killing each extractor in turn flips EXACTLY the one
+      # fixture below and no other, and `good` keeps passing throughout.
+      - name: bad-counts fixture must fail (S1 plugin.json description)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts"
+      - name: bad-counts-marketplace fixture must fail (S2 marketplace.json description)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-marketplace"
+      - name: bad-counts-root-readme fixture must fail (S3 root README counts column)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-root-readme"
+      - name: bad-counts-root-claude fixture must fail (S4 root CLAUDE.md summary table)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-root-claude"
+      - name: bad-counts-plugin-readme fixture must fail (S6 plugin README + the FORM_B parser)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-plugin-readme"
       - name: bad-count-list fixture must fail (right total, wrong names in the list)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-count-list"
       - name: bad-readme-version fixture must fail (plugin README pins a stale version)
