@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.11, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.11, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.13, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.17.0, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.17.1, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 

@@ -53,4 +53,4 @@ https://github.com/ArieGoldkin/claude-forge
 
 ---
 
-**Version**: 2.17.0
+**Version**: 2.17.1
