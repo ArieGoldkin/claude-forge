@@ -2,6 +2,76 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.13.0] - 2026-07-30 — a denial no longer kills the agent it denies (#65 approach 7A)
+
+### Changed
+
+- **`outputDeny` no longer sets `continue: false`.** The denial is now carried by
+  `permissionDecision: 'deny'` alone. Per CC's hook docs, `continue: false` *"takes precedence over
+  any event-specific decision fields"* and stops the agent processing **entirely** — so every
+  security denial ended the turn of whatever was running, and a dispatched subagent died on the spot
+  rather than finishing and reporting.
+
+**The command is still blocked.** `permissionDecision: 'deny'` blocks the tool call; only the
+turn-termination is removed. `isDenyDecision` (2.12.1) treats a deny as blocking regardless of
+`continue`, and the combined wrappers short-circuit on it before any auto-approve path — which is
+exactly why 2.12.1 had to land first.
+
+### Why — measured, not argued
+
+Two-cell controlled experiment. Both cells hit a **real** denial and were told explicitly that the
+denial was expected, non-fatal, and that writing their report was their single most important
+obligation:
+
+| Cell | Shape | wrote `before` | wrote `after` | Outcome |
+|---|---|:--:|:--:|---|
+| control | `continue:false` + deny | yes | **no** | died mid-task |
+| treatment | `continue:true` + deny | yes | yes | survived, received the injected diff |
+
+The control died anyway — independently confirming R1's finding that instructions in the *dispatch
+prompt* cannot rescue a `continue:false` denial. Cost this addresses: **7 of 12** historically lost
+subagent reports ended on a denial from this hook, and `/etk:review-mr` had never completed a run.
+
+A first attempt at the treatment cell was **void** — the delta-cache never fired because the target
+file was unchanged, and the agent correctly reported its own cell invalid instead of claiming a
+result. Protocol corrected (read → *Bash*-append → read) so the denial actually fired.
+
+### Test migration
+
+**128 assertions** moved from `expect(result.continue).toBe(false)` to
+`expect(result.hookSpecificOutput?.permissionDecision).toBe('deny')` across 5 files, plus 7
+individually-handled sites (inline awaits, a JSON round-trip, a `toMatchObject`, and the symlinked
+`output.test.ts` contract). The pinned property changes from *"the turn stopped"* — a mechanism — to
+*"the command did not execute"*, which is what actually matters.
+
+`stopReason` is retained throughout: CC ignores it when `continue` is true, but our own hooks and 51
+assertions read it as the human-readable denial text. That kept 51 sites out of the migration.
+
+**`run-hook`'s exit code for a denial changes 1 → 0** (it maps `result.continue ? 0 : 1`). CC reads
+the JSON decision, and this is the same shape `read-cache` has shipped in production all along.
+
+### Verification
+
+Two mutation controls, both required to fail and both did:
+
+| Mutation | Result |
+|---|---|
+| `deny` → `allow` | **192 tests fail** — the migrated assertions still catch a loss of blocking |
+| `continue:true` → `false` | 3 ctk + 4 shared tests fail — the new contract is pinned on both sides |
+
+6,828 tests pass across all six trees (+1 vs baseline: the new hook-level regression test, ctk-local;
+every other tree unchanged). Typecheck clean. Lint clean in all 5 plugins via their own `npm run
+lint`. `validate-versions`, `validate-manifest-shape`, `validate-shared-test-symlinks` all exit 0.
+`dist` rebuilt for all five plugins.
+
+### Not yet proven
+
+The spike demonstrated survival for a **`Read`** denied by **`read-cache`**. That this hook's
+**Bash** denials are now survivable in a real dispatch follows from the shared `outputDeny` contract
+but has **not** been observed end-to-end — it needs this release installed and a subagent dispatched
+against it. When that is run, check hook **liveness first**: an unnoticed plugin outage (#82) already
+made one null result look like evidence this session.
+
 ## [2.12.1] - 2026-07-30 — a denial expressed the documented way was not recognised as a denial
 
 ### Fixed

@@ -136,7 +136,7 @@ describe('bashCombined', () => {
 
       const result = await bashCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toContain('Sandbox bypass');
       expect(autoApproveSafeBash).not.toHaveBeenCalled();
       expect(securityBlocker).not.toHaveBeenCalled();
@@ -207,7 +207,7 @@ describe('bashCombined', () => {
 
       const result = await bashCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toBe('Denied by profile');
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       // security + git run before profile in the new order; both have fired
@@ -269,7 +269,7 @@ describe('bashCombined', () => {
 
       const result = await bashCombined(input);
 
-      expect(result.continue).toBe(false);
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       expect(result.stopReason).toBe('Dangerous command blocked');
       expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
       // security-blocker now runs FIRST and short-circuits the deny —
