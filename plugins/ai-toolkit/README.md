@@ -8,9 +8,9 @@ Claude Code plugin for AI/LLM development patterns including RAG, embeddings, La
 
 ## Features
 
-- **14 Skills**: ai-native-development, embeddings, function-calling, golden-dataset, langfuse-observability, langgraph, llm-patterns, multi-agent-orchestration, notebooklm, ollama-local, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
+- **16 Skills**: ai-native-development, coaching-conversation-patterns, embeddings, function-calling, golden-dataset, langfuse-observability, langgraph, llm-patterns, multi-agent-orchestration, notebooklm, ollama-local, pgvector-search, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
 - **1 Agent**: ai-ml-engineer
-- **23 Commands**: ai-native-development, embeddings, function-calling, golden-dataset-curation, golden-dataset-management, golden-dataset-validation, langfuse-observability, langgraph-checkpoints, langgraph-human-in-loop, langgraph-parallel, langgraph-routing, langgraph-state, langgraph-supervisor, llm-evaluation, llm-streaming, llm-testing, multi-agent-orchestration, notebooklm, ollama-local, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
+- **25 Commands**: ai-native-development, coaching-conversation-patterns, embeddings, function-calling, golden-dataset-curation, golden-dataset-management, golden-dataset-validation, langfuse-observability, langgraph-checkpoints, langgraph-human-in-loop, langgraph-parallel, langgraph-routing, langgraph-state, langgraph-supervisor, llm-evaluation, llm-streaming, llm-testing, multi-agent-orchestration, notebooklm, ollama-local, pgvector-search, prompt-caching, rag-retrieval, semantic-caching, streaming-api-patterns
 - **Hooks**: No plugin-specific hooks. Shared hooks provided by ctk.
 
 ## Installation
@@ -47,6 +47,6 @@ cd hooks && npm install && npm run build && npm test
 
 ---
 
-**Version**: 2.0.0
+**Version**: 2.0.12
 **Repository**: https://github.com/ArieGoldkin/claude-forge
 **Maintainer**: Arie Goldkin

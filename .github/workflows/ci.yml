@@ -184,6 +184,17 @@ jobs:
       # the real-repo run at exit 0 and CI green.
       - name: bad-logvar fixture must fail (docs name a variable production never reads)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-logvar"
+      # Checks 7 and 8: counts and the plugin README version. Without these three
+      # fixtures, deleting either check leaves the real-repo run at exit 0 and CI
+      # green -- the same hole the bad-logvar fixtures exist to close for check 6.
+      # Each fixture differs from `good` by exactly ONE line and passes again when
+      # that line is corrected, so it can only be failing for its own reason.
+      - name: bad-counts fixture must fail (declared count disagrees with the filesystem)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts"
+      - name: bad-count-list fixture must fail (right total, wrong names in the list)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-count-list"
+      - name: bad-readme-version fixture must fail (plugin README pins a stale version)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-readme-version"
       - name: bad-plugin-id fixture must fail (name is not a valid shell identifier)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-plugin-id"
       - name: bad-test-identity fixture must fail (tests run as a different plugin than production)

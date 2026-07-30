@@ -8,7 +8,7 @@ Claude Code plugin for frontend development, UI/UX design, and browser automatio
 
 ## Features
 
-- **16 Skills**: agent-browser, agentation, ai-ui-generation, ascii-visualizer, browser-content-capture, coding-standards, design-system-tokens, figma-design-workflow, frontend-creative-design, interaction-patterns, json-render, prototype-to-production, responsive-patterns, shadcn, stitch, ui-components
+- **17 Skills**: agent-browser, agentation, ai-ui-generation, ascii-visualizer, browser-content-capture, design-system-tokens, explainer-video, figma-design-workflow, frontend-creative-design, interaction-patterns, json-render, playground, prototype-to-production, responsive-patterns, shadcn, stitch, ui-components
 - **4 Agents**: ui-developer, rapid-ui-designer, ux-researcher, whimsy-injector
 - **11 Commands**: agent-browser, ai-ui-generation, ascii-visualizer, browser-content-capture, figma-design-workflow, frontend-creative-design, json-render, prototype-to-production, shadcn, stitch, web-research
 - **Hooks**: No plugin-specific hooks. Shared hooks provided by ctk.
@@ -58,4 +58,4 @@ cd hooks && npm install && npm run build && npm test
 
 ---
 
-**Version**: 2.3.3
+**Version**: 2.3.13

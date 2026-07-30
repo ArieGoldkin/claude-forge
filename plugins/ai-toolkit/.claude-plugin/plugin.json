@@ -1,7 +1,7 @@
 {
   "name": "atk",
-  "version": "2.0.11",
-  "description": "AI/LLM development toolkit - 14 skills, 1 agent, 23 commands for AI-native development patterns",
+  "version": "2.0.12",
+  "description": "AI/LLM development toolkit - 16 skills, 1 agent, 25 commands for AI-native development patterns",
   "author": {
     "name": "Arie Goldkin",
     "email": "ariegoldkin88@gmail.com"
