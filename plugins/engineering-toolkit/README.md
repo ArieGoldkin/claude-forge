@@ -32,10 +32,10 @@ claude --plugin-dir ./claude-forge/plugins/engineering-toolkit
 
 ## Features
 
-- **20 Skills**: agent-loops, architecture-decision-record, atlassian-integration, auto-research, brainstorming, code-review-playbook, coding-standards, cover, development-pipeline, evidence-verification, experiment, fix-bug, hipaa-compliance-checker, investigate-sentry, quality-gates, security-checklist, testing-strategy-builder, tool-wrapper-patterns, verify
-- **5 Agents**: logic-validator, product-manager, quality-reviewer, sprint-prioritizer, tdd-implementer
-- **20 Commands**: agent-loops, allocate-tasks-parallel, architecture-decision-record, atlassian-integration, auto-research, brainstorm, code-review-playbook, cover, develop, experiment, fix-bug, generate-agents-md, hipaa-compliance-checker, investigate-sentry, review-mr, review-stats, start-parallel, sync-parallel, verify
-- **Hooks**: review-logger, continuity-recommendation. Shared hooks provided by ctk.
+- **27 Skills**: agent-loops, architecture-decision-record, atlassian-integration, audit-skill, auto-research, brainstorming, caveman, cmux, code-review-playbook, coding-standards, conduct, cover, development-pipeline, evidence-verification, experiment, fix-bug, hipaa-compliance-checker, investigate-sentry, prepare-pr, quality-gates, review-mr, scope-check, security-checklist, testing-strategy-builder, tool-wrapper-patterns, verify, zoom-out
+- **5 Agents**: adversarial-verifier, product-manager, quality-reviewer, sprint-prioritizer, tdd-implementer
+- **21 Commands**: agent-loops, allocate-tasks-parallel, architecture-decision-record, atlassian-integration, audit-skill, auto-research, brainstorm, code-review-playbook, conduct, cover, develop, experiment, fix-bug, generate-agents-md, hipaa-compliance-checker, investigate-sentry, post-mr-comments, review-stats, start-parallel, sync-parallel, verify
+- **1 Hook**: continuity-recommendation. All shared hooks (including `review-logger`) are provided by ctk.
 
 ## Recommended Companion Plugins
 
@@ -53,4 +53,4 @@ https://github.com/ArieGoldkin/claude-forge
 
 ---
 
-**Version**: 2.7.1
+**Version**: 2.17.0

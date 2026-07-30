@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.11, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.11, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.13, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture (v2.16.2, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.17.0, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -55,7 +55,7 @@ claude-forge/
 | dtk (formerly devops-toolkit) | 15 | 2 | 12 | 2 (repo-access-guard, continuity-recommendation) | Infrastructure, AWS, Terraform, CI/CD, Salesforce, Husky pre-commit |
 | atk (formerly ai-toolkit) | 16 | 1 | 25 | 1 (continuity-recommendation) | RAG, embeddings, LangGraph, LLM patterns, conversational AI, NotebookLM |
 | ftk (formerly frontend-toolkit) | 17 | 4 | 11 | 1 (continuity-recommendation) | React, Figma, Stitch AI, shadcn/ui, design systems, browser automation |
-| etk (formerly engineering-toolkit) | 26 | 5 | 20 | 2 (review-logger, continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode |
+| etk (formerly engineering-toolkit) | 27 | 5 | 21 | 1 (continuity-recommendation) | ADR, TDD, code review, quality gates, HIPAA compliance, brainstorming, Sentry investigation, MR-comment posting, codebase zoom-out, caveman terse-mode, cmux fleet orchestration (conduct) |
 
 > **Important**: ctk (formerly continuity-toolkit) is the **canonical owner of all shared hooks** (security, permissions, lifecycle, post-tool, HIPAA context injection). Install it alongside other plugins for full hook coverage. Other plugins have been stripped of shared hooks to prevent duplication when multiple plugins are installed simultaneously.
 >
@@ -133,7 +133,7 @@ With `preserveSymlinks: true`, TypeScript resolves imports relative to the **sym
 | Plugin | Hooks | Notes |
 |--------|-------|-------|
 | ctk | All 31 shared hooks + 3 ctk-specific (hipaa-context-injector, phi-output-redactor, session-loader) | Canonical shared hooks owner |
-| etk | review-logger, continuity-recommendation | Domain-specific only |
+| etk | continuity-recommendation | Domain-specific only (`review-logger` is a **shared** hook, owned by ctk — etk does not wire it) |
 | dtk | repo-access-guard, continuity-recommendation | Domain-specific only |
 | atk | continuity-recommendation | Recommends ctk installation |
 | ftk | continuity-recommendation | Recommends ctk installation |
