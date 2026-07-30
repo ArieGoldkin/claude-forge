@@ -22,6 +22,7 @@ import {
   getCurrentLedgerPath,
 } from '../lib/continuity.js';
 import { formatHandoffSummary, validateHandoff } from '../lib/handoff-schema.js';
+import { stampHookLiveness } from '../lib/hook-liveness.js';
 import { getProviderInfo } from '../lib/input.js';
 import { acquireLock, releaseLock } from '../lib/lock.js';
 import {
@@ -34,6 +35,7 @@ import {
 } from '../lib/logging.js';
 import { outputSuccess } from '../lib/output.js';
 import { ensureSessionDir, evictOldSessions } from '../lib/read-cache/index.js';
+import { resolveSessionId } from '../lib/session-key.js';
 import { buildWindowTitleSequence } from '../lib/terminal-sequence.js';
 import type { HookInput, HookResult, SharedContext } from '../types.js';
 
@@ -394,9 +396,27 @@ function buildSessionWindowTitle(projectDir: string, branch: string | null): str
  * // Returns ~500-800 bytes of compact context
  * ```
  */
-export async function sessionLoader(_input: HookInput): Promise<HookResult> {
+export async function sessionLoader(input: HookInput): Promise<HookResult> {
   const projectDir = process.env['CLAUDE_PROJECT_DIR'] || '.';
   const { provider } = getProviderInfo();
+
+  // Record that a ctk hook ran, as early as possible (#82). SessionStart is the
+  // decisive place to stamp: it fires before the user does anything, so a healthy
+  // session has a marker within its first second and the statusline can treat a
+  // missing marker as a real failure rather than "too early to tell".
+  //
+  // Keyed through `resolveSessionId`, so `/doctor` derives the same filename when
+  // it looks for this marker — deriving a shared key two ways is what silently
+  // disabled ctk's context warnings until 2.8.0.
+  //
+  // The read-cache call further down reads `CLAUDE_SESSION_ID` alone, which CC
+  // does not set; the read-cache library itself resolves
+  // `CLAUDE_CODE_SESSION_ID || CLAUDE_SESSION_ID`, so that call is effectively
+  // inert rather than divergent, and repairing it would resolve to the SAME
+  // directory. Left alone as out of scope, but recorded accurately: an earlier
+  // draft of this comment called it "a different precedence" whose repair would
+  // "move real cache directories", and both halves of that were wrong.
+  stampHookLiveness(resolveSessionId(input.session_id), HOOK_NAME);
 
   logDebug(HOOK_NAME, `Provider: ${provider}, project: ${projectDir}`);
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import * as fs6 from 'fs';
-import { readSync, readFileSync, writeFileSync } from 'fs';
+import { readSync, writeFileSync, renameSync, readFileSync } from 'fs';
 import * as path2 from 'path';
 import { join } from 'path';
-import * as crypto from 'crypto';
 import * as os from 'os';
 import { tmpdir } from 'os';
+import * as crypto from 'crypto';
 import { execSync, execFileSync } from 'child_process';
 
 // src/lib/output.ts
@@ -1019,6 +1019,45 @@ function formatHandoffSummary(handoff) {
   }
   return lines.join("\n");
 }
+var DEFAULT_SESSION_ID = "default";
+var UNTRUSTED_SESSION_IDS = [DEFAULT_SESSION_ID, "unknown"];
+function isTrustedSessionKey(sessionId) {
+  return isSafeSessionId(sessionId) && !UNTRUSTED_SESSION_IDS.includes(sessionId);
+}
+function isSafeSessionId(value) {
+  if (typeof value !== "string") return false;
+  if (value.includes("..")) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
+}
+function resolveSessionId(candidate) {
+  if (isSafeSessionId(candidate)) return candidate;
+  for (const name of ["CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID"]) {
+    const fromEnv = process.env[name];
+    if (isSafeSessionId(fromEnv)) return fromEnv;
+  }
+  return DEFAULT_SESSION_ID;
+}
+function sessionScopedTmpPath(prefix, sessionId) {
+  const safe = isSafeSessionId(sessionId) ? sessionId : DEFAULT_SESSION_ID;
+  return join(tmpdir(), `${prefix}${safe}.txt`);
+}
+
+// src/lib/hook-liveness.ts
+var HOOK_ALIVE_PREFIX = "claude-ctk-hook-alive-";
+function getHookLivenessPath(sessionId) {
+  return sessionScopedTmpPath(HOOK_ALIVE_PREFIX, sessionId);
+}
+function stampHookLiveness(sessionId, hookName) {
+  if (!isTrustedSessionKey(sessionId)) return;
+  const record = { at: (/* @__PURE__ */ new Date()).toISOString(), hook: hookName };
+  const target = getHookLivenessPath(sessionId);
+  const scratch = `${target}.tmp`;
+  try {
+    writeFileSync(scratch, JSON.stringify(record), "utf8");
+    renameSync(scratch, target);
+  } catch {
+  }
+}
 var LOCK_RETRY_DELAY_MS = 100;
 function sleep(ms) {
   return new Promise((resolve7) => setTimeout(resolve7, ms));
@@ -1793,9 +1832,10 @@ function buildSessionWindowTitle(projectDir, branch) {
   const projectName = path2.basename(path2.resolve(projectDir));
   return buildWindowTitleSequence(branch ? [projectName, branch] : [projectName]);
 }
-async function sessionLoader(_input) {
+async function sessionLoader(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const { provider } = getProviderInfo();
+  stampHookLiveness(resolveSessionId(input.session_id), HOOK_NAME2);
   logDebug(HOOK_NAME2, `Provider: ${provider}, project: ${projectDir}`);
   let output = "=== SESSION CONTEXT ===\n\n";
   const initResult = ensureContinuityStructure(projectDir);
@@ -4156,7 +4196,7 @@ function shouldWarn(currentTier, lastTier) {
   return currentTier > lastTier;
 }
 function readPercentage(sessionId) {
-  const filePath = join(tmpdir(), `${TEMP_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(TEMP_PREFIX, sessionId);
   try {
     const content = readFileSync(filePath, "utf8").trim();
     const pct = Number.parseInt(content, 10);
@@ -4167,7 +4207,7 @@ function readPercentage(sessionId) {
   }
 }
 function readLastTier(sessionId) {
-  const filePath = join(tmpdir(), `${WARN_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(WARN_PREFIX, sessionId);
   try {
     const content = readFileSync(filePath, "utf8").trim();
     const tier = Number.parseInt(content, 10);
@@ -4178,29 +4218,15 @@ function readLastTier(sessionId) {
   }
 }
 function writeLastTier(sessionId, tier) {
-  const filePath = join(tmpdir(), `${WARN_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(WARN_PREFIX, sessionId);
   try {
     writeFileSync(filePath, String(tier), "utf8");
   } catch {
   }
 }
-function isSafeSessionId(value) {
-  if (typeof value !== "string") return false;
-  if (value.includes("..")) return false;
-  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
-}
-function getSessionId2(input) {
-  if (isSafeSessionId(input.session_id)) {
-    return input.session_id;
-  }
-  const fromEnv = process.env["CLAUDE_SESSION_ID"];
-  if (isSafeSessionId(fromEnv)) {
-    return fromEnv;
-  }
-  return "default";
-}
 async function contextMonitor(input) {
-  const sessionId = getSessionId2(input);
+  const sessionId = resolveSessionId(input.session_id);
+  stampHookLiveness(sessionId, HOOK_NAME19);
   const pct = readPercentage(sessionId);
   if (pct === null) {
     logDebug(HOOK_NAME19, "No context percentage file found (StatusLine not configured?)");

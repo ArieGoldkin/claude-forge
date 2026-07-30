@@ -18,6 +18,7 @@ import { existsSync, readFileSync, readSync, renameSync, statSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveSessionId, sessionScopedTmpPath } from '../lib/session-key.js';
 
 // =============================================================================
 // CONSTANTS
@@ -285,10 +286,12 @@ export function extractPr(data: Record<string, unknown>): {
 /**
  * Resolve the session id used to key the context-percentage file.
  *
- * MUST mirror `getSessionId()` in the context-monitor hook exactly: payload
- * session id first, then `CLAUDE_SESSION_ID`, then 'default'. The two are a
- * writer/reader pair on the same filename, so any divergence in precedence
- * silently breaks the context warnings.
+ * Delegates to `resolveSessionId` in `lib/session-key.ts`, which the
+ * context-monitor hook uses too — the two are a writer/reader pair on the same
+ * filename, so any divergence in precedence silently breaks the context warnings.
+ * There is no longer a `getSessionId()` in that hook to mirror; it was replaced by
+ * the shared resolver, whose precedence is payload id, then
+ * `CLAUDE_CODE_SESSION_ID`, then `CLAUDE_SESSION_ID`, then 'default'.
  *
  * This previously read the env var only. Claude Code does not export
  * `CLAUDE_SESSION_ID` into the statusline child process, so the writer keyed
@@ -298,35 +301,27 @@ export function extractPr(data: Record<string, unknown>): {
  * legitimate "not configured" state that silent-succeeds at debug log level.
  */
 export function extractSessionId(data: Record<string, unknown>): string {
-  const id = data['session_id'];
-  if (isSafeSessionId(id)) return id;
-  const fromEnv = process.env['CLAUDE_SESSION_ID'];
-  if (isSafeSessionId(fromEnv)) return fromEnv;
-  return 'default';
+  return resolveSessionId(data['session_id']);
 }
 
 /**
- * Session ids are interpolated into a temp-file path, so anything containing
- * path separators or traversal segments must be rejected rather than joined.
+ * Re-exported from `lib/session-key.ts`, where the implementation now lives.
+ *
+ * Session ids are interpolated into temp-file paths, so anything carrying path
+ * separators or traversal segments must be rejected rather than joined —
  * `join(tmpdir(), 'claude-context-pct-' + '../../etc/x' + '.txt')` escapes the
- * temp directory entirely, and the file is then written and renamed over.
+ * temp directory entirely, and the file is then written and renamed over. CC
+ * supplies a UUID, so that is not reachable in a stock install, but it becomes
+ * reachable in the composed-launcher setup this plugin documents, where a
+ * third-party wrapper re-emits the payload into ctk's stdin.
  *
- * Claude Code supplies a UUID, so this is not reachable in a stock install —
- * but it becomes reachable in the composed-launcher setup this plugin now
- * documents, where a third-party wrapper re-emits the payload into ctk's stdin.
- *
- * MUST stay identical to the guard in the context-monitor hook: the two form a
- * writer/reader pair, and a validator applied to only one side desynchronises
- * the filename exactly like the precedence mismatch this replaced.
+ * This used to be a second copy of the hook's guard, under a comment saying the
+ * two MUST stay identical. They form a writer/reader pair on the same filename,
+ * and a rule that two processes must agree cannot be maintained by asking two
+ * files to agree — that is the shape of #83. Kept as a re-export so this module's
+ * public surface and its tests are unchanged.
  */
-export function isSafeSessionId(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  // Reject `..` outright as well as separators: the charset alone permits it,
-  // and a traversal segment has no business in a session id even where the
-  // surrounding prefix/suffix would defuse it.
-  if (value.includes('..')) return false;
-  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
-}
+export { isSafeSessionId } from '../lib/session-key.js';
 
 /**
  * Extract model display name from StatusLine stdin data.
@@ -757,8 +752,7 @@ function main(): void {
   const sessionId = extractSessionId(data);
 
   // Atomic write: write to .tmp then rename
-  const tmpDir = tmpdir();
-  const targetFile = join(tmpDir, `${TEMP_PREFIX}${sessionId}.txt`);
+  const targetFile = sessionScopedTmpPath(TEMP_PREFIX, sessionId);
   const tmpFile = `${targetFile}.tmp`;
 
   try {

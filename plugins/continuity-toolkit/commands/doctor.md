@@ -85,6 +85,22 @@ claude plugin install <plugin>@<marketplace-name>     # may report "already inst
 Then restart. See the skill's Step 1a for why neither command is credited as *the* fix, and why
 skills reappearing is not evidence that hooks came back.
 
+### Step 1b: Verify ctk Hooks Are Actually Firing (#82)
+
+Steps 1 and 1a inspect files and records; this is the only step that observes hooks **running**.
+Both reported healthy through a session where ctk's hooks fired zero times, leaving it with no
+security or permission hooks.
+
+**Run the skill's snippet, not a shortened one.** Marker absence is a fault only when the session
+id is trustworthy *and* the installed ctk is new enough to stamp. This is the only detection surface
+in 2.14.0 — the passive statusline warning was cut before release.
+
+> **Single source of truth**: the three-condition snippet, the VERDICT table, the capture-before-repair
+> evidence list, and why an ABSENT marker is frequently *inconclusive rather than a fault* live in the
+> `doctor` skill's Step 1b (`skills/doctor/SKILL.md`). Read and run it from there — `ABSENT` alone is
+> not a failure, and an earlier revision of this check reported FAIL on a healthy install by
+> inferring capability from a side effect any process could produce.
+
 ### Step 2: Check Hook Build Status
 
 For each installed plugin, verify hooks are compiled:
