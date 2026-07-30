@@ -2,9 +2,29 @@
 import { execSync } from 'child_process';
 import { writeFileSync, renameSync, readSync, existsSync, statSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { resolve, join, basename } from 'path';
+import { resolve, basename, join } from 'path';
 import { fileURLToPath } from 'url';
 
+var DEFAULT_SESSION_ID = "default";
+function isSafeSessionId(value) {
+  if (typeof value !== "string") return false;
+  if (value.includes("..")) return false;
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
+}
+function resolveSessionId(candidate) {
+  if (isSafeSessionId(candidate)) return candidate;
+  for (const name of ["CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID"]) {
+    const fromEnv = process.env[name];
+    if (isSafeSessionId(fromEnv)) return fromEnv;
+  }
+  return DEFAULT_SESSION_ID;
+}
+function sessionScopedTmpPath(prefix, sessionId) {
+  const safe = isSafeSessionId(sessionId) ? sessionId : DEFAULT_SESSION_ID;
+  return join(tmpdir(), `${prefix}${safe}.txt`);
+}
+
+// src/statusline/context-percentage.ts
 var TEMP_PREFIX = "claude-context-pct-";
 var FILLED_CHAR = "\u2588";
 var EMPTY_CHAR = "\u2591";
@@ -135,16 +155,7 @@ function extractPr(data) {
   return { number: num, reviewState: typeof state === "string" && state ? state : null };
 }
 function extractSessionId(data) {
-  const id = data["session_id"];
-  if (isSafeSessionId(id)) return id;
-  const fromEnv = process.env["CLAUDE_SESSION_ID"];
-  if (isSafeSessionId(fromEnv)) return fromEnv;
-  return "default";
-}
-function isSafeSessionId(value) {
-  if (typeof value !== "string") return false;
-  if (value.includes("..")) return false;
-  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
+  return resolveSessionId(data["session_id"]);
 }
 function extractModelName(data) {
   const model = data["model"];
@@ -379,8 +390,7 @@ function main() {
     compact: process.env["CONTINUITY_STATUSLINE_COMPACT"] === "1"
   };
   const sessionId = extractSessionId(data);
-  const tmpDir = tmpdir();
-  const targetFile = join(tmpDir, `${TEMP_PREFIX}${sessionId}.txt`);
+  const targetFile = sessionScopedTmpPath(TEMP_PREFIX, sessionId);
   const tmpFile = `${targetFile}.tmp`;
   try {
     writeFileSync(tmpFile, String(pct), "utf8");

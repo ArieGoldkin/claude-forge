@@ -46,6 +46,10 @@ function writePct(sessionId: string, pct: number): void {
   fs.writeFileSync(pctFile(sessionId), String(pct), 'utf8');
 }
 
+function livenessFile(sessionId: string): string {
+  return join(os.tmpdir(), `claude-ctk-hook-alive-${sessionId}.txt`);
+}
+
 function cleanup(sessionId: string): void {
   try {
     fs.unlinkSync(pctFile(sessionId));
@@ -54,6 +58,17 @@ function cleanup(sessionId: string): void {
   }
   try {
     fs.unlinkSync(warnFile(sessionId));
+  } catch {
+    /* ignore */
+  }
+  // Liveness markers must be removed too. This suite calls the real
+  // `contextMonitor` against the real temp directory, so anything it leaves
+  // behind is read by the developer's own live statusline and `/ctk:doctor`. An
+  // earlier revision left markers (and a machine-global arming flag) lying
+  // around, and `/doctor` consequently reported "FAIL — total or partial hook
+  // unload" on a completely healthy install.
+  try {
+    fs.unlinkSync(livenessFile(sessionId));
   } catch {
     /* ignore */
   }
@@ -505,5 +520,61 @@ describe('contextMonitor', () => {
       delete process.env['CLAUDE_SESSION_ID'];
     }
     cleanup(sid);
+  });
+});
+
+// =============================================================================
+// HOOK LIVENESS STAMPING (#82)
+// =============================================================================
+
+describe('contextMonitor — hook liveness stamping', () => {
+  const sid = 'test-liveness-ctx-monitor';
+
+  beforeEach(() => {
+    cleanup(sid);
+  });
+
+  afterEach(() => {
+    cleanup(sid);
+  });
+
+  it('stamps a liveness marker for the session', async () => {
+    writePct(sid, 42);
+    await contextMonitor(createInput(sid));
+
+    expect(fs.existsSync(livenessFile(sid))).toBe(true);
+    const record = JSON.parse(fs.readFileSync(livenessFile(sid), 'utf8')) as {
+      at: string;
+      hook: string;
+    };
+    expect(record.hook).toBe('context-monitor');
+    expect(Number.isNaN(Date.parse(record.at))).toBe(false);
+  });
+
+  it('STAMPS EVEN WITH NO PERCENTAGE FILE — above the fast path', async () => {
+    // The load-bearing test for the stamp's placement. `contextMonitor` returns
+    // early when no percentage file exists, which is the state of every user who
+    // has not configured the statusline. A stamp below that return would never run
+    // for them, making the detector inert for exactly the population it is meant
+    // to protect. Moving the call after the early return must fail this test.
+    expect(fs.existsSync(pctFile(sid))).toBe(false);
+
+    await contextMonitor(createInput(sid));
+
+    expect(fs.existsSync(livenessFile(sid))).toBe(true);
+  });
+
+  it('keys the marker by the session id, so two sessions do not share one', async () => {
+    const other = 'test-liveness-other-session';
+    cleanup(other);
+    try {
+      writePct(sid, 10);
+      await contextMonitor(createInput(sid));
+
+      expect(fs.existsSync(livenessFile(sid))).toBe(true);
+      expect(fs.existsSync(livenessFile(other))).toBe(false);
+    } finally {
+      cleanup(other);
+    }
   });
 });

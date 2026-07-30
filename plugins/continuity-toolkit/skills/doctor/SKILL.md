@@ -19,6 +19,9 @@ Cross-plugin system diagnostics for the claude-forge ecosystem. Checks what's in
 - Detects all installed claude-forge (marketplace cache + local dev)
 - Compares each plugin's recorded `installPath` against the disk — the cache glob and
   `claude plugin list` are both metadata-derived and report a plugin installed regardless
+- **Observes whether ctk hooks actually fired this session** (#82) — the only check here that
+  watches hooks *run* rather than inspecting files and records, both of which reported healthy
+  through a session with zero hook invocations
 - Verifies hook compilation status (dist/bin/run-hook.js exists)
 - Counts hook registrations per plugin, checks for duplicates
 - Verifies continuity system setup (ledger, context monitor, shared-context.json)
@@ -104,6 +107,82 @@ without a restart, so their return is **not** evidence that hooks came back.
 > **neither was shown to be the cause.** ctk's record was already dangling during the prior session,
 > when the plugin loaded and ran normally, so the dangling record cannot be the mechanism and the
 > sweep did not create it. What broke that session is still unidentified.
+
+### Step 1b: Verify ctk Hooks Are Actually Firing (#82)
+
+**This is the only check in this skill that observes hooks running.** Everything above it —
+the Step 1 glob, the Step 1a install-path comparison, `claude plugin list` — describes *files
+and records*. On 2026-07-29 all of those reported healthy while ctk's hooks fired **zero**
+times for a whole session, so the session ran with no `security-blocker`, no permission hooks
+and no continuity lifecycle, and nothing announced it. Step 1a would not reliably have caught
+it: the same record/disk inconsistency was present during the *previous*, fully working
+session.
+
+Hooks stamp a marker on SessionStart and on every user prompt. **This check is the
+only detection surface in 2.14.0** — a passive statusline warning was built and then
+cut before release, because every serious defect two review rounds found lived in it
+(chiefly: it asked whether a stamping-capable ctk was *installed* when the question
+is whether the *loaded* hooks stamp, so upgrading ctk mid-session would have alarmed
+a healthy one).
+
+Absence is only meaningful under three conditions, all evaluated below. Do not
+shorten this to "marker missing ⇒ broken":
+
+```bash
+# The Bash tool exports CLAUDE_CODE_SESSION_ID (note the _CODE_); hooks key the
+# marker by the session id in their payload, which is the same UUID.
+node -e "
+const os=require('os'),fs=require('fs'),p=require('path');
+const sid=process.env.CLAUDE_CODE_SESSION_ID||process.env.CLAUDE_SESSION_ID||'default';
+// 'default' and 'unknown' are the two fallback constants the writer and reader
+// layers substitute independently. Under either, marker absence is meaningless.
+const trusted=!['default','unknown',''].includes(sid);
+let installed=null;
+try{
+  const dir=process.env.CLAUDE_CONFIG_DIR||p.join(os.homedir(),'.claude');
+  const recs=JSON.parse(fs.readFileSync(p.join(dir,'plugins','installed_plugins.json'),'utf8'));
+  // CC keys these records '<name>@<marketplace>' (e.g. 'ctk@claude-forge'), NOT 'ctk'.
+  const t=recs.plugins||{};
+  installed=Object.keys(t).filter(k=>k==='ctk'||k.startsWith('ctk@')).flatMap(k=>(t[k]||[]).map(e=>e.version)).filter(Boolean);
+}catch{}
+const cmp=(a,b)=>{const A=(a.split('-')[0]||'').split('.'),B=(b.split('-')[0]||'').split('.');
+  for(let i=0;i<Math.max(A.length,B.length);i++){const x=parseInt(A[i]||'0',10)||0,y=parseInt(B[i]||'0',10)||0;if(x!==y)return x-y;}return 0;};
+const stamping=(installed||[]).some(v=>cmp(v,'2.14.0')>=0);
+let rec=null; try{rec=JSON.parse(fs.readFileSync(p.join(os.tmpdir(),'claude-ctk-hook-alive-'+sid+'.txt'),'utf8'))}catch{}
+console.log('session       :', sid, trusted?'(trusted)':'(UNTRUSTED fallback id)');
+console.log('installed ctk :', installed?installed.join(', '):'unreadable');
+console.log('stamp expected:', stamping);
+console.log('marker        :', rec?('PRESENT — stamped by '+rec.hook+' at '+rec.at):'ABSENT');
+console.log('VERDICT       :', rec?'OK':(!trusted?'INCONCLUSIVE (untrusted session id)':(!stamping?'INCONCLUSIVE (installed ctk predates stamping)':'FAIL')));
+"
+```
+
+| VERDICT | Meaning |
+|---|---|
+| `OK` | A ctk hook demonstrably ran in this session. Report the stamping hook and time. |
+| `FAIL` | **This is the #82 state.** A stamping-capable ctk is installed and the session id is trustworthy, yet nothing stamped. Treat as a total or partial hook unload and capture evidence below. |
+| `INCONCLUSIVE (installed ctk predates stamping)` | Not a fault. The installed ctk is older than 2.14.0 and its hooks never stamp. Report the version. |
+| `INCONCLUSIVE (untrusted session id)` | Not a fault. The id fell back to a constant, so writer and reader may key different files. Report it as undetermined. |
+
+> **Why not simply "marker absent ⇒ broken":** an earlier revision of this check
+> keyed off a flag that stamping dropped in the temp directory, on the theory that
+> its presence proved the install could stamp. The flag was machine-global and
+> never expired, so **this repo's own test suite armed it** — and `/doctor` then
+> reported FAIL on a completely healthy install. Ask CC's plugin records for the
+> installed version instead of inferring capability from a side effect.
+
+On **FAIL**, capture evidence *before* repairing anything. The 2026-07-29 occurrence was
+repaired first, which destroyed the evidence and is why the trigger is still unidentified.
+Collect, in this order: `ls -la ~/.claude/plugins/`; copies of `installed_plugins.json`,
+`known_marketplaces.json` and `plugin-catalog-cache.json`; `git -C
+~/.claude/plugins/marketplaces/<mkt> log --oneline -1` plus `status`; the `/plugin` **Errors**
+tab; and `claude --output-format stream-json -p test | jq '.init.plugin_errors'`, which is the
+runtime load-error signal `claude plugin list` lacks. Then repair **one command at a time**,
+re-checking load state between each, so the fix is isolated — that was not done last time, and
+is why no command can be credited with the repair.
+
+**Do not report this check as OK on the strength of a passing Step 1 or 1a.** Their agreement
+is exactly what was true while the hooks were dead.
 
 ### Step 2: Verify Hook Builds
 

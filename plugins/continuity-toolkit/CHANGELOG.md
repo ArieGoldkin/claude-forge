@@ -2,6 +2,117 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.14.0] - 2026-07-30 — detect a silent total hook unload (#82, detection half)
+
+### Added
+
+- **Hook-liveness marker.** ctk hooks now stamp a session-scoped marker on SessionStart and on
+  every user prompt, and **`/doctor` Step 1b** reads it on demand. Absence of a marker is the
+  signal. This is the *detection* half of #82 and needs no reproduction — the trigger is still
+  unidentified and **#82 stays open**.
+- **`lib/session-key.ts`** — the session-id keying contract as one implementation:
+  `isSafeSessionId`, the `payload → CLAUDE_CODE_SESSION_ID → CLAUDE_SESSION_ID → default`
+  precedence, `isTrustedSessionKey`, and session-scoped temp paths.
+- **`lib/hook-liveness.ts`** — the marker writer.
+
+### Why
+
+On 2026-07-29 a session ran with **zero** ctk hook invocations while every user-facing signal
+reported healthy: `claude plugin list` showed all five plugins `✔ enabled`, and the install census
+matched. ctk owns 34 registered hooks (31 shared + 3 ctk-specific), so that session had no
+`security-blocker`, no permission hooks and no continuity lifecycle — and nothing announced it.
+#81's install-path check does **not** close this: the same record/disk inconsistency was present
+during the *previous, fully working* session, so it is a correlate, not the signal.
+
+A dead hook cannot report that it is dead, so the reader is not a hook — `/doctor` is a slash
+command, evaluated outside the hook system entirely.
+
+### What was cut before release, and why
+
+A **passive statusline warning** — firing on every refresh, which is what would have caught #82
+unprompted — was designed, built, verified end-to-end, and then removed. Two rounds of adversarial
+review found three defects, *all* of them in that reader:
+
+1. **It would have alarmed on its own rollout.** Its capability check asked "is a stamping-capable
+   ctk **installed**?" when the question is "are the **loaded** hooks capable?". Plugin records flip
+   at install time while a running session keeps the hooks it started with — so upgrading ctk
+   mid-session would have shown "no security guardrails" on a perfectly healthy session until it
+   ended, on the very upgrade that installs the feature.
+2. **Nothing pinned it.** Replacing the entire user-visible warning with `null` left all six test
+   trees green — the same hole the first review round found on the writer half, fixed there and left
+   open here.
+3. **It sat below four early returns** in the statusline's `main()`, so it could not run on a payload
+   lacking `context_window` — inert by placement, which is the writer-side bug this release has a
+   test against.
+
+(1) is architectural and unsettled, so the reader waits. Shipping the writer now means the marker
+exists in the wild and the reader can land later with no migration.
+
+An earlier revision of that reader used a **self-arming latch** — stamping dropped a flag, and
+absence counted only once the flag existed. Review killed that too, and the demonstration is worth
+recording: the flag was machine-global, contentless and never expired, so **this repo's own test
+suite armed it**, and `/doctor` then reported "FAIL — total or partial hook unload" on a completely
+healthy install. Precisely the false positive the latch existed to prevent. *A proxy that anything
+can set is not evidence.*
+
+### False positives the shipped writer handles
+
+- **Session too young.** Stamping from `session-loader` (SessionStart) means a healthy session has a
+  marker within its first second, before the user acts.
+- **Writer and reader keyed differently.** The two layers that can supply a fallback id chose
+  *different* constants — `getDefaultSessionId()` in `lib/input.ts` substitutes `unknown`, while
+  `lib/session-key.ts` falls back to `default` — so a fully-fallen-back session would write its
+  marker under one name and seek it under the other. `stampHookLiveness` now declines to write under
+  either, and `/doctor` reports such a session as undetermined rather than broken.
+
+Staleness is deliberately not a failure: `context-monitor` stamps per prompt, so during one long
+agentic turn an old marker is healthy.
+
+### Changed
+
+- **`context-monitor` stamps above its fast path.** That hook returns early for every user without a
+  configured statusline; a stamp placed after that return would never run for them — inert in exactly
+  the way #82's own defect class is. Pinned by a test that fails if the call moves.
+- **`resolveSessionId` prefers `CLAUDE_CODE_SESSION_ID`** over `CLAUDE_SESSION_ID`, matching
+  `getDefaultSessionId()` in `lib/input.ts`, which is what populates `session_id` on hook payloads.
+  (CC **added** `CLAUDE_CODE_SESSION_ID` in v2.1.132 — it is not a rename, and an earlier draft of
+  this entry asserted one that never happened.)
+- **Two copies of the session-id guard collapsed into one.** `isSafeSessionId` and the resolution
+  precedence existed independently in the shared hook and in ctk's statusline, each under a comment
+  instructing whoever edited them to keep the two "identical". They are a writer/reader pair on one
+  filename, and a rule that two *processes* must agree cannot be maintained by asking two *files* to
+  agree — the shape of 2.12.1 (#83), where three wrappers held private copies of `isDenyDecision` and
+  one drifted. ctk's statusline re-exports the shared implementation, so its surface is unchanged.
+- The context-percentage and last-warn paths now build through `sessionScopedTmpPath` as well, so the
+  module's single-sourcing claim holds where it actually matters.
+
+### Verified
+
+- **7019 tests passing**, 1 skipped — a uniform **+31 across all six trees** (a non-uniform delta
+  there would mean a broken symlink), plus **5** ctk-local writer tests.
+- **Both writers are pinned.** Independent review confirmed by mutation that deleting either stamp
+  call site, or moving `contextMonitor`'s below its early return, now fails a test.
+- **Two real bugs were caught while verifying this change**, both by running rather than reading —
+  `compareVersions` ranked `2.14.0-rc.1` above `2.14.0`, and a records lookup used the bare key `ctk`
+  when CC keys them `ctk@claude-forge`. Both belonged to the reader that was subsequently cut; they
+  are recorded because the second would have made the feature permanently inert, which is the same
+  defect class as #82 itself.
+- **No `claude-ctk-*` litter** in the temp directory after a full six-tree run, verified by
+  enumeration before and after. (Other suites leave unrelated `claude-context-*` files; that is
+  pre-existing and out of scope.)
+- ctk is the only plugin whose `dist` changes; the other four rebuild byte-identical.
+- Typecheck, lint, and all three validators exit 0.
+
+### Known limits
+
+- Proves *some* ctk hook fired — **not** that all 34 are wired. A partial unload is not covered.
+- **Detection is on demand only.** Without the passive reader, nothing surfaces a dead-hook session
+  unless the user runs `/ctk:doctor`. That is the main thing #82 still wants, and it is deferred
+  rather than solved.
+- **False negative on `claude --resume`.** A resumed session reuses its id, and the marker has no
+  expiry or per-run nonce, so the previous run's marker satisfies the check.
+- Detection only. It does not diagnose #82's trigger.
+
 ## [2.13.0] - 2026-07-30 — a denial no longer kills the agent it denies (#65 approach 7A)
 
 ### Changed

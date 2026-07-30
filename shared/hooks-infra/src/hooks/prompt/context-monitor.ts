@@ -21,11 +21,11 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { getCachedBranch } from '../lib/git-utils.js';
+import { stampHookLiveness } from '../lib/hook-liveness.js';
 import { logDebug, logInfo, logWarn } from '../lib/logging.js';
 import { outputPromptContext, outputSilentSuccess } from '../lib/output.js';
+import { resolveSessionId, sessionScopedTmpPath } from '../lib/session-key.js';
 import type { HookInput, HookResult } from '../types.js';
 
 // =============================================================================
@@ -125,7 +125,7 @@ export function shouldWarn(currentTier: Tier, lastTier: Tier): boolean {
  * Returns null if file doesn't exist or contains invalid data.
  */
 function readPercentage(sessionId: string): number | null {
-  const filePath = join(tmpdir(), `${TEMP_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(TEMP_PREFIX, sessionId);
   try {
     const content = readFileSync(filePath, 'utf8').trim();
     const pct = Number.parseInt(content, 10);
@@ -141,7 +141,7 @@ function readPercentage(sessionId: string): number | null {
  * Returns 0 if file doesn't exist.
  */
 function readLastTier(sessionId: string): Tier {
-  const filePath = join(tmpdir(), `${WARN_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(WARN_PREFIX, sessionId);
   try {
     const content = readFileSync(filePath, 'utf8').trim();
     const tier = Number.parseInt(content, 10);
@@ -156,7 +156,7 @@ function readLastTier(sessionId: string): Tier {
  * Write the last emitted warning tier to the temp file.
  */
 function writeLastTier(sessionId: string, tier: Tier): void {
-  const filePath = join(tmpdir(), `${WARN_PREFIX}${sessionId}.txt`);
+  const filePath = sessionScopedTmpPath(WARN_PREFIX, sessionId);
   try {
     writeFileSync(filePath, String(tier), 'utf8');
   } catch {
@@ -165,37 +165,16 @@ function writeLastTier(sessionId: string, tier: Tier): void {
 }
 
 // =============================================================================
-// SESSION ID EXTRACTION
+// SESSION ID EXTRACTION — moved to lib/session-key.ts
 // =============================================================================
-
-/**
- * Session ids are interpolated into the temp-file paths below, so values
- * carrying path separators or traversal segments are rejected rather than
- * joined. MUST stay identical to `isSafeSessionId()` in the statusline script
- * (`plugins/continuity-toolkit/hooks/src/statusline/context-percentage.ts`):
- * that script writes the file this hook reads, so a validator applied to only
- * one side desynchronises the filename — the same class of writer/reader
- * mismatch that silently disabled these warnings before ctk 2.8.0.
- */
-function isSafeSessionId(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  if (value.includes('..')) return false;
-  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
-}
-
-/**
- * Extract session ID from hook input or environment.
- */
-function getSessionId(input: HookInput): string {
-  if (isSafeSessionId(input.session_id)) {
-    return input.session_id;
-  }
-  const fromEnv = process.env['CLAUDE_SESSION_ID'];
-  if (isSafeSessionId(fromEnv)) {
-    return fromEnv;
-  }
-  return 'default';
-}
+//
+// `isSafeSessionId` and the payload → environment → default precedence used to
+// live here as private copies, under a comment instructing whoever edited them to
+// keep them "identical to" the copy in ctk's statusline. That instruction was the
+// only thing holding the writer and reader in agreement, and an instruction is
+// not a mechanism: the same shape — three private copies of `isDenyDecision`, one
+// drifted — is what #83 had to fix. Both sides now import `resolveSessionId` from
+// `lib/session-key.ts`, so agreement is structural.
 
 // =============================================================================
 // HOOK ENTRY POINT
@@ -208,7 +187,13 @@ function getSessionId(input: HookInput): string {
  * Fast path: No temp file -> silentSuccess in <1ms.
  */
 export async function contextMonitor(input: HookInput): Promise<HookResult> {
-  const sessionId = getSessionId(input);
+  const sessionId = resolveSessionId(input.session_id);
+
+  // Record that a ctk hook ran in this session (#82). This MUST stay above the
+  // no-percentage-file fast path below: that path returns for every user who has
+  // not configured the statusline, and a stamp placed after it would never run
+  // for them — an inert feature of exactly the kind this marker exists to detect.
+  stampHookLiveness(sessionId, HOOK_NAME);
 
   // Read current context percentage
   const pct = readPercentage(sessionId);

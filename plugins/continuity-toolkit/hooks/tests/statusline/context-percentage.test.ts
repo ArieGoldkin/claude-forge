@@ -1016,13 +1016,19 @@ describe('CONTINUITY_STATUSLINE_SILENT', () => {
   };
 
   const pctFile = (sid: string): string => join(tmpdir(), `claude-context-pct-${sid}.txt`);
+  // The statusline keeps a per-session render count for the #82 liveness check,
+  // and this block runs the real built script against the real temp directory.
+  const renderFile = (sid: string): string =>
+    join(tmpdir(), `claude-ctk-statusline-renders-${sid}.txt`);
 
   afterEach(() => {
     for (const sid of ['silent-probe', 'loud-probe']) {
-      try {
-        unlinkSync(pctFile(sid));
-      } catch {
-        /* already gone */
+      for (const path of [pctFile(sid), renderFile(sid)]) {
+        try {
+          unlinkSync(path);
+        } catch {
+          /* already gone */
+        }
       }
     }
   });

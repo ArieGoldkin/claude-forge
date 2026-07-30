@@ -27,10 +27,27 @@ import type { HookInput } from '../../src/types.js';
 /**
  * Create a mock HookInput for testing.
  */
-function createMockInput(): HookInput {
+/**
+ * Session id every test in this file stamps under.
+ *
+ * `sessionLoader` writes a hook-liveness marker (#82) keyed by session id, into
+ * the real temp directory. Without an explicit id here the resolver falls through
+ * to `CLAUDE_CODE_SESSION_ID`, which is set in any live Claude Code session — so
+ * the suite would write a marker for the DEVELOPER'S OWN session and make
+ * `/ctk:doctor` report hooks alive when they might not be. Pinning a distinctive
+ * id keeps the pollution inert and lets `afterEach` remove it.
+ */
+const TEST_SESSION_ID = 'test-session-loader-liveness';
+
+function livenessFile(sessionId: string): string {
+  return path.join(os.tmpdir(), `claude-ctk-hook-alive-${sessionId}.txt`);
+}
+
+function createMockInput(sessionId: string = TEST_SESSION_ID): HookInput {
   return {
     tool_name: 'SessionStart',
     tool_input: {},
+    session_id: sessionId,
   };
 }
 
@@ -136,6 +153,14 @@ describe('session-loader', () => {
   afterEach(() => {
     process.env = { ...originalEnv };
     cleanupTempDir(tempDir);
+
+    // Remove the liveness marker this suite stamps into the real temp directory,
+    // where the developer's own statusline and `/ctk:doctor` would otherwise read it.
+    try {
+      fs.unlinkSync(livenessFile(TEST_SESSION_ID));
+    } catch {
+      // Ignore
+    }
 
     // Clean up any leftover lock directories
     try {
@@ -982,6 +1007,49 @@ Status: ✔ ⚠ 🎉
         expect(result.terminalSequence).toBeDefined();
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // ===========================================================================
+  // HOOK LIVENESS STAMPING (#82)
+  // ===========================================================================
+
+  describe('hook liveness stamping', () => {
+    it('stamps a marker recording that SessionStart ran', async () => {
+      // SessionStart is the decisive stamp: it fires before the user does
+      // anything, which is what lets the statusline treat a missing marker as a
+      // real failure rather than "too early to tell".
+      await sessionLoader(createMockInput());
+
+      expect(fs.existsSync(livenessFile(TEST_SESSION_ID))).toBe(true);
+      const record = JSON.parse(fs.readFileSync(livenessFile(TEST_SESSION_ID), 'utf8')) as {
+        at: string;
+        hook: string;
+      };
+      expect(record.hook).toBe('session-start');
+      expect(Number.isNaN(Date.parse(record.at))).toBe(false);
+    });
+
+    it('keys the marker by the PAYLOAD session id, not the environment', async () => {
+      // The statusline reads this marker and derives its filename from the payload
+      // id it receives. If this writer preferred the environment the two would key
+      // different files — the writer/reader split that silently disabled ctk's
+      // context warnings until 2.8.0, except here it would produce a false
+      // "no security guardrails" alarm instead of mere silence.
+      const explicit = 'test-session-loader-explicit';
+      process.env['CLAUDE_CODE_SESSION_ID'] = 'env-should-lose';
+      try {
+        await sessionLoader(createMockInput(explicit));
+
+        expect(fs.existsSync(livenessFile(explicit))).toBe(true);
+        expect(fs.existsSync(livenessFile('env-should-lose'))).toBe(false);
+      } finally {
+        try {
+          fs.unlinkSync(livenessFile(explicit));
+        } catch {
+          // Ignore
+        }
       }
     });
   });
