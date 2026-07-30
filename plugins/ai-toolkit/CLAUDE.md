@@ -1,7 +1,7 @@
 # atk — AI Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: atk (formerly `ai-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.10
+> **Version**: 2.0.11
 
 ## Overview
 
@@ -23,9 +23,11 @@ ai-native-development, coaching-conversation-patterns, embeddings, function-call
 ## Environment Variables
 
 ```bash
-CLAUDE_PROJECT_DIR     # Project root (from Claude Code)
-CLAUDE_PLUGIN_ROOT     # Plugin installation path
-AI_LOG_LEVEL            # Log level: debug|info|warn|error (default: warn)
+CLAUDE_PROJECT_DIR   # Project root (from Claude Code)
+CLAUDE_PLUGIN_ROOT   # Plugin installation path
+CLAUDE_PLUGIN_NAME   # Set to "ai" by run-hook-wrapper.sh (drives the log dir and the
+                     # log-level variable name; kept short, unchanged by the atk rename)
+AI_LOG_LEVEL         # Log level: debug|info|warn|error (default: warn)
 ```
 
 ## Development

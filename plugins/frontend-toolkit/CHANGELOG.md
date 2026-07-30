@@ -2,6 +2,37 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.3.13] - 2026-07-30 — correct two refuted claims in the 2.3.11 entry (#75)
+
+Documentation only. No skill, agent, command or hook behaviour changed.
+
+### Fixed
+
+Two factual claims in the released **2.3.11** entry below were refuted by the adversarial review of
+#72 and had been left uncorrected. Both are now annotated **in place**:
+
+- **The `17 / 8 / 7` log-level counts were symlink paths, not distinct files.** `grep -R` follows
+  this repo's directory symlinks and inflates counts ~2.8×; the distinct-blob figures are
+  **6 / 3 / 2**. The asymmetry the argument rested on survives, so the conclusion stands — but the
+  stated numbers did not.
+- **"Deriving the env var separately was considered and rejected" was decided against one of two
+  derivation sites.** A second lived in `getHookEnvironment()` in `types.ts` — public API of all five
+  plugins, zero tests, zero callers, already divergent. #74 later single-sourced it (etk 2.16.1),
+  which is why the conclusion holds today; it did not hold for the reason originally given.
+
+Also recorded, in the symlinked `logging.test.ts` header where the identity table lives: **the
+production log directory is safe iff `run-hook-wrapper.sh` is unchanged** — *not* because
+`CLAUDE_PLUGIN_DATA` takes precedence, which was the reasoning #72 gave and the review demolished.
+The wrong reason would have given identical false reassurance had #63 been resolved by changing the
+wrappers instead, which *would* have relocated real users' logs.
+
+Minor, same area: `hooks/bin/run-hook-wrapper.sh` no longer identifies itself as `# AI Toolkit Plugin` in its header comment (pre-existing copy-paste; comment only, no behaviour).
+
+> **On versioning.** Corrections to released entries ride whatever release is already shipping; when
+> the correction is the only change, it takes its own patch bump, because Claude Code re-resolves an
+> install only when the version differs — an unbumped correction is one no user ever receives. That
+> decision is recorded in etk's CHANGELOG under #75.
+
 ## [2.3.12] - 2026-07-27 — one derivation for the log-level variable, and a CI check that docs match code
 
 Shared library, tests and CI. No skill, agent or command behaviour changed.
@@ -48,9 +79,29 @@ Issue #63 reported two disagreeing names — production (`frontend`, via `run-ho
 
 Measured, not assumed: `FRONTEND_LOG_LEVEL` appeared in **0** files repo-wide, against 17 / 8 / 7 for `CONTINUITY_` / `ENGINEERING_` / `DEVOPS_LOG_LEVEL` — the three plugins whose names never drifted.
 
+> **Correction (2026-07-30, #75).** The `17 / 8 / 7` figures above are **symlink paths, not distinct
+> files** — `grep -R` follows this repo's directory symlinks, inflating counts ~2.8×. The
+> distinct-blob figures are **6 / 3 / 2** (`git grep -l`). The asymmetry the argument rests on
+> survives intact (0 vs 6/3/2) and the conclusion stands, but a reader would reasonably infer the
+> variable is referenced in seventeen places, and it is not.
+>
+> Also imprecise: **"appears in 0 files" is not "nothing reads it."** `logging.ts` builds the name
+> dynamically, so a literal-text census could never find it whether or not it works. The zero is
+> evidence of *undocumented*, not of *unread*.
+>
+> Corrected in place rather than only forward: a reader landing on this entry should not be handed a
+> false measurement. History is annotated, not rewritten.
+
 `vitest.config.ts` now sets `frontend`, so the suite verifies the identity users actually get. The issue's recommended option covered only that half; correcting the docs was added because aligning the tests alone would have left the documented control dead.
 
 Deriving the env var separately from the log directory was considered and rejected — `frontend` is already a valid shell identifier, and the invalid-identifier problem existed only in the hyphenated test-only name now removed.
+
+> **Correction (2026-07-30, #75).** "Considered and rejected" was decided against **one of two**
+> derivation sites. A second lived at `shared/hooks-infra/src/types.ts` inside `getHookEnvironment()`
+> — public API of all five plugins, with zero tests and zero callers, and it had already diverged
+> (it neither lower-cased nor validated the value). The conclusion holds *today* only because #74
+> later single-sourced the derivation (etk 2.16.1); it did not hold when this entry was written, and
+> the reason given here was never sufficient to support it.
 
 ## [2.3.10] - 2026-07-09 — prune dead session-loader.ts (cross-fork adoption)
 

@@ -66,13 +66,32 @@ import type { PermissionLogEntry } from '../../src/types.js';
  * documented a THIRD form (`AI_TOOLKIT_LOG_LEVEL`, `FRONTEND_TOOLKIT_LOG_LEVEL`)
  * that matched neither production nor the tests — and the docs are what users
  * follow. Measured: those documented names appeared in ZERO files repo-wide,
- * against 17/8/7 for the three plugins whose names never drifted. Aligning the
+ * against 6/3/2 for the three plugins whose names never drifted. Aligning the
  * tests alone would have left users exporting a variable nothing reads, so the
  * docs were corrected in the same change.
  *
- * Deriving the env var separately from the directory was considered and is NOT
- * needed: `ai`/`frontend` are already valid shell identifiers. The invalid-
- * identifier problem existed only in the hyphenated test identity removed here.
+ * CORRECTED 2026-07-30 (#75): that comparison originally read "17/8/7". Those
+ * were symlink PATHS — `grep -R` follows this repo's directory symlinks and
+ * inflates counts ~2.8×. Distinct blobs (`git grep -l`) are 6/3/2. The asymmetry
+ * the argument rests on survives (0 vs 6/3/2). Note also that "appears in 0
+ * files" is not "nothing reads it": `logging.ts` builds the name dynamically, so
+ * a literal census measures DOCUMENTATION, not behaviour.
+ *
+ * Deriving the env var separately from the directory was considered and is not
+ * needed — but that was originally decided against only ONE of two derivation
+ * sites. A second lived in `getHookEnvironment()` in `types.ts`: public API of
+ * all five plugins, zero tests, zero callers, and already divergent (it neither
+ * lower-cased nor validated). #74 single-sourced it (etk 2.16.1), which is why
+ * the conclusion holds now; it did not hold for the reason first given.
+ *
+ * THE LOG-DIRECTORY INVARIANT, recorded because the wrong version of it is
+ * dangerous (#75): the production log directory is safe **iff
+ * `run-hook-wrapper.sh` is unchanged** — NOT because `CLAUDE_PLUGIN_DATA` takes
+ * precedence. Nothing in this repo sets that variable (Claude Code supplies it),
+ * its own docstring calls it optional, and the fallback branch has demonstrably
+ * executed. The `CLAUDE_PLUGIN_DATA` reasoning would have given identical false
+ * reassurance had #63 been resolved the other way — by changing the wrappers to
+ * match the tests — which WOULD have relocated real users' logs.
  */
 interface TreeIdentity {
   /** Expected CLAUDE_PLUGIN_NAME for this tree. */
