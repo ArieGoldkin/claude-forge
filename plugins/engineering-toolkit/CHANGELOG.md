@@ -2,6 +2,24 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.17.1] - 2026-07-30 — `/etk:conduct` command description trimmed to house style
+
+### Changed
+
+- **`commands/conduct.md` `description` no longer narrates the skill's internals.** It listed the
+  classification axes and enumerated all six topologies (`solo, pane, broadcast, shard, race,
+  develop-fleet`) — a 230-char restatement of what the skill body already says, in the one field
+  that exists to be a picker label. Now matches the house style of its closest sibling
+  (`commands/auto-research.md`): what it does, plus one "Use when" clause.
+- The same leak was fixed in the **skill** `description` at 2.17.0 under the `/etk:audit-skill`
+  release gate; the command file was flagged in the same pass and deferred, because a command
+  description is a user-invoked picker label rather than permanent per-turn model context, so the
+  context-rent argument is weaker. Fixed here for consistency.
+
+**Version bump rationale**: descriptions are user-visible, and CC only re-resolves an installed
+plugin when the declared version differs — so an unbumped description fix is one no installed user
+would ever receive. Same rule settled under #75 for CHANGELOG corrections.
+
 ## [2.17.0] - 2026-07-30 — new skill: conduct (the cmux Conductor) + the cmux fleet doctrine
 
 Ports the cmux/conduct execution-orchestration line developed in the upstream work fork

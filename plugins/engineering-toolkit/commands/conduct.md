@@ -1,5 +1,5 @@
 ---
-description: cmux Conductor — classifies a work item's execution shape + current container and routes it to the right cmux topology (solo, pane, broadcast, shard, race, develop-fleet), nesting under the current workspace when it matches
+description: cmux Conductor — routes a work item to the right execution topology, from plain solo up to a watched fleet. Use when you know the work but not how much cmux it deserves.
 ---
 
 # Conduct: $ARGUMENTS
