@@ -27,14 +27,14 @@
       "name": "atk",
       "source": "./plugins/ai-toolkit",
       "description": "AI/LLM development toolkit (atk, formerly ai-toolkit) - 16 skills, 1 agent, 25 commands for AI-native development patterns",
-      "version": "2.0.10",
+      "version": "2.0.11",
       "category": "development"
     },
     {
       "name": "ftk",
       "source": "./plugins/frontend-toolkit",
       "description": "Frontend development toolkit (ftk, formerly frontend-toolkit) - 17 skills, 4 agents, 11 commands for UI/UX, design systems, browser automation, Google Stitch AI, and Remotion explainer videos",
-      "version": "2.3.12",
+      "version": "2.3.13",
       "category": "development"
     },
     {

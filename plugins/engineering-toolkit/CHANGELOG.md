@@ -15,9 +15,15 @@ All notable changes to the engineering-toolkit (`etk`) plugin will be documented
   prior claim rather than silently deleting it.
 
 **Note on the 2.10.0 entry below** (*"ctk's `WorktreeCreate` hook fires on each, seeding per-agent
-continuity"*): that released entry carries the same false claim. It is left as-published pending the
-open decision on whether factual corrections to already-released CHANGELOG entries warrant their own
-patch bump (issue #75).
+continuity"*): that released entry carries the same false claim.
+
+**Decision made 2026-07-30 (#75):** factual corrections to already-released CHANGELOG entries are
+applied **in place, marked as corrections** — a reader landing on the old entry should not be handed
+a false statement, and annotating beats rewriting. On versioning: a correction **rides whatever
+release is already shipping**; when the correction is the *only* change, it **takes its own patch
+bump**, because Claude Code re-resolves an install only when the version differs, so an unbumped
+correction is one no user ever receives. The 2.10.0 entry below is corrected on that basis; etk
+carries no bump here because this correction ships inside etk's existing unreleased entry.
 
 ## [2.16.1] - 2026-07-27 — one derivation for the log-level variable, and a CI check that docs match code
 
@@ -185,6 +191,13 @@ The autonomy docs mapped the ~6 auto-research *routes* to rungs, but never answe
 ### Added
 
 - **A worktree per agent in `/etk:start-parallel`** (new Step 2). Each terminal gets its own checkout and branch via `git worktree add`, so collision is structurally impossible rather than merely discouraged; `.squad/` locks drop to belt-and-braces. Coordination state (`locks/`, `comms/`) stays shared via `SQUAD_DIR` — only the *code* is isolated. ctk's `WorktreeCreate` hook fires on each, seeding per-agent continuity.
+
+  > **Correction (2026-07-30, #75).** The last sentence is false twice over. `git worktree add` run
+  > in a shell never fires CC's `WorktreeCreate` event at all — that event fires only for
+  > `--worktree`, `isolation: "worktree"`, background sessions, and the `EnterWorktree` tool. And
+  > ctk's hook was itself broken and was removed in ctk 2.11.0 (#78/#79). Each agent *does* get its
+  > own continuity state, but because it is a separate session in a separate directory, not because
+  > of any hook. Corrected in place; history is annotated, not rewritten.
 - **Portable teardown**, verified on **git 2.15**: `rm -rf` + `git worktree prune` + `git branch -d`. `git worktree remove` requires **git ≥ 2.17** and is documented as the newer-git equivalent, not the only path — it does not exist on the git shipped with some LTS distros and Xcode CLI tools. Order is called out too: `git branch -d` refuses while the branch is still registered to a worktree, so prune first.
 
 ### Fixed

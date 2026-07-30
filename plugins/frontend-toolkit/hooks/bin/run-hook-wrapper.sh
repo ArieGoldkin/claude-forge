@@ -1,5 +1,5 @@
 #!/bin/sh
-# AI Toolkit Plugin - Resilient Hook Wrapper
+# Frontend Toolkit Plugin - Resilient Hook Wrapper
 #
 # Defense-in-depth wrapper that ensures Claude Code always receives valid JSON,
 # even when Node.js or the compiled bundle is unavailable.
