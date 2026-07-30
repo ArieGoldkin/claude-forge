@@ -2,6 +2,99 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.17.0] - 2026-07-30 — new skill: conduct (the cmux Conductor) + the cmux fleet doctrine
+
+Ports the cmux/conduct execution-orchestration line developed in the upstream work fork
+(11 releases there: 2.17.0, 2.18.0, 2.19.0, 2.20.0, 2.21.0, 2.24.0–2.29.0), de-fingerprinted and
+adapted to claude-forge conventions. Conduct and `/etk:auto-research` are **siblings, not nested**:
+auto-research routes a goal to *which process*; conduct routes a work item to *what execution shape
+that process runs in* — including "none".
+
+### Added
+
+- **New skill `conduct` + `/etk:conduct` command — the cmux Conductor.** Classifies a work item on
+  four axes (scope · lanes · visibility · diversity) plus a fifth **Container** axis read from live
+  cmux state, then routes to one of 7 execution patterns (race+verify · broadcast · pipeline solo ·
+  develop-fleet · sweep · single watch pane · L0 solo). Core discipline is **the lowest rung that
+  does the job** — a fleet must be *earned*, never assumed. Emit-first: conduct produces the
+  ready-to-run invocation and confirms at a Phase-3 gate before driving anything.
+- **`skills/conduct/references/routing-map.md`** — per-pattern emission templates, the Placement
+  branch, and worked examples doubling as a routing mini-benchmark.
+- **`skills/conduct/scripts/cmux-conduct.sh`** — cold-start launcher that boots a cmux workspace
+  already running `/etk:conduct`. Deliberately thin (creates the container, hands off); refuses to
+  run from *inside* cmux, where the Container axis already governs placement.
+- **`skills/cmux/references/agent-fleets.md`** — the fleet doctrine: where tiers are legal, the
+  job-title Identity roster (a lane is a teammate — `📊 Auditor·etk`, never `shard-2`), the sidebar
+  Visibility layer, race dispatch, the **three-gate fan-in** reconcile, and the **give-up bound**
+  for retries.
+- **`skills/cmux/references/read-and-notify.md`** — event-driven waiting, and the collection
+  contract: **collect from a result FILE, never from the screen.**
+
+### Changed
+
+- **`skills/cmux/SKILL.md` re-baselined against cmux 0.64.20** (191 → 316 lines): `identify` vs
+  `current-workspace` semantics, nesting agents under the current workspace, `workspace-group`,
+  agent-session surface opacity, `--placement dock`, per-workspace `todo`, and 8 new pitfalls.
+- **`skills/agent-loops/references/dispatch-policy.md`** — adds the **cross-process carve-out**: the
+  no-nested-agents constraint binds *within one session*, so independent CC sessions in cmux panes
+  are each their own main loop and a third tier is reachable by composition across sessions, never
+  by nesting. L2 mechanics now also name `.squad/locks/*.lock` for shared coordination state.
+- **`skills/auto-research/SKILL.md`** — four improvements carried over from the fork: fan-out
+  dispatch now specifies `run_in_background: false` (subagents are background-by-default as of CC
+  v2.1.198+, and every fan-out route needs its agents' results before its next phase); the Recipe
+  Presets table is **single-sourced** to `references/recipes.md` (which was already strictly
+  richer) instead of restating it; Safety Rails cite the harness-level cost ceiling
+  (`enforceAvailableModels` / `soft_deny`); and Related Skills now lists all four previously-missing
+  routing targets.
+
+### Fixed
+
+- **The WKWebView trust boundary is preserved across the `cmux/SKILL.md` rewrite.** The 191 → 316
+  line replacement initially dropped the paragraph declaring page text, DOM, `eval` results and
+  console/network output **untrusted data, not instructions** — a prompt-injection guard on the one
+  section that ingests attacker-controllable text, and one every peer browser skill carries
+  (`ftk:agent-browser`, `ftk:browser-content-capture`, `ftk:stitch`). A fork-vs-destination diff is
+  structurally **blind** to this class: the loss is against the *pre-existing forge file*, not
+  against the port source, so nothing in the source could reveal it. Restored and extended to cover
+  content a lane pipes into its result file. **Lesson: when a port REPLACES a file wholesale, diff
+  the destination against its own previous version too — the port source cannot show you what only
+  the destination had.**
+- **Five dead cross-references removed** from the ported files: `§ Wait for Completion` (heading
+  renamed to `§ Waiting on Agents`), three `playbook P1/P4/P5` citations (work-fork residue — no
+  such document exists here), and `read-and-notify.md § dispatchers` (actual heading is
+  `§ 7. Composed dispatchers`).
+- **The `new-pane` invariant now states the same exception count everywhere.** `agent-fleets.md`
+  and `routing-map.md` said "sole/one exception" while `conduct/SKILL.md` — and `agent-fleets.md`'s
+  own § Visibility, which calls it "named exception 2" — described **two**. All three now name both
+  (race dispatch, and the sidebar-dashboard tier).
+- **etk's hook count and name corrected in four places.** etk registers exactly **one** hook,
+  `continuity-recommendation` (verified in both `hooks/hooks.json` and `hooks/src/index.ts`).
+  `review-logger` is a *shared* hook owned by **ctk**; root `CLAUDE.md` (both tables), etk
+  `CLAUDE.md`, and etk `README.md` all wrongly attributed it to etk.
+- **etk `README.md` count drift closed.** It declared `20 Commands` over a list of 19 against a
+  truth of 21 (missing `audit-skill`, `post-mr-comments`, and `conduct` itself; listing a
+  non-existent `review-mr` command), named a non-existent `logic-validator` agent instead of
+  `adversarial-verifier`, and pinned `Version: 2.7.1` — ten minors stale.
+
+### Notes on the port
+
+- **De-fingerprinted**, per the same convention as the earlier `commands/fix-bug.md` pass: company
+  ticket keys `NAPP-###` → `PROJ-###`, and company workspace/feature names replaced with neutral
+  placeholders. Verified zero remaining hits.
+- **`cotk:coordinate` reference removed** — that plugin exists only in the work fork. The point it
+  illustrated (a race deliberately inverts dedup discipline) now cites
+  `agent-loops/references/dispatch-policy.md` § Failure modes instead.
+- **A ported line claiming ctk's `WorktreeCreate` hook seeds each agent worktree was NOT taken** —
+  it is false here and is the exact claim **2.16.2 (below) exists to correct**. ctk deliberately
+  registers no `WorktreeCreate` hook (issue #78): that event is a *provider*, and an observer-style
+  hook there disables CC's own `git worktree add` for every user. Replaced with the correct
+  statement.
+- **Three cited measurement records ported** into `docs/reviews/` so the evidence behind the
+  three-gate fan-in, the give-up bound, and the file-not-screen collection contract resolves. Each
+  carries a provenance header: they were measured in the work fork, on **that** fork's etk version
+  line, and have not been re-run here. Two `docs/plans/` citations were dropped instead of ported —
+  that directory is gitignored in this repo, so those paths could never resolve.
+
 ## [2.16.2] - 2026-07-28 — correct a false claim about worktree continuity seeding (#78)
 
 ### Fixed

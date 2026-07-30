@@ -19,19 +19,27 @@ Parallel Collision](loop-failure-modes.md)). All dispatch happens from the main 
 skill. Any design that assumes nested delegation is dead on arrival; the main loop *is* the
 orchestrator.
 
+> **Cross-process carve-out**: the constraint binds *within one session*. Independent CC sessions
+> in cmux panes are each their own main loop — a third tier is reachable by *composition across
+> sessions*, never by nesting (`cmux/references/agent-fleets.md`).
+
 ## The four rungs
 
 | Rung | Shape | Escalate when… | Never when… |
 |---|---|---|---|
 | **L0 — Solo** (default) | main loop does the work | — (this is where every task starts) | n/a |
 | **L1 — Single specialist** | one sub-agent, one report | **independence matters**: reviewing your own work (a trust boundary — self-report misses what an independent reviewer catches), or **noise isolation**: a broad scan whose raw output would pollute context (`Explore`) | the task is a follow-on edit the main loop already has full context for |
-| **L2 — Team fan-out** | 3+ agents, single-message dispatch | the work decomposes into **≥3 independent, file-disjoint units** AND **coverage or diversity is the goal** (review dimensions, design perspectives, per-module builds) | units share files (use worktrees or drop to L0/L1); the "team" would just serialize the same judgment |
+| **L2 — Team fan-out** | 3+ agents, single-message dispatch | the work decomposes into **≥3 independent, file-disjoint units** AND **coverage or diversity is the goal** (review dimensions, design perspectives, per-module builds) | units share files (split them, use `.squad/` locks, or drop to L0/L1); the "team" would just serialize the same judgment |
 | **L3 — Dynamic `Workflow`** | scripted pipeline/fan-out | unknown-size work-lists, loop-until-dry, adversarial-verify chains needing deterministic control flow — **and the user explicitly opted in** (ultracode / "use a workflow") | as a default rung. The `Workflow` opt-in gate is the user's cost control; no route may defeat it |
 
 **L2 mechanics** (cite, don't restate, at the dispatch site): emit all `Agent` calls in a **single
 message** (root `CLAUDE.md` → Opus guidance #2 — soft phrasing serializes); every agent gets the
-SCOPE-restate + status protocol (root `CLAUDE.md`); writes that could collide get **worktree
-isolation** (`/etk:start-parallel` Step 2 is the in-repo exemplar).
+SCOPE-restate + status protocol (root `CLAUDE.md`); writes that could collide get per-agent
+**worktree isolation** — a git worktree + branch per agent (`/etk:start-parallel` Step 2 is the
+in-repo exemplar), with `.squad/locks/*.lock` file locks guarding the shared coordination state
+(see [loop-failure-modes.md](loop-failure-modes.md) #9). Note ctk deliberately registers **no**
+`WorktreeCreate` hook — that event is a *provider*, and an observer-style hook there disables CC's
+own `git worktree add` for every user (issue #78); worktrees are created by the dispatching skill.
 
 ## Route → rung map
 

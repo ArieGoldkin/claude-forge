@@ -195,7 +195,7 @@ Present the plan and get explicit user approval.
 
 Hand off to the target skill and provide progress visibility.
 
-1. Invoke the selected skill with the planned parameters. When the routed skill fans out to multiple subagents (`/brainstorming --deep`, `/develop`, `/review-mr`, `/ctk:web-research`), dispatch all of its agents in a single response by emitting multiple Agent tool calls in the same message — do not serialize.
+1. Invoke the selected skill with the planned parameters. When the routed skill fans out to multiple subagents (`/brainstorming --deep`, `/develop`, `/review-mr`, `/ctk:web-research`), dispatch all of its agents in a single response by emitting multiple Agent tool calls in the same message — do not serialize. Pass `run_in_background: false` on each: subagents are background-by-default (CC v2.1.198+), and every one of these routes needs its agents' results before its own next phase can run. Parallelism is unaffected — `run_in_background` controls whether the parent waits, not whether the agents overlap.
 2. Follow that skill's instructions exactly — do not override its phases or guardrails
 3. Provide heartbeat updates based on skill type:
 
@@ -416,14 +416,7 @@ A loop ends when its stop-condition is satisfied or the budget triple-ceiling is
 
 Recipes are named goal+stop-condition templates so common loops don't need hand-authored parameters each time. `--recipe <name>` expands to the right target skill, budget, and stop-condition; the user can still override any field (`--recipe coverage-90 --until streak=2`).
 
-| Recipe | Expands to | Stop |
-|---|---|---|
-| `coverage-90` | `/cover {scope} --target=90% --streak=2` | streak=2 (target met, held twice) |
-| `perf-p95-200ms` | `/experiment` minimizing p95 latency below 200ms | goal |
-| `error-sweep` | `/fix-bug` over the top open error, investigation-first | budget |
-| `docs-drift` | `/verify` + a doc-vs-code consistency scan | goal |
-| `flake-hunt` | `/verify --streak=5` to surface intermittent failures | streak=5 |
-| `pr-review-watch` | `/review-mr` over open PRs, report-only watch via `/loop` (unattended) | budget |
+Available: `coverage-90` · `perf-p95-200ms` · `error-sweep` · `docs-drift` · `flake-hunt` · `pr-review-watch`. Each recipe's expansion (target skill + args, budget override, stop-condition, use-when) is defined **once**, in `${CLAUDE_SKILL_DIR}/references/recipes.md` — read that catalog to resolve a recipe; don't guess the expansion from the name.
 
 Recipes are presets, not new machinery — they ride the existing engine (experiment / cover / verify / fix-bug / review-mr) and the triple ceiling. The full catalog, each preset's cadence/rung/cost profile, and how to add a recipe live in `${CLAUDE_SKILL_DIR}/references/recipes.md`. How much autonomy to grant a loop — and how to promote it from report-only to a confirmed write-loop — is in `${CLAUDE_SKILL_DIR}/references/autonomy-ladder.md`.
 
@@ -467,7 +460,7 @@ The three limits form a **triple ceiling**: the loop stops as soon as *any* one 
 - **No recursive auto-research** — auto-research must not invoke itself, directly or via any subagent it spawns (CC v2.1.172+ allows nested subagents, so this is an enforced policy, not a platform limitation)
 - **Target skill guardrails** apply — auto-research does not bypass them
 - **Readonly enforcement** from target skill applies unchanged
-- **Model economics** — auto-research is the repo's highest-fan-out entry point (a `design` route alone spawns ~11 agents). Don't spawn children that undercut the repo's model-economics guidance; the scan/reduction sub-phases of routed children are the model-economics-eligible work — keep status-quo `model: inherit` until piloted. See root CLAUDE.md → "Model economics for subagent dispatch".
+- **Model economics** — auto-research is the repo's highest-fan-out entry point (a `design` route alone spawns ~11 agents). The cost ceiling is governed at the harness level (`enforceAvailableModels` / `soft_deny: ["Agent(model:fable)"]`), so auto-research need not re-implement it but MUST NOT spawn children that defeat it. Scan/reduction sub-phases of routed children are the model-economics-eligible work; keep status-quo `model: inherit` until piloted. See root CLAUDE.md → "Model & MCP governance" and "Model economics for subagent dispatch".
 - **Interrupt & clean state** — on interrupt mid-execution, auto-research performs no rollback of its own; it relies on the target skill's clean-exit guarantee (e.g. `/experiment` reverts the in-flight commit). For routes without a documented clean-exit guarantee (`/develop`, `/brainstorming`), warn the user that partial artifacts may remain. Re-enter with `/auto-research --resume` to re-plan from the last reported state.
 
 ### Budget Passing
@@ -534,4 +527,8 @@ or disambiguation rules. Expected accuracy: 95%+ on the benchmark entries.
 - `/review-mr` — Comprehensive MR review (routing target for `review`)
 - `/verify` — Quality verification checks (routing target for `verify`)
 - `/ctk:web-research` — External web/documentation research (routing target for `research`; escalate to the `deep-research` harness for multi-source, adversarially-verified reports)
+- `/investigate-sentry` — Sentry issue triage and root-cause assessment (routing target for `triage`)
+- `/audit-skill` — Read-only skill-quality audit, emits candidate flags (routing target for `audit-skill`)
+- `/prepare-pr` — Author a structured MR/PR description and open it (routing target for `ship`)
+- `/hipaa-compliance-checker` — Health-data security/compliance analysis (routing target for `compliance`)
 - `agent-loops` — Named agentic patterns including the Karpathy Loop (theory reference)
