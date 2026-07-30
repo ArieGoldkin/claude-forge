@@ -110,6 +110,30 @@ export function outputDeny(
 }
 
 /**
+ * Does this result deny the operation?
+ *
+ * A denial can be carried two ways, and BOTH must count:
+ *
+ * - `continue: false` — the historical shape emitted by {@link outputDeny}. Per
+ *   CC's hook docs this "takes precedence over any event-specific decision
+ *   fields" and stops the agent's turn entirely.
+ * - `permissionDecision: 'deny'` with `continue: true` — blocks the single tool
+ *   call while letting the agent continue. `read-cache` already emits this.
+ *
+ * WHY THIS IS SHARED (#65). Three combined hooks each carried a private copy
+ * that tested only `continue === false`. A denial expressed the second way was
+ * therefore not recognised as blocking, and execution fell through to the
+ * auto-approve fast path — converting a security denial into a SILENT
+ * AUTO-ALLOW. Widening is strictly safe: it can classify more results as
+ * denials, never fewer.
+ *
+ * Keep this the single definition. Three copies is how the gap opened.
+ */
+export function isDenyDecision(result: HookResult): boolean {
+  return result.continue === false || result.hookSpecificOutput?.permissionDecision === 'deny';
+}
+
+/**
  * Output allow with permission decision.
  *
  * Use this in permission hooks to auto-approve an operation.

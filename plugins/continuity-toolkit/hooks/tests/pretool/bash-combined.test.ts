@@ -232,6 +232,37 @@ describe('bashCombined', () => {
       expect(profileEvaluator).not.toHaveBeenCalled();
     });
 
+    it('should short-circuit a deny carried by permissionDecision alone (continue:true)', async () => {
+      // #65 prerequisite. isDenyDecision keyed ONLY on `continue === false`, so a
+      // denial expressed the documented way — permissionDecision 'deny' with
+      // continue:true — was not recognised as blocking. Execution then fell
+      // through to the auto-approve fast path, turning a security denial into a
+      // SILENT AUTO-ALLOW. That is the exact outcome the isBlockingDecision
+      // comment says the short-circuit exists to prevent.
+      //
+      // This shape is not hypothetical: read-cache.ts:157-167 already returns it,
+      // and CC's docs state continue:false "takes precedence over any
+      // event-specific decision fields" — so dropping continue:false is required
+      // to stop a denial from killing a subagent (measured: control cell died
+      // between two writes, treatment cell survived).
+      vi.mocked(securityBlocker).mockResolvedValue({
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: 'Command references protected resource',
+        },
+      });
+      const input = createBashInput('some-command --flag');
+
+      const result = await bashCombined(input);
+
+      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
+      expect(securityBlocker).toHaveBeenCalledTimes(1);
+      expect(autoApproveSafeBash).not.toHaveBeenCalled();
+      expect(profileEvaluator).not.toHaveBeenCalled();
+    });
+
     it('should return when security-blocker denies', async () => {
       vi.mocked(securityBlocker).mockResolvedValue(denyResult('Dangerous command blocked'));
       const input = createBashInput('rm -rf /');

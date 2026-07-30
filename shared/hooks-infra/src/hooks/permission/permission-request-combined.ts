@@ -20,7 +20,7 @@
 
 import { getToolName } from '../lib/input.js';
 import { logDebug, logInfo } from '../lib/logging.js';
-import { outputSilentSuccess } from '../lib/output.js';
+import { isDenyDecision, outputSilentSuccess } from '../lib/output.js';
 import type { HookInput, HookResult, HookSpecificOutput } from '../types.js';
 import { autoApproveProjectWrites } from './auto-approve-project-writes.js';
 import { autoApproveSafeBash } from './auto-approve-safe-bash.js';
@@ -53,12 +53,8 @@ function isAllowDecision(result: HookResult): boolean {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === 'allow';
 }
 
-/**
- * Check if a hook result is a deny decision.
- */
-function isDenyDecision(result: HookResult): boolean {
-  return result.continue === false;
-}
+// `isDenyDecision` is imported from lib/output.js — single definition of what
+// counts as a denial (#65). A private copy here tested only `continue === false`.
 
 /**
  * Combined PermissionRequest hook.

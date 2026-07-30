@@ -16,7 +16,12 @@
 import { guardWriteEdit, runGuards } from '../lib/guards.js';
 import { getContent, getFilePath, getNewString } from '../lib/input.js';
 import { logDebug, logInfo, logWarn } from '../lib/logging.js';
-import { outputDeny, outputSilentSuccess, outputWithNotification } from '../lib/output.js';
+import {
+  isDenyDecision,
+  outputDeny,
+  outputSilentSuccess,
+  outputWithNotification,
+} from '../lib/output.js';
 import { autoApproveProjectWrites } from '../permission/auto-approve-project-writes.js';
 import { profileEvaluator } from '../permission/profile-evaluator.js';
 import { scanForSecrets } from '../posttool/secret-detector.js';
@@ -49,12 +54,8 @@ function isAllowDecision(result: HookResult): boolean {
   return result.continue === true && result.hookSpecificOutput?.permissionDecision === 'allow';
 }
 
-/**
- * Check if a hook result is a deny decision.
- */
-function isDenyDecision(result: HookResult): boolean {
-  return result.continue === false;
-}
+// `isDenyDecision` is imported from lib/output.js — single definition of what
+// counts as a denial (#65). A private copy here tested only `continue === false`.
 
 /**
  * Gather ALL write content to scan for secrets, across every file-write tool
