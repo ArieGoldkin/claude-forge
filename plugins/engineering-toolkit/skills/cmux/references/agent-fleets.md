@@ -124,6 +124,35 @@ Identity says *who*; these say *how it's going*. All verified live on cmux 0.64.
   keeps the member workspaces; **`delete` closes every workspace in the group** — never use
   `delete` on lanes you didn't create.
 
+### Sidebar teardown — the dashboard is state you created, so you clear it
+
+Everything above **persists after the panes are gone**. A fleet that closes its lanes and stops
+there leaves a stale "3/3 done" pill and a full progress bar on a workspace that is no longer
+running anything — measured 2026-07-31, after a run whose pane teardown was otherwise correct.
+Critical Rule 8 ("close scoped, never broad") applies to sidebar state exactly as it does to
+surfaces:
+
+```bash
+cmux clear-status <key> --workspace "$W"   # ONE pill, by key
+cmux clear-progress     --workspace "$W"
+cmux clear-log          --workspace "$W"   # ⚠ whole workspace — NOT key-scoped
+```
+
+- **These verbs are not in `set-status --help`.** The setter's help documents no way to unset;
+  the `clear-*` counterparts appear only in the top-level `cmux --help` and in
+  `cmux capabilities --json`. Confirm with `list-status` / `list-log`, not by assuming the
+  setter's help is complete.
+- **`clear-status` is key-scoped — use your own key and only your own key.** cmux maintains its
+  own pills on the same workspace (`claude_code=Running`, hook-managed). Clearing those looks
+  like tidying and is actually breaking cmux's display. This is why § Identity requires a fleet
+  key of your own (`fleet`, `lane-<slug>`) rather than writing to a generic one.
+- **`clear-log` is NOT key-scoped — it wipes the workspace's whole activity log.** Run
+  `cmux list-log --workspace "$W"` first; if a build or test tool also logs there, its entries
+  go too. When the log is shared, leave it and let it scroll rather than clearing.
+- Verify teardown by reading `cmux sidebar-state --workspace "$W"` — `status_count`,
+  `progress` and `log_count` are the checkable done-condition, the same way `cmux tree`
+  verifies pane teardown.
+
 > **Do not re-import the upstream playbook's collect step.** These visibility patterns are
 > adapted from disler/learning-cmux-with-agents (prompts 13/22/26/31) — but its fan-in
 > (prompt 12) and `.team` contract collect by polling `read-screen` for a sentinel, which is

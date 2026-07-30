@@ -181,7 +181,8 @@ takes no --working-directory, so the cd belongs in the sent command), label at s
 collect event-first, joining on that FILE's last STATUS: line
 (via collect_lane), never on a sentinel grepped from read-screen.
 Workers never get their own workspaces (the invariant). Phase-5 verify stays inside
-the pipeline. Teardown: close only what you created — panes first; a workspace only
+the pipeline. Teardown: close only what you created — panes first, then the sidebar
+state the run wrote (agent-fleets.md § Sidebar teardown); a workspace only
 if YOU created it (close-workspace pulls focus even after --focus false).
 ```
 
