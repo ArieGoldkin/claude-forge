@@ -181,6 +181,12 @@ jobs:
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good-prose
       - name: good-strays fixture must pass (a Finder .DS_Store is not a command)
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good-strays
+      # #94: a release note enumerating TWO kinds is still prose. It describes a
+      # PAST release, so its counts legitimately differ from current totals --
+      # the same reason CHANGELOG.md is excluded outright. Every number in this
+      # fixture is deliberately wrong; it must still pass.
+      - name: good-prose-series fixture must pass (two-kind release-note prose)
+        run: bash scripts/validate-versions.sh tests/fixtures/versions/good-prose-series
       - name: bad-marketplace fixture must fail
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-marketplace"
       - name: bad-changelog fixture must fail
