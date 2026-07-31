@@ -57,11 +57,67 @@ FORM_B = re.compile(
 )
 
 
-def declarations(text):
-    """-> list of (kind, number, matched_text). Both forms, in one pass."""
+# FORM_A alone cannot tell a DECLARATION from PROSE -- they are the same shape.
+# "Provides 15 specialized skills" (a real dtk declaration) and "adds 3 new
+# commands" (an ordinary sentence) differ only in intent. Measured on the real
+# tree: 3 realistic prose sentences added to one plugin CLAUDE.md produced 3
+# FAILs on a document whose every actual declaration was correct.
+#
+# A position anchor was the obvious fix and is WRONG: 12 of the 24 real
+# declarations live mid-sentence ("Provides 16 skills, 1 agent, and 25
+# commands") or in a tree comment, so anchoring to line-start/bold would have
+# silently dropped half the gate's coverage -- a false NEGATIVE, which is worse
+# than the false positive it fixes.
+#
+# What actually separates the two is the FORM the count appears in. Every real
+# declaration in this repo is one of exactly three; prose is none of them:
+#
+#   MARKED       bold or list-bold      "- **27 skills**: agent-loops, ..."
+#   SERIES       >=2 distinct kinds     "Provides 16 skills, 1 agent, and 25 commands"
+#   DIR_ATTACHED names the directory    "|-- skills/   # 15 specialized skill directories"
+#
+# "The release adds 2 new commands" is a lone kind, unbolded, with no sibling
+# kind and no `commands/` token -- so it is ignored, which is the whole point.
+#
+# KNOWN RESIDUAL, stated rather than hidden: prose that enumerates two kinds at
+# once ("adds 3 commands and 2 skills") reads as SERIES and would still FAIL.
+# That is rarer than the single-kind sentence, and such a line arguably ought to
+# be correct anyway. It is a smaller hole than the one being closed, not zero.
+def _is_series(matches):
+    """True when a line declares >=2 DISTINCT kinds -- the inventory-sentence shape
+    ("16 skills, 1 agent, and 25 commands"). Distinctness matters: two counts of the
+    same kind on one line is prose, not an inventory."""
+    return len({kind for kind, _, _, _ in matches}) >= 2
+
+
+def declarations(text, trusted=False):
+    """-> list of (kind, number, matched_text). Both forms, in one pass.
+
+    `trusted=True` scans every FORM_A hit with no form requirement. Use it only
+    for text that CANNOT contain prose: the synthesized "<n> <kind>s" strings
+    this script builds from the two root tables, and the plugin.json /
+    marketplace.json `description` fields, which are single-purpose inventory
+    strings rather than documents. Markdown bodies are scanned with
+    trusted=False, where the three-form rule above applies.
+    """
     found = []
-    for m in FORM_A.finditer(text):
-        found.append((m.group(2).lower(), int(m.group(1)), m.group(0).strip()))
+    for line in text.splitlines():
+        # (kind, number, raw, match) for every FORM_A hit on this line
+        hits = [
+            (m.group(2).lower(), int(m.group(1)), m.group(0).strip(), m)
+            for m in FORM_A.finditer(line)
+        ]
+        if not hits:
+            continue
+        series = _is_series(hits)
+        for kind, n, raw, m in hits:
+            if trusted:
+                found.append((kind, n, raw))
+                continue
+            marked = line[: m.start()].rstrip().endswith("**")
+            dir_attached = f"{kind}s/" in line
+            if marked or dir_attached or series:
+                found.append((kind, n, raw))
     for m in FORM_B.finditer(text):
         found.append((m.group(1).lower().rstrip("s"), int(m.group(2)), m.group(0).strip()))
     return found
@@ -90,13 +146,29 @@ def enumerated_lists(text):
     return out
 
 
+def content_entries(d):
+    """Real shipped entries in a skills/agents/commands directory.
+
+    Dotfiles are NOT content. `iterdir()` returns every dirent, so a single
+    Finder-generated .DS_Store -- which this repo gitignores, and which therefore
+    appears on developer machines while being invisible in CI -- inflated the
+    count. Measured: two stray .DS_Store files produced FOURTEEN FAILs across all
+    six sites, on a tree whose docs were entirely correct.
+
+    This is deliberately narrow: only a leading dot is excluded. No real skill,
+    agent, or command starts with one, so nothing shippable can hide behind this,
+    and a genuinely malformed entry still surfaces.
+    """
+    return [p for p in d.iterdir() if not p.name.startswith(".")]
+
+
 def ground_truth(plugin_dir):
     """Count real entries. Symlinked skills (etk -> shared/skills) COUNT: they are
     part of what the plugin ships, and every doc in the repo enumerates them."""
     out = {}
     for kind in KINDS:
         d = plugin_dir / (kind + "s")
-        out[kind] = len(list(d.iterdir())) if d.is_dir() else None
+        out[kind] = len(content_entries(d)) if d.is_dir() else None
     return out
 
 
@@ -106,11 +178,16 @@ def main():
     short = sys.argv[3]
 
     truth = ground_truth(plugin_dir)
-    sites = []  # (label, text)
+    # (label, text, trusted). trusted=True means "cannot contain prose, so scan
+    # every hit"; see declarations(). The two JSON `description` fields are
+    # single-purpose inventory strings and the two root-table entries are
+    # synthesized by this script, so all four stay strictly gated. Only the
+    # free-text markdown bodies get the three-form rule.
+    sites = []
 
     pj_path = plugin_dir / ".claude-plugin" / "plugin.json"
     pj = json.loads(pj_path.read_text())
-    sites.append((str(pj_path) + " (description)", pj.get("description", "")))
+    sites.append((str(pj_path) + " (description)", pj.get("description", ""), True))
 
     # Shared files: isolate THIS plugin's fragment first, or one plugin's row
     # would be checked against another's ground truth.
@@ -121,7 +198,7 @@ def main():
             None,
         )
         if entry:
-            sites.append((str(mk_path) + f" ({short} description)", entry.get("description", "")))
+            sites.append((str(mk_path) + f" ({short} description)", entry.get("description", ""), True))
 
     # Root README plugin table: | **[etk](plugins/...)** — ... | 2.17.1 | 27 · 5 · 21 |
     rr = repo_root / "README.md"
@@ -132,7 +209,7 @@ def main():
         )
         if m:
             for kind, n in zip(KINDS, m.groups()):
-                sites.append((f"{rr} (plugin table, {kind}s column)", f"{n} {kind}s"))
+                sites.append((f"{rr} (plugin table, {kind}s column)", f"{n} {kind}s", True))
 
     # Root CLAUDE.md summary table: | etk (formerly engineering-toolkit) | 27 | 5 | 21 | ...
     rc = repo_root / "CLAUDE.md"
@@ -143,7 +220,7 @@ def main():
         )
         if m:
             for kind, n in zip(KINDS, m.groups()):
-                sites.append((f"{rc} (plugin summary table, {kind}s column)", f"{n} {kind}s"))
+                sites.append((f"{rc} (plugin summary table, {kind}s column)", f"{n} {kind}s", True))
 
     # Per-plugin docs. CHANGELOG.md is excluded by design, exactly as check 6c
     # excludes it: it is a historical record and legitimately states the counts
@@ -151,11 +228,11 @@ def main():
     for name in ("CLAUDE.md", "README.md"):
         p = plugin_dir / name
         if p.exists():
-            sites.append((str(p), p.read_text()))
+            sites.append((str(p), p.read_text(), False))
 
     failures = []
-    for label, text in sites:
-        for kind, declared, raw in declarations(text):
+    for label, text, trusted in sites:
+        for kind, declared, raw in declarations(text, trusted=trusted):
             actual = truth.get(kind)
             if actual is None:
                 continue  # plugin ships no such directory -- nothing to compare against
@@ -169,14 +246,14 @@ def main():
 
     # The enumerated list itself, by name. Runs on the per-plugin docs only.
     list_failures = []
-    for label, text in sites:
+    for label, text, _trusted in sites:
         if not label.endswith(".md"):
             continue
         for kind, declared, names in enumerated_lists(text):
             d = plugin_dir / (kind + "s")
             if not d.is_dir():
                 continue
-            real = {p.stem if p.suffix == ".md" else p.name for p in d.iterdir()}
+            real = {p.stem if p.suffix == ".md" else p.name for p in content_entries(d)}
             phantom = sorted(n for n in names if n not in real)
             missing = sorted(n for n in real if n not in names)
             if len(names) != declared or phantom or missing:
