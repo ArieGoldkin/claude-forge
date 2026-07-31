@@ -5,6 +5,13 @@
 .DS_Store
 Thumbs.db
 
+# ...except the ones that ARE the test fixture. `good-strays` exists to prove the
+# count gate ignores Finder droppings; if these stayed ignored, CI would check out
+# an empty fixture and the test would pass while asserting nothing -- the exact
+# "green while asserting nothing" failure this repo has shipped before.
+!tests/fixtures/versions/good-strays/plugins/*/commands/.DS_Store
+!tests/fixtures/versions/good-strays/plugins/*/skills/.DS_Store
+
 # Editor files
 *.swp
 *.swo

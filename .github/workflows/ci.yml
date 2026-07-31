@@ -174,6 +174,13 @@ jobs:
         run: bash scripts/validate-versions.sh
       - name: good fixture must pass
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good
+      # POSITIVE fixtures. A count gate's dangerous failure is the FALSE POSITIVE:
+      # it red-CIs a correct document, and the cheapest way to make it green again
+      # is to weaken the gate. These two pin the two ways that happened.
+      - name: good-prose fixture must pass (ordinary prose is not a declaration)
+        run: bash scripts/validate-versions.sh tests/fixtures/versions/good-prose
+      - name: good-strays fixture must pass (a Finder .DS_Store is not a command)
+        run: bash scripts/validate-versions.sh tests/fixtures/versions/good-strays
       - name: bad-marketplace fixture must fail
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-marketplace"
       - name: bad-changelog fixture must fail
@@ -206,6 +213,18 @@ jobs:
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-plugin-readme"
       - name: bad-count-list fixture must fail (right total, wrong names in the list)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-count-list"
+      # S5 (plugin CLAUDE.md free text) is read through the three-form rule, so it
+      # needs one negative PER FORM. The pre-existing markdown negative above is
+      # caught by the FORM_B heading parser and would still pass with the whole
+      # form rule deleted -- i.e. it pins nothing here. Crippled-check matrix:
+      # killing MARKED / SERIES / DIR_ATTACHED in turn flips exactly the one
+      # fixture below and no other, and good/good-prose keep passing throughout.
+      - name: bad-counts-doc-marked must fail (S5 form MARKED, "**9 skills**")
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-doc-marked"
+      - name: bad-counts-doc-series must fail (S5 form SERIES, "9 skills, 1 agent, 3 commands")
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-doc-series"
+      - name: bad-counts-doc-dir must fail (S5 form DIR_ATTACHED, "skills/ # 9 skill directories")
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-counts-doc-dir"
       - name: bad-readme-version fixture must fail (plugin README pins a stale version)
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-readme-version"
       - name: bad-plugin-id fixture must fail (name is not a valid shell identifier)
