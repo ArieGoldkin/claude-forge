@@ -2,6 +2,85 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.15.0] - 2026-07-31 — security-blocker stops denying protected literals in inert positions (#65)
+
+### Fixed
+
+- **`security-blocker` no longer denies a command for merely *mentioning* a protected
+  path (#65, direction 1).** The sensitive-path check now scans a **scannable projection**
+  of the command — the raw text with provably-inert regions blanked — instead of the raw
+  text. Measured on a 23-entry corpus: **false positives 11 → 1, false negatives 0**.
+  Newly allowed: `echo "…/etc/hosts…"`, a `git commit -m` message naming a system path,
+  `grep "/usr/" file.ts`, a quoted-delimiter heredoc body carrying `#!/usr/bin/env`,
+  a `#` comment, and a `case` pattern.
+
+### How it is safe
+
+- **No pattern changed.** Every regex in `BASH_SECRET_PATTERNS` /
+  `BASH_SYSTEM_DIR_PATTERNS` is byte-identical; only *where they look* changed. The whole
+  source diff is 13 insertions / 2 deletions.
+- **Fail-closed, which inverts the two designs adversarial review previously demolished.**
+  Those granted permission on a positive match (a mutating-verb blocklist; a safe-reader
+  allowlist), so a parsing miss **allowed** a dangerous command. Here text is removed from
+  the scan only on positive proof, and every ambiguity blanks nothing — the parser's
+  failure mode is "scan the whole raw command", i.e. the pre-#65 behaviour. It can
+  over-block; it cannot under-block.
+- **A pipe re-arms every region.** `echo /etc/hosts | xargs rm -f` really does delete the
+  file — echo never opens a path, but a pipe hands its operands to a command that does.
+  Any segment whose stdout is piped has no inert region, and no heredoc body is blanked
+  when a real pipe (`|`, not `||`) is present. This case was caught by the repo's own
+  pinned adversarial-review suite, not by design review.
+- **A heredoc body is inert only if something CONSUMES it as data.** A quoted delimiter
+  proves the body is not *expanded*; it does not prove the body is not *executed*.
+  `sh <<'EOF' … EOF` runs every line, and an intermediate version of this change allowed
+  `sh <<'EOF'\ncat /etc/shadow\nEOF`. The consuming command is now checked against an
+  allowlist (`cat`, `tee`) — deliberately not a blocklist of interpreters, which would
+  leak through `perl`, `awk`, or any local wrapper.
+- **argv[0] is never inert** — `/usr/bin/printenv` stays denied. This is why the rule is
+  "text except in inert positions" and not "operands instead of text".
+- **Quoting alone is not proof of inertness** — `cat "/etc/passwd"` stays denied, because
+  inertness is a property of the command + argument slot, never of the quotes.
+
+### Testing
+
+- New `lib/shell-projection.ts` with 40 tests, symlinked into all five plugins (set parity).
+- New corpus regression gate asserting 0 false negatives and ≤1 false positive.
+- All 404 pinned `security-blocker` assertions unchanged and passing; none weakened or skipped.
+- Crippled-check matrix: disabling each of the 6 guards (pipe, heredoc-pipe, substitution,
+  redirect, quote-balance, quoted-heredoc-delimiter) turns at least one test red; restore
+  control is byte-identical and green.
+
+### Four false negatives were introduced and fixed during development
+
+Recorded because the pattern matters more than the bugs: **every one was in a position the
+design called "provably inert", and none was found by reasoning — all four were found by
+executing commands.** Two by the repo's own pinned suite and a self-probe, two by
+independent adversarial verification that the self-review had already declared clean.
+
+| Escaped as | Why it was wrong |
+|---|---|
+| `echo /etc/hosts \| xargs rm -f` | echo never opens a path, but a pipe hands its operands to something that does |
+| `sh <<'EOF' … EOF` | a quoted delimiter proves the body is not *expanded*, not that it is not *executed* |
+| `tee f "<<'Z'"` + next line | the heredoc scanner was a regex with no quote tracking, so a marker inside a quoted argument blanked a real following command |
+| `grep -f /etc/shadow log` | `-f` takes a pattern **FILE**; the operand is a path, not a pattern |
+| `{ true; echo /etc/hosts; } \| xargs rm -f` | the pipe binds to the group, so the inner segment's `pipedOut` was false |
+| `./echo /etc/shadow` | allowlisting by basename let an attacker-chosen binary inherit echo's rule |
+
+### Corrected claim
+
+An earlier version of this work claimed the projection "cannot under-block". **That is
+false and has been withdrawn** in both the module header and the design doc. The real
+guarantee is narrower and stated as such: ambiguity leaves text *scannable* rather than
+granting permission, and each blanked region is proved independently — at whole-command
+scope (unbalanced quotes, group-bound pipe, thrown error) the raw command is returned; at
+segment scope only the offending segment is skipped.
+
+### Known limitation
+
+- A macOS temp path (`/var/folders/…`) is still denied by the `/var/` pattern. That is a
+  pattern-breadth question, not a position question, and is deliberately **not** fixed
+  here — tracked separately so it does not ride along with a security-sensitive change.
+
 ## [2.14.1] - 2026-07-30 — correct declared skill/command/hook counts (11 · 1 · 12 · 31)
 
 ### Fixed

@@ -43,6 +43,7 @@ import {
   resolveRealPath,
 } from '../lib/path-utils.js';
 import type { ProtectionCategory } from '../lib/path-utils.js';
+import { scannableProjection } from '../lib/shell-projection.js';
 import type { AgentContext, HookInput, HookResult, ToolName } from '../types.js';
 
 // Re-export protected path patterns and types from path-utils (single source of truth)
@@ -523,14 +524,28 @@ export function matchesBashSensitivePattern(command: string): {
   matched: boolean;
   pattern?: string;
 } {
+  // #65: scan the projection, not the raw text. Provably-inert regions (quoted
+  // heredoc bodies, comments, echo/printf operands, a `git commit` message, a
+  // grep PATTERN operand, `case` patterns) are blanked first; every pattern
+  // below is unchanged and still matches exactly what it matched before.
+  //
+  // Ambiguity leaves text SCANNABLE rather than granting permission: at whole-
+  // command scope (unbalanced quotes, a group-bound pipe, a thrown error) the
+  // raw command comes back untouched; at segment scope (substitution, redirect,
+  // piped stdout) that segment is skipped while others keep their blanking. The
+  // guarantee is per-region, not "cannot under-block" — see the module header
+  // in lib/shell-projection.ts, which records the three false negatives review
+  // found and why that stronger claim was withdrawn.
+  const scannable = scannableProjection(command);
+
   // Secret-bearing files: any reference, read included.
   for (const pattern of BASH_SECRET_PATTERNS) {
-    if (pattern.test(command)) {
+    if (pattern.test(scannable)) {
       return { matched: true, pattern: pattern.source };
     }
   }
   // System directories: only when targeted by a mutating operation.
-  return matchesSystemDirMutation(command);
+  return matchesSystemDirMutation(scannable);
 }
 
 /**
