@@ -150,7 +150,9 @@ the routing map, parametrized with the actual work item / ticket.
   grepping `read-screen` — the cmux skill's `references/read-and-notify.md` §1), scoped
   teardown verified with `cmux tree`, and every fleet rule in the cmux skill's
   `references/agent-fleets.md`. Never steal focus; never close panes or surfaces you
-  didn't create.
+  didn't create. **Teardown is not finished when the panes close** — any pill, progress bar
+  or log line the run wrote persists on the workspace and must be cleared too
+  (agent-fleets.md § Sidebar teardown; verify with `cmux sidebar-state`).
 - **Label at dispatch (mandatory when driving).** The orchestrator names every lane AT
   SPAWN — agents never self-label: `rename-tab --surface <the ref new-pane printed>`
   with an emoji role prefix, plus a `set-status` sidebar pill per role. **Never emit a bare

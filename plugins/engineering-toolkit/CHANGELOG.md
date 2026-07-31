@@ -2,6 +2,30 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.17.2] - 2026-07-31 — a fleet's sidebar state is teardown too
+
+### Fixed
+
+- **`agent-fleets.md` § Visibility told you how to paint the sidebar and never how to wipe it.**
+  `set-status`, `set-progress` and `log` were documented as the fleet dashboard; the `clear-*`
+  counterparts were not. Teardown covered panes and workspaces only, so a run that closed its lanes
+  correctly still left a stale "3/3 done" pill and a full progress bar on a workspace doing nothing.
+  Observed 2026-07-31 after a fleet whose pane teardown was otherwise clean.
+- New **§ Sidebar teardown** in `agent-fleets.md` with the three verbs and two traps that are easy
+  to hit:
+  - **They are absent from `set-status --help`.** The setter documents no way to unset; the
+    `clear-*` verbs appear only in top-level `cmux --help` and `cmux capabilities --json`.
+  - **`clear-status` is key-scoped, `clear-log` is not.** cmux keeps its own hook-managed pills on
+    the same workspace (`claude_code=Running`); clearing those reads as tidying and actually breaks
+    cmux's display. `clear-log` wipes the workspace's entire activity log, so `list-log` first when
+    anything else might be writing there.
+  - Verify with `cmux sidebar-state` — `status_count` / `progress` / `log_count` are the checkable
+    done-condition, the way `cmux tree` is for panes.
+- **`conduct/SKILL.md` Phase 4 and `routing-map.md` pattern 4** now say teardown is not finished
+  when the panes close, and cite the new section rather than restating it.
+
+Docs only — no behavior change, no code touched.
+
 ## [2.17.1] - 2026-07-30 — `/etk:conduct` command description trimmed to house style
 
 ### Changed
