@@ -54,8 +54,20 @@ Extract from the ticket:
 Read the issue with the `gh` CLI — no MCP server is involved:
 
 ```bash
-gh issue view <number> --json title,body,comments,labels,state,url
+gh issue view <number-or-url> --json title,body,comments,labels,state,url
 ```
+
+⚠ **If the user gave a URL, pass the URL through verbatim — never normalize it to a bare number.**
+`gh issue view` accepts `{<number> | <url>}`, and a bare number always resolves against the
+**current** repo. A cross-repo URL reduced to its number does not error; it reads a *different
+issue of the same number in this repo* and returns exit 0, so the entire investigation proceeds
+from the wrong bug report with nothing to signal it. Use `-R <owner>/<repo>` if you must pass a
+number for another repo.
+
+⚠ **Verify what came back is the issue you asked for.** GitHub gives issues and pull requests **one
+shared number space**, so `gh issue view <n>` can return a *pull request*. Check that the returned
+`url` matches the one you were given (and that it contains `/issues/`) before treating the body as
+a bug report.
 
 Extract the same fields the Jira branch does, from their GitHub equivalents:
 - **Summary**: `title`
@@ -222,8 +234,14 @@ Use mcp__atlassian__transitionJiraIssue to move to "In Progress" (if currently i
 Comment with the `gh` CLI — no MCP server is involved:
 
 ```bash
-gh issue comment <number> --body "Fix proposed in #<pr_number>. Root cause: <one-line explanation>"
+gh issue comment <number-or-url> --body "Fix proposed in #<pr_number>. Root cause: <one-line explanation>"
 ```
+
+⚠ **Use the same identifier Phase 2 read from — the URL if that is what you were given.** A bare
+number resolves against the **current** repo, so a cross-repo issue normalized to its number posts
+the comment on a *different* issue, successfully and silently. That is precisely the
+"report to a tracker you did not read from" failure this step exists to prevent, in a narrower
+form: right tracker, wrong issue.
 
 Then **stop**. Two things that look like the Jira branch's other steps are deliberately absent:
 
