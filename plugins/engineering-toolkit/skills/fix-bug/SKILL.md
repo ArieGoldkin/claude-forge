@@ -1,6 +1,6 @@
 ---
 name: fix-bug
-description: "Observation-driven debugging loop (OHAOI): Observe, Hypothesize, Act, Iterate. Investigates root cause before fixing. Integrates with Jira tickets and MR creation. Use when: debugging a bug report, fixing a failing test, tracing unexpected behavior, diagnosing production errors. Triggers on: fix bug, debug, failing test, broken, error, crash, regression, flaky, investigate, root cause, stack trace, reproduce"
+description: "Observation-driven debugging loop (OHAOI): Observe, Hypothesize, Act, Iterate. Investigates root cause before fixing. Integrates with Jira tickets, GitHub issues, and MR/PR creation. Use when: debugging a bug report, fixing a failing test, tracing unexpected behavior, diagnosing production errors. Triggers on: fix bug, debug, failing test, broken, error, crash, regression, flaky, investigate, root cause, stack trace, reproduce"
 effort: xhigh
 paths:
   - "**/*.ts"
@@ -48,7 +48,7 @@ Effective debugging is not about guessing -- it is about systematically narrowin
 Before forming any theory, collect all available information. Each observation step should capture FULL context: error message + stack trace + relevant state + reproduction steps.
 
 **Checklist:**
-- [ ] Read the error/bug report completely (Jira ticket, Slack thread, user report)
+- [ ] Read the error/bug report completely (Jira ticket, GitHub issue, Slack thread, user report)
 - [ ] Reproduce the issue (or confirm reproduction steps)
 - [ ] Capture the exact error message and full stack trace
 - [ ] Note actual behavior vs expected behavior
@@ -212,7 +212,7 @@ The commit message and MR description should explain the root cause and why the 
 
 ## Integration with /fix-bug Command
 
-This skill provides the debugging methodology used by the `/fix-bug` command. The command handles the operational workflow (Jira integration, branch creation, MR creation), while this skill provides the investigation discipline.
+This skill provides the debugging methodology used by the `/fix-bug` command. The command handles the operational workflow (tracker integration — Jira via MCP or GitHub via `gh` — branch creation, MR/PR creation), while this skill provides the investigation discipline.
 
 **Command phases that use this skill:**
 - **Phase 3 (Investigate Root Cause)**: Apply the OHAOI loop instead of ad-hoc searching

@@ -1,16 +1,17 @@
 ---
-description: Investigate and fix a bug from a Jira ticket. Reads ticket context, searches the codebase, proposes a fix, and creates an MR.
+description: Investigate and fix a bug from a Jira ticket, a GitHub issue, or a free-text description. Finds root cause, proposes a fix, and opens the MR/PR.
 ---
 
 # Fix Bug: $ARGUMENTS
 
-Investigate and fix a bug from a Jira ticket or free-text description.
+Investigate and fix a bug from a Jira ticket, a GitHub issue, or a free-text description.
 
 **Usage:**
 ```bash
-/fix-bug PROJ-123                    # From Jira ticket
-/fix-bug PROJ-123 --dry-run          # Investigate only, don't create MR
-/fix-bug "checkout 500 error"        # From description (no Jira)
+/fix-bug PROJ-123                    # From a Jira ticket
+/fix-bug 71                          # From a GitHub issue (bare number, #71, or a URL)
+/fix-bug 71 --dry-run                # Investigate only, don't open a PR
+/fix-bug "checkout 500 error"        # From a description (no tracker)
 ```
 
 ---
@@ -53,8 +54,20 @@ Extract from the ticket:
 Read the issue with the `gh` CLI — no MCP server is involved:
 
 ```bash
-gh issue view <number> --json title,body,comments,labels,state,url
+gh issue view <number-or-url> --json title,body,comments,labels,state,url
 ```
+
+⚠ **If the user gave a URL, pass the URL through verbatim — never normalize it to a bare number.**
+`gh issue view` accepts `{<number> | <url>}`, and a bare number always resolves against the
+**current** repo. A cross-repo URL reduced to its number does not error; it reads a *different
+issue of the same number in this repo* and returns exit 0, so the entire investigation proceeds
+from the wrong bug report with nothing to signal it. Use `-R <owner>/<repo>` if you must pass a
+number for another repo.
+
+⚠ **Verify what came back is the issue you asked for.** GitHub gives issues and pull requests **one
+shared number space**, so `gh issue view <n>` can return a *pull request*. Check that the returned
+`url` matches the one you were given (and that it contains `/issues/`) before treating the body as
+a bug report.
 
 Extract the same fields the Jira branch does, from their GitHub equivalents:
 - **Summary**: `title`
@@ -70,7 +83,8 @@ text — do not silently proceed as if the issue had been read.
 
 ### If free text provided:
 
-Use the text directly as the bug description. Skip ticket enrichment.
+Use the text directly as the bug description. Skip tracker enrichment, and skip the Phase-5
+write-back entirely — there is nothing to report back to.
 
 ### For all three:
 
@@ -97,7 +111,7 @@ Write down a specific hypothesis about the root cause before searching the codeb
 ### Step 3: ACT -- Targeted investigation
 
 Make ONE focused search action to test the hypothesis:
-1. **Error-based search**: If the ticket has error messages or stack traces, search for those strings
+1. **Error-based search**: If the bug report has error messages or stack traces, search for those strings
 2. **Keyword search**: Search for domain terms from the bug description (e.g., "checkout", "cart", "payment")
 3. **File identification**: Narrow down to 1-5 most likely affected files
 4. **Code reading**: Read the affected files and trace the logic
@@ -167,18 +181,25 @@ Present findings and ask the user whether to proceed with a fix attempt.
 
 ```bash
 git add <changed_files>
-git commit -m "fix: <summary from investigation> [<ticket>]
+git commit -m "fix: <summary from investigation> [<ref>]
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
+
+`<ref>` renders per tracker: `PROJ-123` for Jira, `#71` for a GitHub issue. Omit the brackets
+entirely for free-text bugs rather than emitting an empty `[]`.
 
 ### Create the MR — delegate to `/etk:prepare-pr`
 
 Route MR authoring + creation through **`/etk:prepare-pr`** so the bug MR carries the standardized description (Background / High-Level Design / Pitfalls) instead of an ad-hoc format. prepare-pr pushes the branch, drafts the body to a file (with a HIPAA redaction pass), opens the MR on the detected VCS (`gh` or `glab`), and hands off to `/review-mr`:
 
 ```bash
-/etk:prepare-pr --closes <ticket>
+/etk:prepare-pr --closes <ref>
 ```
+
+`prepare-pr` detects the VCS itself, but `<ref>` still renders per tracker: `PROJ-123` for Jira,
+`#71` for a GitHub issue. On GitHub this is what produces the `Closes #71` keyword that closes the
+issue on merge — which is why the write-back step below does **not** close it a second time.
 
 (Add `--target <branch>` and `--label <name>` if the project uses a fixed integration branch or a bug label.)
 
@@ -192,7 +213,12 @@ Notes:
 - The Phase-4 tests already ran, so pass that context to prepare-pr's Step-1 gate; it treats that as partial evidence and **runs the lint/typecheck** that Phase 4 didn't cover (Phase 4 runs tests only, not a full `/etk:verify`).
 - Do **not** also hand-write the MR-create command; prepare-pr owns the description contract now.
 
-### Update Jira (if ticket provided)
+### Update the tracker (if a ticket or issue was provided)
+
+Write back to whichever tracker Phase 1 identified. **Report to the tracker you read from** —
+reading a GitHub issue and then commenting on Jira is the defect this step exists to avoid.
+
+#### If a Jira key was provided
 
 Use the Atlassian MCP to update the ticket:
 
@@ -203,6 +229,37 @@ Use mcp__atlassian__addCommentToJiraIssue to add a comment:
 Use mcp__atlassian__transitionJiraIssue to move to "In Progress" (if currently in Draft/To Do)
 ```
 
+#### If a GitHub issue was provided
+
+Comment with the `gh` CLI — no MCP server is involved:
+
+```bash
+gh issue comment <number-or-url> --body "Fix proposed in #<pr_number>. Root cause: <one-line explanation>"
+```
+
+⚠ **Use the same identifier Phase 2 read from — the URL if that is what you were given.** A bare
+number resolves against the **current** repo, so a cross-repo issue normalized to its number posts
+the comment on a *different* issue, successfully and silently. That is precisely the
+"report to a tracker you did not read from" failure this step exists to prevent, in a narrower
+form: right tracker, wrong issue.
+
+Then **stop**. Two things that look like the Jira branch's other steps are deliberately absent:
+
+- **No status transition.** GitHub has no status field, and the closest analogues both cost more
+  than they give: an `in-progress` label errors unless the label already exists in that repo, and
+  an assignee signals ownership rather than progress. The PR that references the issue already
+  appears on its timeline, so **the PR is the in-progress signal**. Do not invent one.
+- **No explicit close.** The `Closes #<number>` keyword in the PR body closes the issue when the
+  fix actually *lands*. Closing here would close it when the PR *opens*, which is not the same
+  event. ⚠ This command exists because of that exact failure: PR #70 carried `Closes #69` while
+  its own body said the change was read-path-only, so #69 auto-closed and took its pinned
+  remainder with it — re-filed as #71. **The lesson was to check what a PR actually completes
+  before writing the keyword, not to add a second closing path.** Adding one here would race the
+  first.
+
+If `gh` is unavailable or unauthenticated, say so and skip the write-back — do not report success
+for a comment that was never posted.
+
 ---
 
 ## Phase 6: Report Results
@@ -212,9 +269,9 @@ Present a summary to the user:
 ```markdown
 ## Fix Applied: [Bug Summary]
 
-**Jira**: PROJ-123
+**Tracker**: PROJ-123 (Jira) | #71 (GitHub) | none (free text)
 **Branch**: fix/<slug>
-**MR**: !<mr_number>
+**MR/PR**: !<mr_number> | #<pr_number>
 
 **Root cause**: [explanation]
 **Changes**:
@@ -237,11 +294,13 @@ Present a summary to the user:
 |------|---------|
 | `/etk:fix-bug` (skill) | Observation-driven debugging methodology (OHAOI loop) |
 | `/etk:atlassian-integration` | Jira MCP interaction (read tickets, add comments, transition status) |
-| `mcp__atlassian__getJiraIssue` | Read bug ticket details |
-| `mcp__atlassian__addCommentToJiraIssue` | Post fix comment to ticket |
-| `mcp__atlassian__transitionJiraIssue` | Move ticket to In Progress |
-| `/etk:prepare-pr` | Author the standardized MR description + open the MR (Phase 5) |
-| `glab mr view` | View MR details |
+| `mcp__atlassian__getJiraIssue` | Read bug ticket details (Jira) |
+| `mcp__atlassian__addCommentToJiraIssue` | Post fix comment to ticket (Jira) |
+| `mcp__atlassian__transitionJiraIssue` | Move ticket to In Progress (Jira only — GitHub has no analogue) |
+| `gh issue view` | Read bug issue details (GitHub) |
+| `gh issue comment` | Post fix comment to issue (GitHub) |
+| `/etk:prepare-pr` | Author the standardized MR/PR description + open it (Phase 5) |
+| `glab mr view` / `gh pr view` | View MR/PR details |
 | Glob, Grep, Read | Search and read codebase |
 | Edit, Write | Apply code fixes |
 | Bash | Run tests, git operations |
@@ -250,6 +309,7 @@ Present a summary to the user:
 
 | Command | When to use |
 |---------|-------------|
-| `/fix-bug PROJ-123` | Investigate and fix a bug (this command) |
-| `/review-mr 567` | Review the MR created by fix-bug |
+| `/fix-bug PROJ-123` | Investigate and fix a bug from a Jira ticket (this command) |
+| `/fix-bug 71` | Investigate and fix a bug from a GitHub issue (this command) |
+| `/review-mr 567` | Review the MR/PR created by fix-bug |
 | `/etk:atlassian-integration` | Direct Jira/Confluence interaction |
