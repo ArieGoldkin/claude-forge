@@ -2,6 +2,53 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.18.0] - 2026-07-31 — `/etk:fix-bug` reports to the tracker it read from
+
+Closes #71, the remainder of #69. Release 2.16.0 (PR #70) shipped the GitHub **read** path and its
+own body said so — but it also carried `Closes #69`, so the pinned remainder closed with it. This
+completes the round trip.
+
+### Added
+
+- **GitHub write-back.** After opening the PR, `/etk:fix-bug` now comments on the GitHub issue it
+  read from via `gh issue comment`, mirroring the Jira branch's `addCommentToJiraIssue`. If `gh` is
+  unavailable or unauthenticated it says so and skips, rather than reporting success for a comment
+  that was never posted.
+
+### Fixed
+
+- **The command advertised only Jira, so the read path shipped in 2.16.0 was undiscoverable.** The
+  `description` frontmatter read *"Investigate and fix a bug from a Jira ticket"*; a user holding a
+  GitHub issue had no reason to invoke it. The intro, the usage block (which showed no GitHub
+  example at all) and the related-commands table had the same gap. **A description that
+  misdescribes the tool is worse than a missing feature** — the capability existed and could not be
+  found.
+- **Investigation-step vocabulary.** Step 3's *"If the ticket has error messages"* now reads *"the
+  bug report"*; after 2.16.0 the model could have read a GitHub **issue** and still be told to look
+  at "the ticket".
+- **Templating renders per tracker.** The commit trailer, `prepare-pr --closes`, and the Phase-6
+  summary took a bare `<ticket>` that only ever rendered Jira-shaped. Now `<ref>` is `PROJ-123` for
+  Jira and `#71` for GitHub, and the brackets are omitted entirely for free-text bugs instead of
+  emitting an empty `[]`.
+- **Tool table** now lists the GitHub verbs alongside the Atlassian MCP ones, and marks the Jira
+  transition as having no GitHub analogue.
+
+### Deliberately NOT added — both are decisions, not omissions
+
+- **No GitHub status transition.** GitHub has no status field. An `in-progress` label errors unless
+  it already exists in the repo, and an assignee signals ownership rather than progress. The PR
+  that references the issue already appears on its timeline, so **the PR is the in-progress
+  signal**.
+- **No explicit `gh issue close`.** The `Closes #<n>` keyword closes the issue when the fix
+  **lands**; closing here would fire when the PR **opens**, which is a different event. ⚠ This is
+  the precise failure that created #71 — a keyword that closed more than its PR delivered. The
+  lesson was to check what a PR actually completes before writing the keyword, **not** to add a
+  second closing path that would race the first. Both reasons are recorded in the command body so
+  they are not "fixed" later by someone reading the absence as an oversight.
+
+Command and skill prose only. No hook, agent, or TypeScript source touched; skill/agent/command
+counts unchanged at 27/5/21.
+
 ## [2.17.2] - 2026-07-31 — a fleet's sidebar state is teardown too
 
 ### Fixed
