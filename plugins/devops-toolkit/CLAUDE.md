@@ -1,7 +1,7 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.12
+> **Version**: 2.0.13
 > **Last Updated**: 2026-06-26
 
 ## Overview
@@ -112,8 +112,14 @@ guardWithinProject(input)      // Skip if outside project directory
 guardSkipInternal(input)       // Skip node_modules, .git, __pycache__, .venv
 ```
 
-**Log files**: `~/.claude/logs/devops/hooks.log` (200KB rotation)
-**Audit file**: `~/.claude/logs/devops/permission-feedback.log` (100KB rotation)
+**Log files**: `$CLAUDE_PLUGIN_DATA/logs/hooks.log` (200KB rotation)
+**Audit file**: `$CLAUDE_PLUGIN_DATA/logs/permission-feedback.log` (100KB rotation)
+
+⚠ `~/.claude/logs/devops/` is the **legacy fallback**, used only when `CLAUDE_PLUGIN_DATA` is
+unset — which in practice means the **test suite**. Its newest entries read like live activity
+and are not. Resolve the real path with
+`find ~/.claude -name permission-feedback.log -newermt "-1 hour"` before treating an absence of
+log lines as evidence. See ctk's CLAUDE.md → "Log locations" for the full note.
 
 ## Development
 

@@ -1,7 +1,7 @@
 # Continuity Toolkit - Claude Code Plugin
 
 > **Plugin Name**: ctk (formerly `continuity-toolkit`, renamed in v2.0.0)
-> **Version**: 2.15.0
+> **Version**: 2.15.1
 > **Last Updated**: 2026-07-19
 
 ## Overview
@@ -200,5 +200,29 @@ cd hooks && npm run typecheck # Type check
 cd hooks && npm test         # Run tests
 ```
 
-**Log files**: `~/.claude/logs/continuity/hooks.log`
-**Audit file**: `~/.claude/logs/continuity/permission-feedback.log`
+### Log locations — read the plugin-data path, not the legacy one
+
+`logging.ts` prefers **`CLAUDE_PLUGIN_DATA`** (set by CC for live hooks, and persistent across
+plugin updates), falling back to `~/.claude/logs/<plugin-name>/` only when that variable is
+**unset**. The two paths therefore hold different populations:
+
+| Path | Written by | Use for |
+|---|---|---|
+| `$CLAUDE_PLUGIN_DATA/logs/` — in practice `~/.claude/plugins/data/ctk-claude-forge/logs/` | **live hooks** | anything real |
+| `~/.claude/logs/continuity/` | **the test suite** (no `CLAUDE_PLUGIN_DATA` in env) and pre-`CLAUDE_PLUGIN_DATA` installs | history only |
+
+- **Hook log**: `$CLAUDE_PLUGIN_DATA/logs/hooks.log`
+- **Permission audit**: `$CLAUDE_PLUGIN_DATA/logs/permission-feedback.log`
+
+⚠ **The legacy path looks alive and is not.** Its newest entries are typically a test-suite run
+(`session=unknown`, fixture commands like `echo hi`, `rm -rf /`), which reads as "the last time a
+hook ran". On 2026-07-31 that cost a false "hooks are not logging" conclusion and invalidated a
+null-result probe. Resolve the real directory before treating log absence as evidence:
+
+```bash
+find ~/.claude -name permission-feedback.log -newermt "-1 hour"
+```
+
+The permission log records `session=`, `agent_id=` and `agent_type=`, so a denial can be
+attributed to the exact subagent that hit it — the instrument for measuring whether denials cost
+an agent its report (#65 / #84).

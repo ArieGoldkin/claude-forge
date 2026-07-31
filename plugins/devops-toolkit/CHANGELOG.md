@@ -2,6 +2,16 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.13] - 2026-07-31 — document the real hook-log location
+
+### Fixed
+
+- **`CLAUDE.md` documented the legacy log path.** `logging.ts` prefers `CLAUDE_PLUGIN_DATA`
+  (set by CC for live hooks), so real logs go to `$CLAUDE_PLUGIN_DATA/logs/`;
+  `~/.claude/logs/devops/` is the fallback used only when that variable is unset — in practice
+  the test suite. The legacy directory looks alive and is not, which produced a confident wrong
+  conclusion about hooks not logging on 2026-07-31. Full note in ctk's CLAUDE.md.
+
 ## [2.0.12] - 2026-07-30 — correct declared counts and remove five phantom skills from the README
 
 ### Fixed

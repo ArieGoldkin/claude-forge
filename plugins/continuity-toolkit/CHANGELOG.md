@@ -2,6 +2,29 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.15.1] - 2026-07-31 — document the real hook-log location
+
+### Fixed
+
+- **`CLAUDE.md` documented the legacy log path**, which is written only by the test suite.
+  `logging.ts` prefers **`CLAUDE_PLUGIN_DATA`** (set by CC for live hooks), so real logs go to
+  `$CLAUDE_PLUGIN_DATA/logs/` — in practice `~/.claude/plugins/data/ctk-claude-forge/logs/`.
+  `~/.claude/logs/continuity/` is the fallback used only when that variable is **unset**.
+
+  This is actively misleading rather than merely stale: the legacy directory *looks* alive,
+  because its newest entries come from a test-suite run (`session=unknown`, fixture commands
+  like `echo hi` and `rm -rf /`) that reads as "the last time a hook ran". On 2026-07-31 it
+  produced a confident, wrong "hooks are not logging at all" conclusion and invalidated a
+  null-result probe — while the live log was being written every few seconds the whole time.
+
+  The doc now gives both paths, says which population each holds, and includes the one-line
+  resolution command (`find ~/.claude -name permission-feedback.log -newermt "-1 hour"`).
+
+- Noted that the permission log carries `session=`, `agent_id=` and `agent_type=`, so a denial
+  can be attributed to the exact subagent that hit it. That makes it the instrument for
+  measuring whether a denial costs an agent its report (#65 / #84) — unused until now only
+  because it was being read from the wrong directory.
+
 ## [2.15.0] - 2026-07-31 — security-blocker stops denying protected literals in inert positions (#65)
 
 ### Fixed
