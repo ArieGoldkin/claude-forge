@@ -106,6 +106,15 @@ def _is_series(matches):
 
     Distinctness still matters: two counts of the same kind on one line is
     prose, not an inventory.
+
+    COUPLED TO len(KINDS) ON PURPOSE, and CI-guarded. If `hook` is ever added to
+    KINDS -- which this module's header names as a live follow-up with a
+    demonstrated cost -- SERIES silently becomes "all FOUR kinds", and the two
+    plugin docs that carry no hook count (atk, ftk) drop out of the gate. That
+    is not silent: `bad-counts-doc-series` uses a three-kind, hook-free line, so
+    it flips to PASS and its `!`-prefixed CI step goes red. Verified by
+    simulating the arity change, not assumed. Whoever grows KINDS must decide
+    here whether SERIES means "all kinds" or "the original three".
     """
     return len({kind for kind, _, _, _ in matches}) == len(KINDS)
 

@@ -176,15 +176,21 @@ jobs:
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good
       # POSITIVE fixtures. A count gate's dangerous failure is the FALSE POSITIVE:
       # it red-CIs a correct document, and the cheapest way to make it green again
-      # is to weaken the gate. These two pin the two ways that happened.
+      # is to weaken the gate. Each of the three below pins one way that happened.
+      # All three carry CORRECT declarations (2 skills / 1 agent / 3 commands) and
+      # must pass; what differs is the non-declaration noise each one adds.
       - name: good-prose fixture must pass (ordinary prose is not a declaration)
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good-prose
       - name: good-strays fixture must pass (a Finder .DS_Store is not a command)
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good-strays
       # #94: a release note enumerating TWO kinds is still prose. It describes a
       # PAST release, so its counts legitimately differ from current totals --
-      # the same reason CHANGELOG.md is excluded outright. Every number in this
-      # fixture is deliberately wrong; it must still pass.
+      # the same reason CHANGELOG.md is excluded outright.
+      # Read this carefully before "fixing" the fixture: its DECLARATIONS are all
+      # correct, and only the four numbers inside its Release Notes prose (9/7/8/6)
+      # are wrong. It passes because those four are correctly IGNORED, not despite
+      # them. Making them agree with the real counts would destroy the test -- it
+      # would then pass whether or not the SERIES rule works at all.
       - name: good-prose-series fixture must pass (two-kind release-note prose)
         run: bash scripts/validate-versions.sh tests/fixtures/versions/good-prose-series
       - name: bad-marketplace fixture must fail
