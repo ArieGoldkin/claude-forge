@@ -2509,6 +2509,309 @@ function matchDangerousBash(command) {
   return null;
 }
 
+// src/lib/shell-projection.ts
+var ECHO_LIKE = /* @__PURE__ */ new Set(["echo", "printf"]);
+var GREP_LIKE = /* @__PURE__ */ new Set(["grep", "egrep", "fgrep", "rg", "ag"]);
+var GREP_PATTERN_FLAGS = /* @__PURE__ */ new Set(["-e", "--regexp"]);
+function blank(chars, start, end) {
+  for (let i = start; i < end && i < chars.length; i++) {
+    chars[i] = " ";
+  }
+}
+function commandKey(token) {
+  return token.includes("/") ? "" : token;
+}
+var HEREDOC_DATA_CONSUMERS = /* @__PURE__ */ new Set(["cat", "tee"]);
+function blankQuotedHeredocs(command) {
+  const chars = command.split("");
+  const lines = [];
+  let pos = 0;
+  for (const text of command.split("\n")) {
+    lines.push({ start: pos, end: pos + text.length, text });
+    pos += text.length + 1;
+  }
+  const lineIndexOf = (p) => {
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const l = lines[i2];
+      if (l && p >= l.start && p <= l.end) return i2;
+    }
+    return -1;
+  };
+  const opRe = /^<<-?[ \t]*(?:'([^']+)'|"([^"]+)")/;
+  let single = false;
+  let double = false;
+  let i = 0;
+  while (i < command.length) {
+    const c = command[i];
+    if (c === "\\" && !single) {
+      i += 2;
+      continue;
+    }
+    if (c === "'" && !double) {
+      single = !single;
+      i++;
+      continue;
+    }
+    if (c === '"' && !single) {
+      double = !double;
+      i++;
+      continue;
+    }
+    if (single || double || c !== "<" || command[i + 1] !== "<") {
+      i++;
+      continue;
+    }
+    const m = opRe.exec(command.slice(i));
+    if (!m) {
+      i++;
+      continue;
+    }
+    const delim = m[1] ?? m[2];
+    const li = lineIndexOf(i);
+    if (!delim || li === -1) {
+      i++;
+      continue;
+    }
+    let termLine = lines.length;
+    for (let j = li + 1; j < lines.length; j++) {
+      if (lines[j]?.text.trim() === delim) {
+        termLine = j;
+        break;
+      }
+    }
+    const firstToken = (lines[li]?.text ?? "").trim().split(/\s+/)[0] ?? "";
+    if (HEREDOC_DATA_CONSUMERS.has(commandKey(firstToken))) {
+      for (let j = li + 1; j < termLine && j < lines.length; j++) {
+        const line = lines[j];
+        if (line) blank(chars, line.start, line.end);
+      }
+    }
+    const term = lines[termLine];
+    i = Math.max(i + m[0].length, term ? term.end : command.length);
+  }
+  return chars.join("");
+}
+function splitSegments(command) {
+  const segments = [];
+  let segStart = 0;
+  let single = false;
+  let double = false;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (c === "\\" && !single) {
+      i++;
+      continue;
+    }
+    if (c === "'" && !double) {
+      single = !single;
+      continue;
+    }
+    if (c === '"' && !single) {
+      double = !double;
+      continue;
+    }
+    if (single || double) continue;
+    if (c === "|") {
+      const isOr = command[i + 1] === "|";
+      segments.push({ start: segStart, end: i, pipedOut: !isOr });
+      if (isOr) i++;
+      segStart = i + 1;
+      continue;
+    }
+    if (c === "&") {
+      const isAnd = command[i + 1] === "&";
+      segments.push({ start: segStart, end: i, pipedOut: false });
+      if (isAnd) i++;
+      segStart = i + 1;
+      continue;
+    }
+    if (c === ";" || c === "\n") {
+      segments.push({ start: segStart, end: i, pipedOut: false });
+      segStart = i + 1;
+    }
+  }
+  if (single || double) return null;
+  segments.push({ start: segStart, end: command.length, pipedOut: false });
+  return segments;
+}
+function hasRealPipe(command) {
+  const segs = splitSegments(command);
+  return segs === null ? true : segs.some((s) => s.pipedOut);
+}
+function hasGroupedPipe(command) {
+  if (!hasRealPipe(command)) return false;
+  let single = false;
+  let double = false;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (c === "\\" && !single) {
+      i++;
+      continue;
+    }
+    if (c === "'" && !double) single = !single;
+    else if (c === '"' && !single) double = !double;
+    else if (!single && !double && (c === "{" || c === "}" || c === "(" || c === ")")) return true;
+  }
+  return false;
+}
+function scanSegment(command, start, end) {
+  const words = [];
+  let single = false;
+  let double = false;
+  let hasSubstitution = false;
+  let hasRedirect = false;
+  let commentStart = -1;
+  let wordStart = -1;
+  let wordText = "";
+  const flush = (i) => {
+    if (wordStart !== -1) {
+      words.push({ text: wordText, start: wordStart, end: i });
+      wordStart = -1;
+      wordText = "";
+    }
+  };
+  for (let i = start; i < end; i++) {
+    const c = command[i];
+    if (c === void 0) break;
+    if (c === "\\" && !single) {
+      if (wordStart === -1) wordStart = i;
+      wordText += command[i + 1] ?? "";
+      i++;
+      continue;
+    }
+    if (c === "'" && !double) {
+      if (wordStart === -1) wordStart = i;
+      single = !single;
+      continue;
+    }
+    if (c === '"' && !single) {
+      if (wordStart === -1) wordStart = i;
+      double = !double;
+      continue;
+    }
+    if (!single) {
+      if (c === "$" && (command[i + 1] === "(" || command[i + 1] === "{")) hasSubstitution = true;
+      if (c === "`") hasSubstitution = true;
+    }
+    if (!single && !double) {
+      if (c === ">" || c === "<") {
+        hasRedirect = true;
+        flush(i);
+        continue;
+      }
+      if (c === "#" && wordStart === -1) {
+        commentStart = i;
+        break;
+      }
+      if (c === " " || c === "	") {
+        flush(i);
+        continue;
+      }
+    }
+    if (wordStart === -1) wordStart = i;
+    wordText += c;
+  }
+  flush(end);
+  return { words, hasSubstitution, hasRedirect, commentStart, balanced: !single && !double };
+}
+function applyCase(chars, words) {
+  const inIdx = words.findIndex((w) => w.text === "in");
+  if (inIdx === -1) return;
+  for (let i = inIdx + 1; i < words.length; i++) {
+    const w = words[i];
+    if (!w) return;
+    blank(chars, w.start, w.end);
+    if (w.text.includes(")")) return;
+  }
+}
+function hasPatternFileFlag(words) {
+  for (let i = 1; i < words.length; i++) {
+    const t = words[i]?.text ?? "";
+    if (t === "--file" || t.startsWith("--file=")) return true;
+    if (/^-[a-zA-Z]+$/.test(t) && t.includes("f")) return true;
+  }
+  return false;
+}
+function applyGrepLike(chars, words) {
+  if (hasPatternFileFlag(words)) return;
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    if (!w) return;
+    if (GREP_PATTERN_FLAGS.has(w.text)) {
+      const next = words[i + 1];
+      if (next) blank(chars, next.start, next.end);
+      return;
+    }
+    if (w.text.startsWith("--regexp=")) {
+      blank(chars, w.start + "--regexp=".length, w.end);
+      return;
+    }
+    if (!w.text.startsWith("-")) {
+      blank(chars, w.start, w.end);
+      return;
+    }
+  }
+}
+function applyGitCommit(chars, words) {
+  if (words[1]?.text !== "commit") return;
+  for (let i = 2; i < words.length; i++) {
+    const w = words[i];
+    if (!w) return;
+    if (w.text === "-m" || w.text === "--message") {
+      const next = words[i + 1];
+      if (next) blank(chars, next.start, next.end);
+      return;
+    }
+    if (w.text.startsWith("--message=")) {
+      blank(chars, w.start + "--message=".length, w.end);
+      return;
+    }
+  }
+}
+function scannableProjection(command) {
+  try {
+    if (hasGroupedPipe(command)) return command;
+    const afterHeredoc = hasRealPipe(command) ? command : blankQuotedHeredocs(command);
+    const segments = splitSegments(afterHeredoc);
+    if (!segments) return command;
+    const chars = afterHeredoc.split("");
+    for (const seg of segments) {
+      if (seg.pipedOut) continue;
+      const scan = scanSegment(afterHeredoc, seg.start, seg.end);
+      if (!scan.balanced) continue;
+      if (scan.commentStart !== -1) {
+        blank(chars, scan.commentStart, seg.end);
+      }
+      if (scan.hasSubstitution || scan.hasRedirect) continue;
+      const words = scan.words;
+      const argv0 = words[0];
+      if (!argv0) continue;
+      const cmd = commandKey(argv0.text);
+      if (cmd === "case") {
+        applyCase(chars, words);
+        continue;
+      }
+      if (ECHO_LIKE.has(cmd)) {
+        for (let i = 1; i < words.length; i++) {
+          const w = words[i];
+          if (w) blank(chars, w.start, w.end);
+        }
+        continue;
+      }
+      if (GREP_LIKE.has(cmd)) {
+        applyGrepLike(chars, words);
+        continue;
+      }
+      if (cmd === "git") {
+        applyGitCommit(chars, words);
+      }
+    }
+    return chars.join("");
+  } catch {
+    return command;
+  }
+}
+
 // src/pretool/security-blocker.ts
 var DENIAL_GUIDANCE = "\n\nThis check matches the text of the command, not the resource it resolves to. To inspect a file, use the Read, Grep or Glob tools \u2014 those are checked by resolved path instead.\nThis denial is not fatal and does not end your task. Continue, and still write any report or checkpoint you owe.";
 var HOOK_NAME6 = "pre-tool-use-security";
@@ -2685,12 +2988,13 @@ function unwrapExecWrappers(command) {
   return current;
 }
 function matchesBashSensitivePattern(command) {
+  const scannable = scannableProjection(command);
   for (const pattern of BASH_SECRET_PATTERNS) {
-    if (pattern.test(command)) {
+    if (pattern.test(scannable)) {
       return { matched: true, pattern: pattern.source };
     }
   }
-  return matchesSystemDirMutation(command);
+  return matchesSystemDirMutation(scannable);
 }
 function validateBashCommand(command, sessionId, agentContext) {
   const normalized = normalizeHomeRefs(normalizeBashEscapes(command));
