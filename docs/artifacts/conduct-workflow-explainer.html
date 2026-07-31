@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conduct · the execution-topology router</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root{
+  --pg-bg:hsl(232 26% 7%);
+  --pg-ink:hsl(220 18% 93%);
+  --pg-muted:hsl(220 14% 64%);
+  --pg-faint:hsl(220 12% 46%);
+  --pg-glass:hsl(0 0% 100% / .06);
+  --pg-glass-edge:hsl(0 0% 100% / .18);
+  --pg-accent:hsl(248 84% 68%);
+  --pg-accent-deep:hsl(248 70% 46%);
+  --pg-warm:hsl(38 95% 60%);
+  --pg-teal:hsl(172 66% 50%);
+  --pg-red:hsl(2 72% 62%);
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:48px; --s7:96px;
+  --r-sm:9px; --r-md:16px; --r-lg:24px;
+  --ease:cubic-bezier(.2,.8,.25,1);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--pg-bg); color:var(--pg-ink);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background-image:
+    radial-gradient(60rem 40rem at 12% -8%, hsl(248 84% 68% / .16), transparent 60%),
+    radial-gradient(50rem 34rem at 92% 4%, hsl(262 70% 60% / .12), transparent 62%),
+    radial-gradient(48rem 30rem at 50% 108%, hsl(232 70% 52% / .10), transparent 60%);
+  background-attachment:fixed;
+}
+code,pre,.mono,.num{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace}
+.num{font-variant-numeric:tabular-nums}
+.wrap{display:grid; grid-template-columns:210px minmax(0,1fr); gap:var(--s6); max-width:1240px; margin:0 auto; padding:var(--s6) var(--s5) var(--s7)}
+/* ── nav ─────────────────────────────────────────────── */
+nav{position:sticky; top:var(--s5); align-self:start; font-size:13px}
+nav .navttl{color:var(--pg-faint); text-transform:uppercase; letter-spacing:.09em; font-size:10.5px; margin-bottom:var(--s3)}
+nav a{display:block; color:var(--pg-faint); text-decoration:none; padding:6px var(--s3); border-inline-start:2px solid transparent; transition:color .1s var(--ease)}
+nav a:hover{color:var(--pg-muted)}
+nav a.active{color:var(--pg-ink); border-inline-start-color:var(--pg-accent); background:hsl(248 84% 68% / .07)}
+/* ── header ──────────────────────────────────────────── */
+.pills{display:flex; flex-wrap:wrap; gap:var(--s2); margin-bottom:var(--s4)}
+.pill{font-size:11.5px; padding:3px 10px; border-radius:999px; background:var(--pg-glass); border:1px solid var(--pg-glass-edge); color:var(--pg-muted)}
+.pill.on{color:var(--pg-teal); border-color:hsl(172 66% 50% / .4); background:hsl(172 66% 50% / .1)}
+h1{font-size:38px; line-height:1.12; margin:0 0 var(--s3); font-weight:700; letter-spacing:-.02em;
+   background:linear-gradient(100deg,var(--pg-ink),hsl(248 84% 78%)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
+.lede{color:var(--pg-muted); font-size:16.5px; max-width:66ch; margin:0 0 var(--s5)}
+.callout{border-inline-start:3px solid var(--pg-teal); background:hsl(172 66% 50% / .07); padding:var(--s4) var(--s5); border-radius:0 var(--r-md) var(--r-md) 0; margin:var(--s5) 0}
+.callout.warn{border-inline-start-color:var(--pg-warm); background:hsl(38 95% 60% / .07)}
+.callout.red{border-inline-start-color:var(--pg-red); background:hsl(2 72% 62% / .07)}
+.callout b{color:var(--pg-ink)}
+.callout p{margin:0; color:var(--pg-muted)}
+.callout p + p{margin-top:var(--s3)}
+/* ── kpi ─────────────────────────────────────────────── */
+.kpi{display:grid; grid-template-columns:repeat(auto-fit,minmax(128px,1fr)); gap:var(--s3); margin:var(--s5) 0 var(--s6)}
+.k{background:var(--pg-glass); border:1px solid var(--pg-glass-edge); border-radius:var(--r-md); padding:var(--s4)}
+.k .v{font-size:24px; font-weight:700; letter-spacing:-.02em}
+.k .l{font-size:11px; color:var(--pg-faint); margin-top:2px}
+/* ── sections ────────────────────────────────────────── */
+section{margin-bottom:var(--s7); scroll-margin-top:var(--s5)}
+h2{font-size:23px; margin:0 0 var(--s4); font-weight:650; letter-spacing:-.015em; display:flex; align-items:center; gap:var(--s3)}
+h2 .n{display:grid; place-items:center; width:26px; height:26px; border-radius:var(--r-sm); background:var(--pg-accent-deep); color:#fff; font-size:13px; font-weight:700; flex:none}
+h3{font-size:15.5px; margin:var(--s5) 0 var(--s3); font-weight:640; color:var(--pg-ink)}
+p{color:var(--pg-muted); max-width:74ch}
+.legend{font-size:12px; color:var(--pg-faint); margin-top:var(--s2)}
+/* ── glass card ──────────────────────────────────────── */
+.card{background:var(--pg-glass); border:1px solid var(--pg-glass-edge); border-radius:var(--r-md); padding:var(--s5);
+  -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px);
+  box-shadow:inset 0 1px 0 hsl(0 0% 100% / .12), 0 20px 60px -22px hsl(232 40% 3% / .7), 0 4px 12px -6px hsl(232 40% 3% / .5)}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:var(--s4)}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:var(--s3)}
+/* ── vs split ────────────────────────────────────────── */
+.vs{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:var(--s4)}
+.vs > div{border-radius:var(--r-md); padding:var(--s4) var(--s5); border:1px solid}
+.vs .a{background:hsl(248 84% 68% / .08); border-color:hsl(248 84% 68% / .3)}
+.vs .b{background:hsl(172 66% 50% / .07); border-color:hsl(172 66% 50% / .3)}
+.vs h4{margin:0 0 var(--s2); font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--pg-faint)}
+.vs .big{font-size:17px; font-weight:640; margin-bottom:var(--s2)}
+.vs p{font-size:13.5px; margin:0}
+/* ── mermaid ─────────────────────────────────────────── */
+.mermaid{background:hsl(232 30% 9% / .6); border:1px solid var(--pg-glass-edge); border-radius:var(--r-md); padding:var(--s5); margin:var(--s4) 0; overflow-x:auto; text-align:center}
+/* ── router widget ───────────────────────────────────── */
+.router{display:grid; grid-template-columns:minmax(0,300px) minmax(0,1fr); gap:var(--s5); align-items:start}
+.router > *{min-width:0}
+@media(max-width:900px){.router{grid-template-columns:1fr}}
+.axis{margin-bottom:var(--s4)}
+.axis .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--pg-faint); margin-bottom:6px; display:flex; justify-content:space-between}
+.opts{display:flex; flex-wrap:wrap; gap:6px}
+.opt{font-size:12.5px; padding:5px 11px; border-radius:var(--r-sm); background:hsl(0 0% 100% / .04); border:1px solid var(--pg-glass-edge); color:var(--pg-muted); cursor:pointer; user-select:none; transition:background .1s var(--ease),color .1s var(--ease)}
+.opt:hover{color:var(--pg-ink)}
+.opt.sel{background:var(--pg-accent-deep); border-color:var(--pg-accent); color:#fff; font-weight:600}
+.opt:focus-visible{outline:2px solid var(--pg-accent); outline-offset:2px}
+.verdict{border-radius:var(--r-md); padding:var(--s5); border:1px solid hsl(248 84% 68% / .35); background:hsl(248 84% 68% / .08)}
+.verdict .row{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--pg-faint)}
+.verdict .pat{font-size:22px; font-weight:700; margin:var(--s1) 0 var(--s2); letter-spacing:-.015em}
+.verdict .why{font-size:13.5px; color:var(--pg-muted); margin:0 0 var(--s4)}
+.meta{display:flex; gap:var(--s4); flex-wrap:wrap; margin-bottom:var(--s4)}
+.meta div{font-size:12px; color:var(--pg-faint)}
+.meta b{display:block; font-size:15px; color:var(--pg-ink); font-weight:640}
+.rung{display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px}
+.L0{background:hsl(172 66% 50% / .16); color:var(--pg-teal)}
+.L1{background:hsl(200 80% 60% / .16); color:hsl(200 80% 68%)}
+.L2{background:hsl(38 95% 60% / .16); color:var(--pg-warm)}
+.L3{background:hsl(2 72% 62% / .16); color:var(--pg-red)}
+/* ── emit bar ────────────────────────────────────────── */
+.emit{margin-top:var(--s4); border-radius:var(--r-md); overflow:hidden; border:1px solid var(--pg-glass-edge)}
+.emit .bar{display:flex; justify-content:space-between; align-items:center; padding:var(--s2) var(--s3); background:hsl(0 0% 100% / .05); font-size:11.5px; color:var(--pg-faint)}
+.emit pre{margin:0; padding:var(--s4); background:hsl(232 30% 9% / .8); font-size:12.5px; line-height:1.55; color:var(--pg-ink); white-space:pre-wrap; overflow-wrap:anywhere; max-width:100%}
+button{font:inherit; font-size:12px; padding:5px 12px; border-radius:var(--r-sm); border:1px solid var(--pg-glass-edge); background:var(--pg-accent-deep); color:#fff; cursor:pointer; font-weight:600; transition:filter .1s var(--ease)}
+button:hover{filter:brightness(1.14)}
+button:focus-visible{outline:2px solid var(--pg-accent); outline-offset:2px}
+/* ── table ───────────────────────────────────────────── */
+table{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:var(--s3)}
+th,td{text-align:start; padding:9px var(--s3); border-bottom:1px solid hsl(0 0% 100% / .08)}
+th{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--pg-faint); cursor:pointer; user-select:none; white-space:nowrap}
+th:hover{color:var(--pg-ink)}
+th[aria-sort]{color:var(--pg-accent)}
+td{color:var(--pg-muted)}
+td b{color:var(--pg-ink); font-weight:620}
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:var(--s2)}
+.chip{font-size:11.5px; padding:4px 10px; border-radius:999px; background:hsl(0 0% 100% / .04); border:1px solid var(--pg-glass-edge); color:var(--pg-muted); cursor:pointer}
+.chip.on{background:var(--pg-accent-deep); border-color:var(--pg-accent); color:#fff}
+/* ── qf ──────────────────────────────────────────────── */
+.qf{margin-bottom:var(--s4)}
+.qf h4{margin:0 0 var(--s2); font-size:14px; font-weight:620}
+.rec{font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; background:var(--pg-teal); color:hsl(232 40% 8%); padding:1px 5px; border-radius:3px; margin-inline-end:6px; font-weight:800}
+textarea{width:100%; min-height:66px; background:hsl(232 30% 9% / .8); color:var(--pg-ink); border:1px solid var(--pg-glass-edge); border-radius:var(--r-sm); padding:var(--s3); font:inherit; font-size:13px; resize:vertical}
+footer{border-top:1px solid hsl(0 0% 100% / .09); padding-top:var(--s4); color:var(--pg-faint); font-size:12.5px; max-width:80ch}
+footer a{color:var(--pg-muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media(max-width:900px){.wrap{grid-template-columns:1fr; gap:var(--s5)} nav{position:static; display:none}}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav aria-label="Sections">
+  <div class="navttl">Contents</div>
+  <a href="#two">1 · Two routers</a>
+  <a href="#ladder">2 · The ladder</a>
+  <a href="#axes">3 · Classify (live)</a>
+  <a href="#patterns">4 · The 7 patterns</a>
+  <a href="#fleet">5 · Fleet mechanics</a>
+  <a href="#gates">6 · The three gates</a>
+  <a href="#measured">7 · Measured</a>
+  <a href="#open">8 · Open questions</a>
+</nav>
+
+<main>
+  <div class="pills">
+    <span class="pill on">snapshot · etk 2.17.1</span>
+    <span class="pill">cmux 0.64.20</span>
+    <span class="pill">macOS only · optional</span>
+    <span class="pill">main @ 52b2342 · 2026-07-30</span>
+  </div>
+
+  <h1>Conduct — routing work to an execution shape</h1>
+  <p class="lede">
+    <code>/etk:auto-research</code> answers <b>which process</b> a goal needs.
+    <code>/etk:conduct</code> answers <b>what shape that process runs in</b> — including “none”.
+    They are siblings, not nested. This brief explains both, the ladder underneath them, and
+    the fleet mechanics that make a multi-lane run trustworthy.
+  </p>
+
+  <div class="callout">
+    <p><b>The core discipline: the lowest rung that does the job.</b> Escalation is a brake, not an
+    accelerator. Most work items route to the leftmost rungs, and a fleet must be <i>earned</i> by
+    classification — never assumed. Routing everything to a fleet is the fan-out-theater failure mode:
+    five agents producing one agent’s insight five times.</p>
+  </div>
+
+  <div class="kpi">
+    <div class="k"><div class="v num">7</div><div class="l">routing patterns</div></div>
+    <div class="k"><div class="v num">5</div><div class="l">classification axes</div></div>
+    <div class="k"><div class="v num">4</div><div class="l">ladder rungs L0–L3</div></div>
+    <div class="k"><div class="v num">~$0.57</div><div class="l">per lane, cold start</div></div>
+    <div class="k"><div class="v num">3</div><div class="l">fan-in gates</div></div>
+    <div class="k"><div class="v num">2</div><div class="l">blind retries, max</div></div>
+  </div>
+
+  <!-- 1 ─────────────────────────────────────────────── -->
+  <section id="two">
+    <h2><span class="n">1</span> Two routers, one pipeline</h2>
+    <p>The two skills compose without either calling the other. A goal enters auto-research and leaves
+    as a chosen skill; a work item enters conduct and leaves as a chosen topology. <code>/etk:develop</code>
+    is neither a router nor a topology — it is <i>the process that runs inside a lane</i>.</p>
+
+    <div class="vs">
+      <div class="a">
+        <h4>Router A</h4>
+        <div class="big"><code>/etk:auto-research</code></div>
+        <p><b>Input:</b> a natural-language goal.<br>
+        <b>Question:</b> which process?<br>
+        <b>Output:</b> a skill — <code>/develop</code>, <code>/fix-bug</code>, <code>/review-mr</code>,
+        <code>/cover</code>, <code>/brainstorming</code>, <code>/verify</code>…</p>
+      </div>
+      <div class="b">
+        <h4>Router B</h4>
+        <div class="big"><code>/etk:conduct</code></div>
+        <p><b>Input:</b> a work item or ticket.<br>
+        <b>Question:</b> what execution shape?<br>
+        <b>Output:</b> a topology — solo, one watched pane, sweep, broadcast, race, or a
+        develop-fleet. Possibly <i>no cmux at all</i>.</p>
+      </div>
+    </div>
+
+    <div class="mermaid">
+flowchart LR
+  G([goal]) --> AR{{"/etk:auto-research<br/>which process?"}}
+  AR --> S1["/etk:develop"]
+  AR --> S2["/etk:fix-bug"]
+  AR --> S3["/etk:review-mr"]
+
+  W([work item]) --> CD{{"/etk:conduct<br/>what shape?"}}
+  CD --> T0["L0 · solo<br/>no cmux"]
+  CD --> T1["L1 · one pane"]
+  CD --> T2["L2 · fleet / sweep / race"]
+
+  S1 -.runs inside a lane.-> T2
+  S2 -.runs inside a lane.-> T1
+
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3
+  classDef proc fill:#11203a,stroke:#388bfd,color:#cfe2ff
+  classDef topo fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  class AR,CD gate
+  class S1,S2,S3 proc
+  class T0,T1,T2 topo
+    </div>
+    <p class="legend">Legend — <span style="color:#a371f7">dashed violet</span>: a router / decision gate ·
+      <span style="color:#388bfd">blue</span>: a process (a skill) ·
+      <span style="color:#2dd4bf">teal</span>: an execution topology. Dotted edges show a process
+      <i>running inside</i> a topology — the only relationship between the two routers.</p>
+
+    <div class="callout warn">
+      <p><b>They must not be merged.</b> Conduct never re-routes a routed skill’s own sub-dispatch —
+      the pipeline’s Phase-4 fan-out is <code>/develop</code>’s decision, not conduct’s. And conduct
+      never invokes itself. A fleet that should run unwatched belongs to
+      <code>/auto-research --unattended</code> (propose-only), not to conduct, which has no
+      unattended mode by design.</p>
+    </div>
+  </section>
+
+  <!-- 2 ─────────────────────────────────────────────── -->
+  <section id="ladder">
+    <h2><span class="n">2</span> The dispatch ladder — and the carve-out</h2>
+    <p>Every agent in this repo excludes <code>Agent</code>/<code>Task</code> from its tools, so
+    <b>agents cannot spawn agents</b>. The main loop <i>is</i> the orchestrator. That constraint is
+    what makes a third tier look impossible — and the cmux carve-out is why it isn’t.</p>
+
+    <div class="mermaid">
+flowchart TB
+  subgraph ONE["WITHIN ONE SESSION — the ladder binds here"]
+    direction LR
+    L0["<b>L0 · Solo</b><br/>main loop does the work"]
+    L1["<b>L1 · One specialist</b><br/>independence, or noise isolation"]
+    L2["<b>L2 · Team fan-out</b><br/>3+ agents, one message"]
+    L3["<b>L3 · Workflow</b><br/>scripted, explicit opt-in"]
+    L0 --> L1 --> L2 --> L3
+  end
+
+  subgraph MANY["ACROSS SESSIONS — the cmux carve-out"]
+    direction LR
+    ORCH["<b>Orchestrator</b><br/>drives cmux"]
+    PA["<b>Pane A</b><br/>independent session"]
+    PB["<b>Pane B</b><br/>independent session"]
+    ORCH ==> PA
+    ORCH ==> PB
+    PA -.-> LA["its own L0–L2<br/>applies inside"]
+    PB -.-> LB["its own L0–L2<br/>applies inside"]
+  end
+
+  ONE -.->|"a 3rd tier comes from composition, never nesting"| MANY
+
+  classDef rung fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:2px
+  classDef proc fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3,stroke-width:2px
+  class L0,L1,L2 rung
+  class L3 gate
+  class ORCH,PA,PB,LA,LB proc
+  style ONE fill:#0c1322,stroke:#2b3a55,color:#8fa3bd
+  style MANY fill:#0b1a18,stroke:#1d4b45,color:#7fb8ae
+    </div>
+    <p class="legend">Legend — <span style="color:#388bfd">blue</span>: in-session rungs ·
+      <span style="color:#a371f7">dashed violet</span>: gated on explicit user opt-in ·
+      <span style="color:#2dd4bf">teal</span>: separate OS processes.</p>
+
+    <div class="callout">
+      <p><b>Cross-process carve-out.</b> The no-nested-agents rule binds <i>within one session</i>.
+      Each cmux pane runs an <b>independent Claude Code session</b> — its own main loop, with its own
+      L0–L2 rights. So “orchestrator → lead → worker” is <b>composition across sessions</b>, never
+      nested delegation. The fleet is how you reach a third tier without violating the ladder.</p>
+    </div>
+  </section>
+
+  <!-- 3 ─────────────────────────────────────────────── -->
+  <section id="axes">
+    <h2><span class="n">3</span> Classify — try the router</h2>
+    <p>Four axes come from the item’s text. The fifth — <b>Container</b> — is read from live cmux
+    state, never from the text. Set them below and watch the routing decision change.</p>
+
+    <div class="router card">
+      <div>
+        <div class="axis">
+          <div class="lbl"><span>Scope</span><span class="mono" id="a1v"></span></div>
+          <div class="opts" data-axis="scope" role="group" aria-label="Scope">
+            <span class="opt" data-v="single" tabindex="0">single task</span>
+            <span class="opt sel" data-v="divisible" tabindex="0">divisible job</span>
+            <span class="opt" data-v="ticket" tabindex="0">full ticket</span>
+          </div>
+        </div>
+        <div class="axis">
+          <div class="lbl"><span>Lanes</span></div>
+          <div class="opts" data-axis="lanes" role="group" aria-label="Lanes">
+            <span class="opt" data-v="1" tabindex="0">1</span>
+            <span class="opt sel" data-v="2-3" tabindex="0">2–3</span>
+            <span class="opt" data-v="4+" tabindex="0">4+</span>
+          </div>
+        </div>
+        <div class="axis">
+          <div class="lbl"><span>Visibility</span></div>
+          <div class="opts" data-axis="vis" role="group" aria-label="Visibility">
+            <span class="opt sel" data-v="watch" tabindex="0">watch</span>
+            <span class="opt" data-v="background" tabindex="0">background</span>
+          </div>
+        </div>
+        <div class="axis">
+          <div class="lbl"><span>Diversity</span></div>
+          <div class="opts" data-axis="div" role="group" aria-label="Diversity">
+            <span class="opt sel" data-v="none" tabindex="0">none</span>
+            <span class="opt" data-v="best-of-n" tabindex="0">best-of-N</span>
+            <span class="opt" data-v="race" tabindex="0">race</span>
+          </div>
+        </div>
+        <div class="axis">
+          <div class="lbl"><span>Container <span style="color:var(--pg-warm)">· from cmux, not text</span></span></div>
+          <div class="opts" data-axis="cont" role="group" aria-label="Container">
+            <span class="opt sel" data-v="nest" tabindex="0">nest-under-current</span>
+            <span class="opt" data-v="group" tabindex="0">join-group</span>
+            <span class="opt" data-v="new" tabindex="0">new-workspace</span>
+          </div>
+        </div>
+        <div class="axis">
+          <div class="lbl"><span>Ticket kind <span style="color:var(--pg-faint)">· tickets only</span></span></div>
+          <div class="opts" data-axis="kind" role="group" aria-label="Ticket kind">
+            <span class="opt sel" data-v="bug" tabindex="0">bug</span>
+            <span class="opt" data-v="feature" tabindex="0">feature</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="verdict">
+          <div class="row">First matching row wins</div>
+          <div class="pat" id="pat">—</div>
+          <p class="why" id="why"></p>
+          <div class="meta">
+            <div>rung<b><span class="rung" id="rung">—</span></b></div>
+            <div>sessions<b class="num" id="sess">—</b></div>
+            <div>you’ll see<b id="see">—</b></div>
+            <div>cost floor<b class="num" id="cost">—</b></div>
+          </div>
+          <div class="row">Without cmux</div>
+          <p class="why" id="degrade" style="margin-bottom:0"></p>
+        </div>
+        <div class="emit">
+          <div class="bar"><span>What conduct emits — paste back to Claude</span><button id="copy">Copy</button></div>
+          <pre id="out"></pre>
+        </div>
+        <p class="sr" aria-live="polite" id="live"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 ─────────────────────────────────────────────── -->
+  <section id="patterns">
+    <h2><span class="n">4</span> The seven patterns</h2>
+    <p>Evaluated top-down; the first matching row wins. Click a column to sort, or filter by rung.</p>
+    <div class="chips" id="chips">
+      <span class="chip on" data-f="all">all</span>
+      <span class="chip" data-f="L0">L0</span>
+      <span class="chip" data-f="L1">L1</span>
+      <span class="chip" data-f="L2">L2</span>
+      <span class="chip" data-f="cmux">needs cmux</span>
+    </div>
+    <div class="card" style="padding:var(--s3) var(--s5) var(--s4)">
+      <table>
+        <thead><tr>
+          <th data-k="row">#</th><th data-k="name">Pattern</th><th data-k="fires">Fires when</th>
+          <th data-k="rung">Rung</th><th data-k="sessions">Sessions</th><th data-k="cmux">cmux</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <p class="legend">“Sessions” counts cold-start agent sessions — each pays the full system prompt
+      and SessionStart injection before reading a single file. That is the arithmetic behind
+      “a fleet must be earned”.</p>
+  </section>
+
+  <!-- 5 ─────────────────────────────────────────────── -->
+  <section id="fleet">
+    <h2><span class="n">5</span> Fleet mechanics — spawn to verdict</h2>
+    <p>Every step below exists because a simpler version of it was measured returning a wrong answer.</p>
+
+    <div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant O as Orchestrator
+  participant C as cmux
+  participant L as Lane, own session
+  participant F as Result file
+
+  O->>C: new-pane --type terminal --focus false, stderr captured
+  C-->>O: OK surface 50, pane 8, workspace 3
+  Note over O,C: gate the parse on the OK prefix.<br/>errors go to stderr, so an ungated awk<br/>hands an error token to send as a ref
+  O->>C: rename-tab --surface REF, label at spawn
+  Note over O,C: never a bare rename-tab.<br/>it retitles the caller's own tab
+  O->>C: send, cd worktree then claude with the one-line task
+  O->>C: send-key enter
+  C->>L: dispatch
+  L->>F: writes findings, then a final STATUS line reading DONE
+  C-->>O: notification created, a turn ended
+  Note over O,F: the event says a turn ENDED,<br/>not that the work succeeded
+  O->>F: collect_lane, normalized last line
+  F-->>O: rc 0 done, rc 1 not done, rc 2 escalate
+  O->>O: payload gate, then slice-count assert
+    </div>
+    <p class="legend">Three channels, three jobs — <b>events</b> say something happened,
+      <b>files</b> say what the answer is, <b>screens</b> say whether anyone is home.</p>
+
+    <div class="grid2" style="margin-top:var(--s5)">
+      <div class="card">
+        <h3 style="margin-top:0">Why the verdict comes from a file</h3>
+        <p><code>read-screen</code> returns everything the surface shows — <b>including the dispatch
+        you just typed into it</b>. Any sentinel you ask for is already on screen before the lane has
+        done anything. Measured: a lane reported <code>DONE</code> the instant it was dispatched, and
+        kept reporting <code>DONE</code> while sitting in an API-error retry loop having produced
+        nothing. A file receives only what the lane wrote into it.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Why not a bare <code>tail -n1</code></h3>
+        <p>Agents end markdown files with a trailing blank line, bold the sentinel, or wrap it in a
+        fence. Across 13 file shapes, <code>tail -n1</code> produced <b>5 false negatives</b> — safe,
+        but it re-dispatches lanes that already succeeded at ~$0.57 each. <code>collect_lane</code>
+        normalizes the last <i>meaningful</i> line, and still rejects the echoed instruction, a
+        sentinel in a sentence, and a sentinel that is not last.</p>
+      </div>
+    </div>
+
+    <div class="callout red">
+      <p><b><code>$TEAM</code> must be absolute, and must not be a system temp dir.</b> Lanes are
+      dispatched with <code>cd &lt;worktree&gt;</code>, so a relative path resolves inside each lane’s
+      own worktree — every lane writes a file the orchestrator never finds. And ctk’s
+      <code>security-blocker</code> denies writes under the system temp roots, so a <code>mktemp -d</code>
+      lane is blocked on its very first write. Use a path inside the repo, under a directory the repo
+      already ignores.</p>
+    </div>
+  </section>
+
+  <!-- 6 ─────────────────────────────────────────────── -->
+  <section id="gates">
+    <h2><span class="n">6</span> The three gates — why one is not enough</h2>
+    <p><code>collect_lane</code> validates the <i>sentinel</i>. The reconcile reads a <i>different
+    field</i>. So a lane can be honestly <code>DONE</code> and still poison the aggregate.</p>
+
+    <div class="mermaid">
+flowchart LR
+  S([lane result file]) --> G1{"gate 1<br/>collect_lane<br/>did it finish?"}
+  G1 -- "rc=2 BLOCKED" --> E1[escalate · 0 blind retries]
+  G1 -- "rc=1 no verdict" --> E2[retry once · named cause]
+  G1 -- "rc=0" --> G2{"gate 2<br/>payload<br/>is the datum usable?"}
+  G2 -- "missing · non-numeric · restated" --> E3[drop · name the slice]
+  G2 -- ok --> G3{"gate 3<br/>slice census<br/>did EVERY slice arrive?"}
+  G3 -- "got &lt; expected" --> E4[["INCOMPLETE FAN-IN<br/>no total published"]]
+  G3 -- "got = expected" --> OK[["TOTAL published"]]
+
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3
+  classDef bad  fill:#2a1416,stroke:#f85149,color:#ffd7d5
+  classDef good fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  class G1,G2,G3 gate
+  class E1,E2,E3,E4 bad
+  class OK good
+    </div>
+    <p class="legend">Legend — <span style="color:#a371f7">dashed violet</span>: a gate ·
+      <span style="color:#f85149">red</span>: a refusal or drop ·
+      <span style="color:#2dd4bf">teal</span>: the only path that publishes a number.</p>
+
+    <div class="callout red">
+      <p><b>Measured: five distinct lane failures all produced <span class="num">30</span> where the
+      truth was <span class="num">50</span>.</b> A lane that omits the field, one that writes a
+      non-numeric value, and one that restates it twice all pass a sentinel-only gate.
+      <code>$((total + n))</code> treats an empty <i>and</i> a non-numeric <code>n</code> as
+      <code>0</code>, in bash and zsh alike — no shell accidentally saves you. Same value, no warning,
+      indistinguishable from a legitimate 30.</p>
+      <p><b>A partial fan-in must never publish an aggregate.</b> When a slice is missing the run is
+      <code>DONE_WITH_CONCERNS</code> at best, and the aggregate is <b>withheld, not caveated</b>.</p>
+    </div>
+
+    <h3>The give-up bound — a retry is only a retry if you changed something</h3>
+    <p>The census refuses a partial aggregate but never says how many times to try again.
+    Re-sending an identical dispatch into identical conditions re-bills the full context for the
+    same answer, so the bound is on <b>undiagnosed</b> rounds.</p>
+    <div class="card" style="padding:var(--s3) var(--s5) var(--s4)">
+      <table>
+        <thead><tr><th>Gate result</th><th>Blind retries</th><th>Instead</th></tr></thead>
+        <tbody>
+          <tr><td><b>rc=2</b> BLOCKED / NEEDS_CONTEXT</td><td><b style="color:var(--pg-red)">0, ever</b></td><td>The lane says it lacks something you did not give it. Answer the block and dispatch again <i>carrying the answer</i>, or escalate the text verbatim.</td></tr>
+          <tr><td><b>rc=1</b> no file / no verdict</td><td><b>1</b>, named cause</td><td>Diagnose with <code>--scrollback</code> first: a bounded no-scrollback read once reported a <i>working</i> lane as dead.</td></tr>
+          <tr><td>payload gate</td><td><b>1</b>, quotable</td><td>The file is in hand, so the correction is exact — quote the lane its own output.</td></tr>
+          <tr><td>platform (classifier block, 529, retry loop)</td><td><b style="color:var(--pg-red)">0 — wait</b></td><td>Not in your prompt. One outage-bound lane measured <b>$8.43 in a single round</b>, ~8× its peers. <b>An outage is a stop condition, not a retry condition.</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="legend">A round cap is not a cost cap — one round is not a bounded cost. Check both the
+      round counter and the spend before granting another; ≳3× the healthy-lane median is
+      environmental, not promptable.</p>
+  </section>
+
+  <!-- 7 ─────────────────────────────────────────────── -->
+  <section id="measured">
+    <h2><span class="n">7</span> Measured, not assumed</h2>
+    <p>Conduct’s first fleet in this repo, 2026-07-30 — a 3-lane sweep counting <code>SKILL.md</code>
+    files over 150 lines. Ground truth was fixed <i>before</i> dispatch and required to be all-non-zero
+    and all-distinct, so neither a stalled lane returning 0 nor a guess could land on it.</p>
+
+    <div class="vs">
+      <div class="a">
+        <h4>My control said</h4>
+        <div class="big num">34</div>
+        <p>15 · 9 · 10 — computed with <code>os.walk</code>, which <b>does not follow symlinks</b>,
+        silently skipping every skill linked in from <code>shared/skills/</code>.</p>
+      </div>
+      <div class="b">
+        <h4>The fleet published</h4>
+        <div class="big num">50</div>
+        <p>19 · 20 · 11 — each lane used <code>find -L … -exec wc -l</code> and recorded its method
+        and a full per-file table. <b>Correct.</b></p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <p><b>The ground-truth control is part of the system under test.</b> The fleet disagreed with my
+      reference and the fleet was right. A control gets <i>less</i> scrutiny precisely because it is
+      the trusted side. When a result disagrees with your control, re-derive the control by a
+      different mechanism before writing a word about the system being wrong.</p>
+      <p>The suspicion that the lanes had copied their answers from a ported review document was
+      raised and then <b>actually tested</b>: no lane cites it, each records its own method, a third
+      independent method reproduced the figures, and the source doc’s slice covered a different
+      plugin set yet matched anyway. Computed, not copied.</p>
+    </div>
+
+    <div class="grid3" style="margin-top:var(--s4)">
+      <div class="card"><div class="k" style="background:none;border:none;padding:0"><div class="v num">3/3</div><div class="l">lanes collected</div></div></div>
+      <div class="card"><div class="k" style="background:none;border:none;padding:0"><div class="v num">$1.71</div><div class="l">quoted &amp; approved at the gate</div></div></div>
+      <div class="card"><div class="k" style="background:none;border:none;padding:0"><div class="v num">0</div><div class="l">panes closed that I didn’t create</div></div></div>
+    </div>
+  </section>
+
+  <!-- 8 ─────────────────────────────────────────────── -->
+  <section id="open">
+    <h2><span class="n">8</span> Open questions</h2>
+    <p>Answer inline; the reply assembles below.</p>
+
+    <div class="qf" data-q="Which undriven fleet path to exercise next?">
+      <h4>Q1 · Which fleet path should we drive next?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="the census REFUSAL branch — force a lane to fail" tabindex="0"><span class="rec">recommended</span>refusal branch</span>
+        <span class="opt" data-v="the race + verify gate (pattern 1)" tabindex="0">race + verify</span>
+        <span class="opt" data-v="develop-fleet (pattern 4) on a real ticket" tabindex="0">develop-fleet</span>
+        <span class="opt" data-v="broadcast best-of-N (pattern 2)" tabindex="0">broadcast</span>
+      </div>
+    </div>
+    <div class="qf" data-q="Should conduct gain an unattended mode?">
+      <h4>Q2 · Should conduct ever run unattended?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="no — keep the per-run gate; unattended belongs to auto-research" tabindex="0"><span class="rec">recommended</span>no, keep the gate</span>
+        <span class="opt" data-v="yes, but propose-only" tabindex="0">yes, propose-only</span>
+      </div>
+    </div>
+    <div class="qf" data-q="Notes"><h4>Anything else</h4><textarea id="notes" placeholder="Constraints, disagreements, a different next step…"></textarea></div>
+
+    <div class="emit">
+      <div class="bar"><span>Decision reply — paste back to Claude</span><button id="copy2">Copy</button></div>
+      <pre id="reply"></pre>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>How this brief was made.</b> Content derived from the shipped skill sources on
+    <code>main @ 52b2342</code> — <code>skills/conduct/SKILL.md</code>,
+    <code>skills/conduct/references/routing-map.md</code>,
+    <code>skills/cmux/references/agent-fleets.md</code>,
+    <code>skills/cmux/references/read-and-notify.md</code> and
+    <code>skills/agent-loops/references/dispatch-policy.md</code> — plus the measured run recorded in
+    <code>docs/reviews/2026-07-30_conduct-fleet-first-run-in-forge.md</code>. Cost figures are from the
+    fleet measurements cited in <code>agent-fleets.md</code> § Give-up bound. Nothing here is inferred
+    from the skill names alone.</p>
+    <p style="margin-top:var(--s3)"><b>cmux is optional.</b> macOS 14+ and the third-party cmux app are
+    required for patterns 1–6; conduct still classifies and emits without it, and patterns 1–2 degrade
+    to their non-cmux equivalents.</p>
+  </footer>
+</main>
+</div>
+
+<script>
+/* ── mermaid, with offline fallback ─────────────────── */
+if (window.mermaid) {
+  mermaid.initialize({startOnLoad:true, theme:"dark", securityLevel:"loose",
+    themeVariables:{fontSize:"15px", fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif",
+      primaryColor:"#11203a", lineColor:"#7c8ba3", textColor:"#e4eaf3",
+      clusterBkg:"#0c1322", clusterBorder:"#2b3a55",
+      edgeLabelBackground:"#151d2e", tertiaryColor:"#151d2e",
+      actorBkg:"#11203a", actorBorder:"#388bfd", actorTextColor:"#e4eaf3",
+      signalColor:"#a9b6c9", signalTextColor:"#dfe5ee",
+      noteBkgColor:"#2a230f", noteBorderColor:"#d29922", noteTextColor:"#f5e6c0"},
+    flowchart:{nodeSpacing:44, rankSpacing:56, padding:14, useMaxWidth:true},
+    sequence:{width:190, boxMargin:12, noteMargin:12, messageAlign:"left", useMaxWidth:true}});
+} else {
+  document.querySelectorAll(".mermaid").forEach(d=>{
+    d.style.whiteSpace="pre"; d.style.fontFamily="ui-monospace,monospace";
+    d.style.textAlign="start"; d.style.fontSize="12px";
+    d.insertAdjacentHTML("afterbegin",
+      "<div style='color:#d29922;font-size:12px;margin-bottom:8px'>⚠ offline — showing diagram source</div>");
+  });
+}
+
+/* ── router state ───────────────────────────────────── */
+const state = {scope:"divisible", lanes:"2-3", vis:"watch", div:"none", cont:"nest", kind:"bug"};
+
+const PATTERNS = [
+  {row:1,name:"Race + verify gate",         fires:"diversity = race",                              rung:"L2", sessions:"N+1 (default 3+1)", cmux:"yes",
+   see:"3 racer workspaces", why:"A hot fix where first-good-wins; N diverse attempts on one problem.",
+   degrade:"Degrade to L1 — run the fitting fix skill solo and say why; racing needs visible parallel sessions."},
+  {row:2,name:"Broadcast fan-out + reconcile", fires:"diversity = best-of-N",                      rung:"L2", sessions:"N (default 3)", cmux:"yes",
+   see:"3 panes now", why:"Same task to N agents; the reconciliation is the deliverable, not the relay.",
+   degrade:"N in-session subagents, single-message dispatch — you lose the visible panes, keep the ensemble."},
+  {row:3,name:"Pipeline solo",              fires:"ticket · 1 lane, or 2–3 lanes background",      rung:"L0/L1", sessions:"1", cmux:"optional",
+   see:"1 pane only if watched", why:"The pipeline's own Phase-4 fan-out already covers moderate parallelism.",
+   degrade:"No degradation — this is the non-cmux path already."},
+  {row:4,name:"develop-fleet",              fires:"full ticket AND (watch OR 4+ lanes)",           rung:"L2", sessions:"1 lead + workers on demand", cmux:"yes",
+   see:"1 lead pane now, workers on demand", why:"Lead-only boot; workers appear only if Phase 4 actually decomposes.",
+   degrade:"Run /etk:develop solo — its in-session Phase-4 fan-out, no visible panes."},
+  {row:5,name:"Sweep fan-out / fan-in",     fires:"divisible job",                                 rung:"L2", sessions:"one per slice (cap ~4)", cmux:"yes",
+   see:"N panes now", why:"Audit / map / sweep across file-disjoint slices; you own the merge.",
+   degrade:"In-session subagent fan-out — all Agent calls in a single message."},
+  {row:6,name:"Single agent in a pane",     fires:"single task · watch",                           rung:"L1", sessions:"1", cmux:"yes",
+   see:"1 pane now", why:"A long build or refactor you want to see and steer.",
+   degrade:"Degrade to pattern 7 (L0 solo) and say the watch surface isn't available."},
+  {row:7,name:"L0 solo — no cmux",          fires:"single task · background",                      rung:"L0", sessions:"0 extra", cmux:"no",
+   see:"nothing — it runs here", why:"A quick check or one-file change. A pane here is pure overhead.",
+   degrade:"N/A — this is the floor."}
+];
+
+function route(s){
+  if (s.div === "race")      return PATTERNS[0];
+  if (s.div === "best-of-n") return PATTERNS[1];
+  if (s.scope === "ticket" && (s.lanes === "1" || (s.lanes === "2-3" && s.vis === "background"))) return PATTERNS[2];
+  if (s.scope === "ticket" && (s.vis === "watch" || s.lanes === "4+")) return PATTERNS[3];
+  if (s.scope === "divisible") return PATTERNS[4];
+  if (s.scope === "single" && s.vis === "watch") return PATTERNS[5];
+  return PATTERNS[6];
+}
+
+const CONT = {
+  nest:  "nest-under-current — lanes are new-pane splits UNDER the caller's workspace",
+  group: "join-group — a workspace-group anchored on the current workspace",
+  new:   "new-workspace — the pattern's own named-workspace recipe"
+};
+
+function emit(p, s){
+  if (p.row === 7) return `Run it here — no cmux. ${p.why}\nConfirm inline, one sentence, no box.`;
+  const lines = [];
+  lines.push(`/etk:conduct <your work item>`);
+  lines.push(``);
+  lines.push(`Classified: ${s.scope} · ${s.lanes} lane(s) · ${s.vis} · diversity=${s.div}`);
+  lines.push(`Routes to:  ${p.row} · ${p.name}  (${p.rung})`);
+  lines.push(`Placement:  ${CONT[s.cont]}`);
+  lines.push(`You'll see: ${p.see}`);
+  lines.push(`Sessions:   ${p.sessions} (~$0.57+ per lane cold-start)`);
+  if (p.row === 3) lines.push(`Auto-route by kind: ${s.kind === "bug" ? "/etk:fix-bug <ticket>" : "/etk:develop <ticket>"}`);
+  if (p.row === 4) lines.push(`Lead runs: /etk:develop <ticket>; workers get their own worktree each.`);
+  lines.push(``);
+  lines.push(`Every lane names a result file ($TEAM/<title>-<assignment>.md, absolute, in-repo)`);
+  lines.push(`with STATUS: as its LAST line; collect with collect_lane, never by grepping read-screen.`);
+  if (p.row === 5 || p.row === 2) lines.push(`Reconcile with the three-gate fan-in; publish NO aggregate unless every slice arrived.`);
+  if (p.row === 1) lines.push(`Winner must pass etk:adversarial-verifier BEFORE acceptance; scoped-close the losers.`);
+  return lines.join("\n");
+}
+
+function render(){
+  const p = route(state);
+  document.getElementById("pat").textContent  = `${p.row} · ${p.name}`;
+  document.getElementById("why").textContent  = p.why;
+  const r = document.getElementById("rung");
+  r.textContent = p.rung; r.className = "rung " + p.rung.split("/")[0];
+  document.getElementById("sess").textContent = p.sessions;
+  document.getElementById("see").textContent  = p.see;
+  document.getElementById("cost").textContent = p.row === 7 ? "$0" : "~$0.57/lane";
+  document.getElementById("degrade").textContent = p.degrade;
+  document.getElementById("out").textContent  = emit(p, state);
+  document.getElementById("live").textContent = `Routes to pattern ${p.row}, ${p.name}, rung ${p.rung}.`;
+}
+
+document.querySelectorAll(".router .opts").forEach(g=>{
+  const axis = g.dataset.axis;
+  const pick = el => {
+    g.querySelectorAll(".opt").forEach(o=>o.classList.remove("sel"));
+    el.classList.add("sel"); state[axis] = el.dataset.v; render();
+  };
+  g.querySelectorAll(".opt").forEach(o=>{
+    o.addEventListener("click", ()=>pick(o));
+    o.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(o);} });
+  });
+});
+render();
+
+/* ── patterns table ─────────────────────────────────── */
+let sortKey="row", sortDir=1, filter="all";
+const tb = document.getElementById("tb");
+function renderTable(){
+  let rows = PATTERNS.filter(d =>
+    filter==="all" ? true : filter==="cmux" ? d.cmux==="yes" : d.rung.indexOf(filter)!==-1);
+  rows = rows.slice().sort((a,b)=>{
+    let x=a[sortKey], y=b[sortKey];
+    if(typeof x==="string") return sortDir*x.localeCompare(y);
+    return sortDir*(x-y);
+  });
+  tb.innerHTML = rows.map(d=>`<tr>
+    <td class="num">${d.row}</td>
+    <td><b>${d.name}</b></td>
+    <td>${d.fires}</td>
+    <td><span class="rung ${d.rung.split("/")[0]}">${d.rung}</span></td>
+    <td>${d.sessions}</td>
+    <td>${d.cmux==="yes"?"required":d.cmux}</td></tr>`).join("");
+}
+document.querySelectorAll("th[data-k]").forEach(th=>{
+  th.addEventListener("click", ()=>{
+    const k = th.dataset.k;
+    if(k===sortKey){ sortDir*=-1; } else { sortKey=k; sortDir=1; }
+    document.querySelectorAll("th[data-k]").forEach(t=>t.removeAttribute("aria-sort"));
+    th.setAttribute("aria-sort", sortDir===1?"ascending":"descending");
+    renderTable();
+  });
+});
+document.querySelectorAll("#chips .chip").forEach(c=>{
+  c.addEventListener("click", ()=>{
+    document.querySelectorAll("#chips .chip").forEach(x=>x.classList.remove("on"));
+    c.classList.add("on"); filter=c.dataset.f; renderTable();
+  });
+});
+renderTable();
+
+/* ── open-question reply ────────────────────────────── */
+function updateReply(){
+  const lines=["Decisions on the conduct workflow brief:"];
+  document.querySelectorAll("#open .qf[data-q]").forEach(qf=>{
+    if(qf.dataset.q==="Notes") return;
+    const sel=qf.querySelector(".opt.sel");
+    if(sel) lines.push(`- ${qf.dataset.q} → ${sel.dataset.v}`);
+  });
+  const n=document.getElementById("notes").value.trim();
+  if(n) lines.push(`- Notes: ${n}`);
+  document.getElementById("reply").textContent=lines.join("\n");
+}
+document.querySelectorAll("#open .qf .opts").forEach(g=>{
+  const pick = el => { g.querySelectorAll(".opt").forEach(o=>o.classList.remove("sel"));
+                       el.classList.add("sel"); updateReply(); };
+  g.querySelectorAll(".opt").forEach(o=>{
+    o.addEventListener("click", ()=>pick(o));
+    o.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(o);} });
+  });
+});
+document.getElementById("notes").addEventListener("input", updateReply);
+updateReply();
+
+/* ── copy buttons ───────────────────────────────────── */
+function wireCopy(btnId, srcId){
+  const b=document.getElementById(btnId);
+  b.addEventListener("click", ()=>{
+    navigator.clipboard.writeText(document.getElementById(srcId).textContent).then(()=>{
+      const t=b.textContent; b.textContent="Copied!"; setTimeout(()=>b.textContent=t, 1200);
+    });
+  });
+}
+wireCopy("copy","out"); wireCopy("copy2","reply");
+
+/* ── scroll-spy ─────────────────────────────────────── */
+const navLinks=[...document.querySelectorAll("nav a")];
+const secs=navLinks.map(a=>document.querySelector(a.getAttribute("href")));
+function spy(){
+  let i=secs.length-1;
+  for(let j=0;j<secs.length;j++){ if(secs[j] && secs[j].getBoundingClientRect().top>120){i=j-1;break;} }
+  navLinks.forEach(a=>a.classList.remove("active"));
+  if(i>=0) navLinks[i].classList.add("active");
+}
+document.addEventListener("scroll",spy,{passive:true}); spy();
+</script>
+</body>
+</html>
