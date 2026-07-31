@@ -73,21 +73,50 @@ FORM_B = re.compile(
 # declaration in this repo is one of exactly three; prose is none of them:
 #
 #   MARKED       bold or list-bold      "- **27 skills**: agent-loops, ..."
-#   SERIES       >=2 distinct kinds     "Provides 16 skills, 1 agent, and 25 commands"
+#   SERIES       ALL THREE kinds        "Provides 16 skills, 1 agent, and 25 commands"
 #   DIR_ATTACHED names the directory    "|-- skills/   # 15 specialized skill directories"
 #
 # "The release adds 2 new commands" is a lone kind, unbolded, with no sibling
 # kind and no `commands/` token -- so it is ignored, which is the whole point.
-#
-# KNOWN RESIDUAL, stated rather than hidden: prose that enumerates two kinds at
-# once ("adds 3 commands and 2 skills") reads as SERIES and would still FAIL.
-# That is rarer than the single-kind sentence, and such a line arguably ought to
-# be correct anyway. It is a smaller hole than the one being closed, not zero.
 def _is_series(matches):
-    """True when a line declares >=2 DISTINCT kinds -- the inventory-sentence shape
-    ("16 skills, 1 agent, and 25 commands"). Distinctness matters: two counts of the
-    same kind on one line is prose, not an inventory."""
-    return len({kind for kind, _, _, _ in matches}) >= 2
+    """True when a line declares ALL THREE kinds -- the full-inventory shape
+    ("16 skills, 1 agent, and 25 commands").
+
+    Requiring all three, not merely two, is #94. At >=2 this read ordinary
+    release-note prose as an inventory: "adds 3 new commands and 2 new agents"
+    and "shipped 2 skills and 4 commands" both FAILed a correct document. That
+    is the same class #92 fixed for single-kind prose, and the reason it is not
+    academic is that a release note describes a PAST release, so its counts
+    legitimately differ from current totals -- exactly why CHANGELOG.md is
+    excluded by design. A "Release Notes" section inside CLAUDE.md/README.md is
+    the same historical record with none of the same exemption.
+
+    Measured before changing it: of the 4 form-gated SERIES declarations in this
+    repo, 4 carry all three kinds and 0 carry exactly two. The tightening
+    therefore costs zero current coverage.
+
+    The trade, stated: a genuine two-kind inventory line written in markdown
+    ("Provides 16 skills and 25 commands") would stop being gated. Accepted
+    because (a) there are none today, (b) every plugin restates its full
+    inventory in plugin.json and marketplace.json, which are trusted sites
+    scanned in full, so the NUMBER stays gated regardless, and (c) for this gate
+    a false positive is the more dangerous failure -- it red-CIs a correct
+    document, and the cheapest way to make a false-failing gate green is to
+    weaken it.
+
+    Distinctness still matters: two counts of the same kind on one line is
+    prose, not an inventory.
+
+    COUPLED TO len(KINDS) ON PURPOSE, and CI-guarded. If `hook` is ever added to
+    KINDS -- which this module's header names as a live follow-up with a
+    demonstrated cost -- SERIES silently becomes "all FOUR kinds", and the two
+    plugin docs that carry no hook count (atk, ftk) drop out of the gate. That
+    is not silent: `bad-counts-doc-series` uses a three-kind, hook-free line, so
+    it flips to PASS and its `!`-prefixed CI step goes red. Verified by
+    simulating the arity change, not assumed. Whoever grows KINDS must decide
+    here whether SERIES means "all kinds" or "the original three".
+    """
+    return len({kind for kind, _, _, _ in matches}) == len(KINDS)
 
 
 def declarations(text, trusted=False):
