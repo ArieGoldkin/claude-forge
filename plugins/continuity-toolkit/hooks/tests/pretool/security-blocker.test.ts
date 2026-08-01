@@ -1461,17 +1461,18 @@ describe('securityBlocker - Symlink bypass detection (ME-001) - CRITICAL', () =>
 
     const result = await securityBlocker(createFileInput('Write', symlink));
 
-    // On macOS, temp directories are in /private/var which matches system dir patterns
-    // This is expected and correct security behavior
-    const isMacOSTemp = tempDir.includes('/var/') || tempDir.includes('/private/');
-    if (isMacOSTemp) {
-      // Expected: blocked because resolved path is in /private/var
-      expect(result.hookSpecificOutput?.permissionDecision).toBe('deny');
-    } else {
-      // On other systems, should allow
-      expect(result.continue).toBe(true);
-      expect(result.suppressOutput).toBe(true);
-    }
+    // #99: this test used to branch on macOS and assert `deny`, with the comment
+    // "This is expected and correct security behavior". It was not correct — it
+    // was the false positive #99 exists to fix, encoded as an expectation. On
+    // macOS `tempDir` resolves under the per-user temp tree, which the system-dir
+    // patterns matched, so writing an ordinary file to an ordinary temp directory
+    // was denied. The test's own title says "should allow"; it now does.
+    //
+    // The platform branch is gone deliberately: after the carve-out in
+    // path-utils.ts there is nothing macOS-specific left to special-case, and a
+    // branch that can only be exercised on one OS hides a regression on the other.
+    expect(result.continue).toBe(true);
+    expect(result.suppressOutput).toBe(true);
   });
 
   it.runIf(fs.existsSync('/etc'))(

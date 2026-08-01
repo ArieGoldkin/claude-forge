@@ -269,21 +269,58 @@ export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
 ] as const;
 
 /**
- * System directories. Blocked only when the path is the TARGET of a mutating
- * operation — see `matchesSystemDirMutation`.
+ * System directories. Blocked on ANY reference — read included.
  *
- * Reading these is routine and safe (`git --version` resolving /usr/bin/git,
- * `cat /etc/hosts`, listing a temp dir); it was previously denied outright,
- * which is what made ordinary read-only tool calls fail. Destructive use is
- * still covered twice over: by the dangerous-bash registry, which runs first
- * and independently matches `rm -rf /`, `rmdir` on critical paths, `chmod -R
- * 777`, `dd`, and `mkfs` (see lib/dangerous-bash/filesystem.ts), and by the
- * mutation gate here.
+ * ⚠ THERE IS NO MUTATION GATE, AND THERE DELIBERATELY IS NOT ONE. Until #99
+ * this docstring claimed these were "blocked only when the path is the TARGET
+ * of a mutating operation", and two sibling comments said the same. All three
+ * were stale: they described a design that was built, demolished by adversarial
+ * review, and abandoned — see the "two attempts" note below, which is the
+ * accurate account. Measured on the live code: `cat /etc/hosts > out.txt`,
+ * named in the old docstring as the ALLOWED case, is denied; so is `ls
+ * /usr/bin`, a bare read with no verb at all.
+ *
+ * **Do not "restore" the gate to match a comment.** Deciding "is this path the
+ * target of a write?" needs a shell parse, and the two regex attempts leaked
+ * arbitrary writes to `/usr/local/bin` and `/etc/cron.d` — a PATH hijack
+ * needing no sudo. Destructive use is separately covered by the dangerous-bash
+ * registry, which runs first (see lib/dangerous-bash/filesystem.ts).
  */
 export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   /\/etc\//,
   /\/usr\//,
-  /\/var\//,
+  // #99: macOS puts each user's TMPDIR under /var/folders/, so any build,
+  // installer, or test harness that writes there and then runs the result was
+  // denied. That is ordinary work, not a risky operation. Narrowed rather than
+  // removed — /var/log, /var/root and /var/db stay protected.
+  //
+  // One pattern covers BOTH spellings on purpose: /var is a symlink to
+  // /private/var, and `/private/var/folders/` contains `/var/folders/` as a
+  // substring, so the lookahead suppresses the private spelling too. Verified,
+  // not assumed — see the both-spellings cases in security-blocker-macos-temp.
+  /\/var\/(?!folders\/)/,
+  // Partial traversal guard, mirroring the scratchpad carve-out above. It
+  // catches the CONTIGUOUS form — `/var/folders/x/../../../log/system.log` —
+  // which is what a build tool or installer actually emits by accident.
+  //
+  // ⚠ IT IS PARTIAL, AND THE PRECISE LIMITS ARE MEASURED, NOT GUESSED. An
+  // earlier revision of this comment claimed it "closes" the traversal bypass.
+  // It does not. `\S*` cannot cross whitespace and the `..` must be followed by
+  // `/`, whitespace, or end, so ALL of these defeat it — each verified DENY
+  // before the #99 narrowing and ALLOW after, and each pinned as a known gap in
+  // security-blocker-macos-temp.test.ts:
+  //   - a space or tab inside the path         `"…/my dir/../../../log/x"`
+  //   - a `..` segment ending in a quote        `…/'..'/'..'/…`  ·  `"…/.."`
+  //   - `cd <exempt> && cat ../../../log/x`     (traversal in a later segment)
+  //   - traversal built through a variable      `d=<exempt>; cat $d/../…`
+  //
+  // This cannot be fixed by widening the regex: deciding "where does this path
+  // resolve?" needs a shell parse, the same wall the abandoned mutation gate hit
+  // (see the docstring above). The guard is kept because it is free and catches
+  // the accidental case; it is NOT a security boundary. What actually bounds the
+  // exposure is that BASH_SECRET_PATTERNS run first and independently, and the
+  // dangerous-bash registry runs before both.
+  /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
   /\/proc\//,
   /\/boot\//,
@@ -319,13 +356,18 @@ export const BASH_SENSITIVE_PATTERNS: readonly RegExp[] = [
 ] as const;
 
 /**
- * Test whether a command mutates a protected system directory.
+ * Test whether a command references a protected system directory.
  *
- * Splits on segment separators, finds the earliest mutating verb or write
- * redirect in each segment, and reports a match only when a system-dir pattern
- * occurs after it. This distinguishes `echo x > /etc/hosts` (blocked) from
- * `cat /etc/hosts > out.txt` (allowed) — in the latter the path precedes the
- * redirect, so it is a source, not a target.
+ * ⚠ THE NAME IS A HISTORICAL ARTEFACT — this does NOT test for mutation. It
+ * reports a match on ANY reference to a system-dir pattern. Until #99 this
+ * docstring described segment splitting and "the earliest mutating verb",
+ * and claimed `cat /etc/hosts > out.txt` was allowed while `echo x >
+ * /etc/hosts` was blocked. **Both are denied**, measured on the live code —
+ * the described logic was never implemented here, and the design it belongs to
+ * was abandoned after adversarial review (see BASH_SYSTEM_DIR_PATTERNS).
+ *
+ * The name is kept because it is exported and referenced elsewhere; renaming
+ * it is a separate, mechanical change. Read the body, not the name.
  */
 export function matchesSystemDirMutation(command: string): {
   matched: boolean;
@@ -544,7 +586,9 @@ export function matchesBashSensitivePattern(command: string): {
       return { matched: true, pattern: pattern.source };
     }
   }
-  // System directories: only when targeted by a mutating operation.
+  // System directories: ANY reference, read included. (Said "only when targeted
+  // by a mutating operation" until #99 — that gate does not exist; see the
+  // function's docstring.)
   return matchesSystemDirMutation(scannable);
 }
 

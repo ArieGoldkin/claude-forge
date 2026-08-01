@@ -2,6 +2,82 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.5] - 2026-08-02 — macOS per-user temp paths are no longer denied (#99)
+
+### Fixed
+
+- **`security-blocker` denied any command naming a macOS TMPDIR path.**
+  `BASH_SYSTEM_DIR_PATTERNS` carried a bare `/\/var\//`, and macOS puts every user's temp tree
+  under `/var/folders/`. Since system directories are blocked on **any** reference, any installer,
+  build tool, or test harness that wrote to `TMPDIR` and then ran the result was denied — ordinary
+  work, refused on path text alone. Narrowed to `/\/var\/(?!folders\/)/`; `/var/log`, `/var/root`
+  and `/var/db` stay protected.
+- **Fixed the same false positive on the WRITE path.** `path-utils.ts` carried its own copy of the
+  system-dir list, untouched by the first pass, so `Write`/`Edit` to a temp file stayed denied while
+  `bash -c` writing the same file was allowed — the issue's own motivation ("writes there and then
+  runs the result") only half solved. ⚠ **Both spellings need their own entry there**, unlike the
+  Bash path: those patterns are **anchored** (`^`), so narrowing `/^\/var\//` does not cover
+  `/private/var/…`. The Bash patterns are unanchored substring matches, where one lookahead suffices
+  because `/private/var/folders/` *contains* `/var/folders/`. Same requirement, opposite mechanics.
+  No traversal guard is needed on the write path — `isProtectedPath()` normalizes and resolves the
+  path before matching, so `..` is already gone.
+- **Added a PARTIAL traversal guard, and it is documented as partial.** The narrowing alone leaves a
+  bypass: a path spelled from inside the exempt prefix contains exactly one match candidate, the
+  lookahead suppresses it, and the resolved path lands back in the protected tree. The guard catches
+  the **contiguous** form, which is what a build tool actually emits by accident.
+  ⚠ **It does not close the bypass, and five defeating shapes are pinned as known gaps** — a space
+  or tab in the path, a `..` ending in a quote, `cd <exempt> && cat ../…`, and traversal via a
+  variable. Each was verified DENY before this change and ALLOW after. This cannot be fixed by
+  widening the regex: deciding where a path resolves needs a shell parse — the same wall the
+  abandoned mutation gate hit. What bounds the exposure is that the secret patterns and the
+  dangerous-bash registry run first and independently.
+- **Both spellings are covered by one pattern, verified rather than assumed.** `/var` is a symlink
+  to `/private/var`, and the issue warned a carve-out honouring one spelling is bypassed via the
+  other. It needs no second pattern: `/private/var/folders/` *contains* `/var/folders/`, so the
+  same lookahead suppresses it. Pinned in both directions.
+
+### Changed
+
+- **Corrected three comments describing a mutation gate that does not exist.** The
+  `BASH_SYSTEM_DIR_PATTERNS` docstring, `matchesSystemDirMutation`'s docstring, and the call site
+  all said system dirs were "blocked only when the path is the TARGET of a mutating operation",
+  and the function docstring specifically claimed `cat /etc/hosts > out.txt` was **allowed** while
+  `echo x > /etc/hosts` was **blocked**. Measured on the live code: **both are denied**, and so is
+  `ls /usr/bin` — a bare read with no verb. The described gate was built, demolished by adversarial
+  review, and abandoned; only the comments survived. They are now marked, with an explicit warning
+  **not to "restore" the gate to match them** — the two regex attempts leaked arbitrary writes to
+  `/usr/local/bin` and `/etc/cron.d`.
+
+### Testing
+
+- **New `tests/pretool/security-blocker-macos-temp.test.ts`** (40 cases): both spellings allowed,
+  genuine paths still denied, traversal escapes, sibling system dirs unaffected, the five **known
+  gaps** pinned as documented trades, write-path coverage, and a scope test recording that this
+  exemption is **not uid-bound** while the scratchpad one is.
+- **Corrected a test that encoded this very bug as correct behaviour.**
+  `security-blocker.test.ts`'s symlink case asserted `deny` for an ordinary file in a macOS temp
+  directory, commented *"This is expected and correct security behavior"* — it was the #99 false
+  positive, written down as an expectation, in a test whose own title says *"should allow"*. The
+  platform branch is removed: after the carve-out nothing macOS-specific remains, and a branch only
+  one OS can exercise hides regressions on the other.
+- **Both rule-attribution tests were rewritten after review — the originals pinned nothing.** They
+  declared local copies of the regexes and asserted about those, so reverting the entire source fix
+  left them green; the one named `MUST-FAIL CONTROL` was fully tautological. They now derive from
+  the exported `BASH_SYSTEM_DIR_PATTERNS` and assert through the `pattern` the live matcher
+  reports, so replacing the guard with any other rule fails. Verified by two mutation controls:
+  deleting the guard and reverting the narrowing each fail the suite, and the source restores
+  byte-identical.
+- **Parity rows are now pinned absolutely, not only against each other.** A pure parity assertion
+  passes if both sides flip together, so the three "unprotected in both" labels were unchecked
+  claims.
+- **`security-blocker-fp-corpus` now separates two axes it had conflated.** `truth` answers "does
+  the command touch its literal?"; it does not answer "should this be denied?", which also depends
+  on whether the resource is protected. M1 touches a path that is now deliberately unprotected, so
+  the old classifier turned a correct allow into a FALSE-NEGATIVE. A new `unprotected` flag carries
+  that fact and **M1's `truth` stays `'touches'`** — the issue explicitly warned against relabelling
+  it, and it is simply true. M1 is now a live regression guard: re-broadening `/var/` makes it a
+  false positive and trips `expect(fp).toBe(0)`. Corpus stays at 31 entries, fp=0, fn=0.
+
 ## [2.17.4] - 2026-08-01 — correction: command bash blocks are a spec, not executed code
 
 ### Changed

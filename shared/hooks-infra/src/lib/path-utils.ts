@@ -90,14 +90,31 @@ const CREDENTIAL_PATTERNS: readonly RegExp[] = [
 const SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   /^\/etc\//,
   /^\/usr\//,
-  /^\/var\//,
+  // #99: macOS puts each user's TMPDIR under /var/folders/. The Bash path
+  // exempts it; without the same carve-out here, Write/Edit to a temp file was
+  // still denied while `bash -c 'echo … > <same file>'` was allowed — the
+  // issue's own motivation ("writes there and then runs the result") only half
+  // solved. Found by adversarial review of PR #113, not by the original fix.
+  //
+  // ⚠ BOTH SPELLINGS NEED THEIR OWN ENTRY HERE, unlike the Bash path. These
+  // patterns are ANCHORED (`^`), so `/private/var/folders/…` does not match
+  // `^\/var\//` and is not covered by narrowing that one. The Bash patterns are
+  // unanchored substring matches, where `/private/var/folders/` contains
+  // `/var/folders/` and a single lookahead therefore suffices. Same requirement,
+  // opposite mechanics — verified in both files.
+  /^\/var\/(?!folders\/)/,
   /^\/sys\//,
   /^\/proc\//,
   /^\/boot\//,
   /^\/root\//,
   // macOS specific — CC v2.1.113 expanded dangerous-removal targets
   /^\/private\/etc\//,
-  /^\/private\/var\//,
+  // No traversal companion is needed on this path, and that is a real asymmetry
+  // with security-blocker: isProtectedPath() runs normalizePath() AND
+  // resolveRealPath() first, so `…/folders/x/../../log/y` is already resolved to
+  // `/var/log/y` before matching and the narrowed pattern catches it. The Bash
+  // patterns match RAW command text, which is why they need a (partial) guard.
+  /^\/private\/var\/(?!folders\/)/,
   // Carve-out mirrors security-blocker BASH_SENSITIVE_PATTERNS: CC's
   // harness-managed scratchpad (/private/tmp/claude-<uid>/…) must stay
   // writable or forked skills/subagents die on their first scratchpad write.

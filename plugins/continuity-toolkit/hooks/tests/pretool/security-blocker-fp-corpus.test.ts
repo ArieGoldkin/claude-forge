@@ -50,11 +50,28 @@ function decide(command: string): { verdict: Verdict; pattern?: string } {
  *   'inert'  — the protected literal never becomes a resource the command touches
  *   'touches'— the command genuinely reads/writes/exfiltrates the protected resource
  * position = where the literal sits (the axis the fix must key on)
+ *
+ * ⚠ `truth` and `unprotected` are TWO AXES, and #99 is why they had to split.
+ * `truth` answers "does the command touch its literal?" — an inertness question.
+ * It does NOT answer "should this be denied?", which also depends on whether the
+ * resource is protected at all. The classifier used to assume touches ⇒ deny;
+ * M1 touches a path that is now deliberately unprotected, so that assumption
+ * turned a correct allow into a FALSE-NEGATIVE. Splitting the axes fixes the
+ * measurement without relabelling anything — M1's `truth` stays 'touches',
+ * which is simply true.
  */
 interface Entry {
   id: string;
   cmd: string;
   truth: 'inert' | 'touches';
+  /**
+   * Set when the command genuinely touches its literal (so `truth` stays
+   * 'touches') but the resource is DELIBERATELY not protected, making a
+   * non-denial correct rather than a false negative. Denying one of these is a
+   * false POSITIVE — which is what makes such an entry a live regression guard
+   * for the narrowing that unprotected it.
+   */
+  unprotected?: true;
   position: string;
   src: string;
 }
@@ -144,13 +161,21 @@ const CORPUS: Entry[] = [
   // (`sh <<'EOF'`), which is labelled 'touches'. Labelling it 'inert' put it in
   // the FP column and is what licensed the `fp <= 1` slack. The real complaint
   // about this command is that `/var/` should not be protected at all — a
-  // pattern-breadth question, tracked separately, not an inertness question.
+  // pattern-breadth question, not an inertness question.
+  //
+  // #99 RESOLVED that pattern-breadth question: /var/folders/ is the macOS
+  // per-user TMPDIR and is now exempt, so this command is correctly ALLOWED.
+  // `truth` stays 'touches' — it is true, and the issue explicitly warned
+  // against relabelling it to make room. `unprotected` carries the new fact
+  // instead. The entry is now a REGRESSION GUARD: re-broadening `/var/` makes
+  // it a false positive and trips `expect(fp).toBe(0)`.
   {
     id: 'M1',
     cmd: 'sh /var/folders/9x/t2k_5s/T/install.sh',
     truth: 'touches',
+    unprotected: true,
     position: 'argv0-operand-macos-temp',
-    src: 'ledger field sample 2026-07-31 — relabelled per TestIntegrity review',
+    src: 'ledger field sample 2026-07-31 — relabelled per TestIntegrity review; unprotected per #99',
   },
   {
     id: 'M2',
@@ -312,7 +337,19 @@ describe('#65 FP corpus measurement', () => {
       const { verdict, pattern } = decide(e.cmd);
       const denied = verdict.startsWith('DENY');
       let cls: string;
-      if (e.truth === 'inert' && denied) {
+      // `unprotected` is checked FIRST and on its own axis: for these the
+      // resource is deliberately not protected, so denial is the error and a
+      // non-denial is correct — the opposite of the `touches` rule below.
+      if (e.unprotected) {
+        if (denied) {
+          cls = 'FALSE-POSITIVE';
+          fp++;
+          fpByPosition.set(e.position, (fpByPosition.get(e.position) ?? 0) + 1);
+        } else {
+          cls = 'ok(allow-unprotected)';
+          tn++;
+        }
+      } else if (e.truth === 'inert' && denied) {
         cls = 'FALSE-POSITIVE';
         fp++;
         fpByPosition.set(e.position, (fpByPosition.get(e.position) ?? 0) + 1);
@@ -347,13 +384,19 @@ describe('#65 FP corpus measurement', () => {
 
     // A false NEGATIVE is a security regression. Zero, always.
     expect(fn).toBe(0);
-    // With M1 correctly labelled 'touches', no corpus entry is a false positive.
+    // No corpus entry may be a false positive. Since #99 this also covers M1
+    // from the other direction: /var/folders/ is exempt, so DENYING it is now
+    // the failure this catches. Re-broadening `/var/` trips exactly here.
     expect(fp).toBe(0);
-    // M1 (`/var/folders/`) is the one FP a position rule cannot reach — it is a
-    // pattern-breadth question, deliberately out of scope for #65. Everything
-    // else must be allowed. Tightening this to 0 is the follow-up's job.
-    expect(fp).toBeLessThanOrEqual(1);
     // Guard against the corpus silently shrinking to nothing.
     expect(CORPUS.length).toBe(31);
+    // Pin the CARDINALITY of the `unprotected` axis, not just its semantics.
+    // Review finding (#113): the flag is a laundering vector one edit wide — a
+    // future author facing a real false negative could silence it by marking
+    // that entry `unprotected`, the same move as relabelling `truth`, just on a
+    // newer axis. It cannot launder a DENIED entry (that becomes a false
+    // positive and fails above), and with this line any spread of the flag is a
+    // deliberate, visible edit rather than a quiet one.
+    expect(CORPUS.filter((e) => e.unprotected).length).toBe(1);
   });
 });
