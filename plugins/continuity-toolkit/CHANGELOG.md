@@ -2,15 +2,50 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.4] - 2026-08-01 — correction: command bash blocks are a spec, not executed code
+
+### Changed
+
+Documentation only. **No behaviour changes** — the 2.17.3 fix is unaffected and every defect it
+corrected was real. This release exists because 2.17.3 shipped a **wrong explanation** of *why*
+those defects mattered, and an unbumped correction reaches no user.
+
+- **Corrected the mechanism claim in three places** — this CHANGELOG's 2.17.3 entry, the
+  "Why this exists (#109)" note in `commands/doctor.md`, and the header of
+  `tests/doctor-command-shell-vars.test.ts`. Each said the dead loops *"iterated an empty list"* and
+  *"exit 0 silently"*. **That describes literal execution of the fenced bash, which does not
+  happen.**
+- **What was measured.** A command body reaches the model as a `role=user` message — prompt text,
+  not execution; CC never runs the fenced bash. Across **26 unwitnessed past sessions** invoking
+  `/ctk:resume-session`, 27 of 29 invocations reached for Bash and **not one ran the block**: each
+  composed its own command, they disagree with each other (`ls -t` vs `ls -1t`, absolute vs relative
+  paths), and every one rendered as `-t` a sort order the source states only in *prose*. One session
+  added a flag the source does not contain.
+- **What this does not excuse.** The blocks are a **spec**, and an unbound variable makes the spec
+  ambiguous — a reader must invent the value before acting. Literal text from a block demonstrably
+  propagates into composed commands (3 of the 26 sessions embedded a block's literal line, one after
+  editing it), so a wrong literal is **not inert**. The four defects 2.17.3 exposed — the wrong
+  `hooks.json` path, the `"matcher"` count reading 0 for four plugins that register real hooks,
+  `grep -c … || echo 0` yielding `0\n0`, and Step 7 reading the legacy log tree — are wrong *as
+  instructions* too, and remain fixed.
+
+Full evidence, including two controls that returned zero and were nearly misread as confirmation:
+`docs/reviews/2026-08-01_command-md-execution-mode.md`.
+
 ## [2.17.3] - 2026-08-01 — /doctor's three per-plugin checks actually run (#109)
 
 ### Fixed
 
-- **Steps 2, 3 and 7 of `/ctk:doctor` never executed.** Each looped over `$INSTALLED_PLUGINS`,
-  unassigned since the initial commit, so all three iterated an empty list. A loop over an empty
-  list emits nothing and exits 0 — **indistinguishable from "checked, nothing to report"**, which
-  for a diagnostic is the false all-clear it must never produce. (The issue reported all three as
-  living in Step 7; they are in Steps 2, 3 and 7.)
+- **Steps 2, 3 and 7 of `/ctk:doctor` were an unusable spec.** Each looped over
+  `$INSTALLED_PLUGINS`, unassigned since the initial commit. (The issue reported all three as living
+  in Step 7; they are in Steps 2, 3 and 7.)
+
+  > **⚠ CORRECTED in 2.17.4 (2026-08-01).** This entry originally read: *"never executed … all three
+  > iterated an empty list. A loop over an empty list emits nothing and exits 0 — indistinguishable
+  > from 'checked, nothing to report'."* **That described literal execution, which does not happen.**
+  > A command body is delivered to the model as `role=user` prompt text; CC never runs the fenced
+  > bash. The defect was real but its mechanism was **ambiguity, not silence** — see the 2.17.4 entry
+  > above for the measurement and what it does and does not change.
 - **Two further unassigned variables made the minimal repair unsafe.** `$PLUGIN_ROOT` (Steps 2, 3)
   and `$PLUGIN_SHORT_NAME` (Step 7) were also never assigned, and neither varied with the loop
   variable. Assigning `INSTALLED_PLUGINS` alone would have checked **one** path N times and
