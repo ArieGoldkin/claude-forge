@@ -191,6 +191,67 @@ describe('DEFECT 3 — the trailing hour is a snapshot artifact', () => {
   });
 });
 
+describe('DEFECT 5 — an ONGOING outage must not be excluded by its own silence', () => {
+  // Found by /etk:review-mr on PR #102, not by self-review. The upper bound was
+  // the last LOGGED hour. When hooks stop, the log stops, so that bound freezes
+  // at the moment of failure and every hour of a live outage falls outside the
+  // window. This is the worst failure available to a safety diagnostic: a
+  // confident all-clear precisely when the alarm is needed.
+  it('finds a live outage where hooks stopped and tools kept running', () => {
+    const hooks = hookHoursFromLines([
+      ...logLines('2026-07-29T08', 20),
+      ...logLines('2026-07-29T09', 20),
+    ]);
+    const records = [
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T08:30:00.000Z', 's-1', 'Bash')),
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T09:30:00.000Z', 's-1', 'Bash')),
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T10:30:00.000Z', 's-1', 'Bash')),
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T11:30:00.000Z', 's-1', 'Bash')),
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T12:30:00.000Z', 's-1', 'Bash')),
+    ];
+    const res = detectOutages(hooks, toolHoursFromRecords(records));
+    // T10 and T11 are outages; T12 is the in-progress hour and is excluded.
+    expect(res.outages.map((o) => o.hour)).toEqual(['2026-07-29T10', '2026-07-29T11']);
+  });
+
+  it('still excludes only ONE in-progress hour when both series end together', () => {
+    const hooks = hookHoursFromLines([
+      ...logLines('2026-07-29T08', 20),
+      ...logLines('2026-07-29T09', 20),
+    ]);
+    const records = [
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T08:30:00.000Z', 's-1', 'Bash')),
+      ...Array.from({ length: 30 }, () => rec('2026-07-29T09:30:00.000Z', 's-1', 'Bash')),
+    ];
+    // Nothing silent here — the point is that the healthy case is unchanged.
+    expect(detectOutages(hooks, toolHoursFromRecords(records)).outages).toEqual([]);
+  });
+
+  it('coverage.to reflects the later of the two series', () => {
+    const hooks = hookHoursFromLines(logLines('2026-07-29T08', 10));
+    const records = Array.from({ length: 10 }, () =>
+      rec('2026-07-29T15:00:00.000Z', 's-1', 'Bash')
+    );
+    expect(detectOutages(hooks, toolHoursFromRecords(records)).coverage?.to).toBe('2026-07-29T15');
+  });
+});
+
+describe('DEFECT 6 — analysing nothing is INCONCLUSIVE, not an all-clear', () => {
+  // The amplifier that turned a wrong log directory into a confident wrong
+  // answer. `hoursAnalysed === 0` means no hour had BOTH coverage and tool
+  // calls, so there is no evidence either way. The CLI maps this to exit 2.
+  it('reports hoursAnalysed 0 when log coverage and tool activity do not overlap', () => {
+    const res = detectOutages(
+      hookHoursFromLines([...logLines('2026-01-01T00', 5), ...logLines('2026-01-01T05', 5)]),
+      toolHoursFromRecords(
+        Array.from({ length: 40 }, () => rec('2026-07-29T10:30:00.000Z', 's-1', 'Bash'))
+      )
+    );
+    expect(res.hoursAnalysed).toBe(0);
+    expect(res.outages).toEqual([]);
+  });
+});
+
 describe('DISCRIMINATION CONTROL — normal hours are not flagged', () => {
   it('a healthy hour with heavy tool use produces no outage', () => {
     const records = Array.from({ length: 50 }, () =>

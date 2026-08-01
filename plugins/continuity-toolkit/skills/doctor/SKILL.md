@@ -199,9 +199,12 @@ node "${CLAUDE_PLUGIN_ROOT}/hooks/dist/bin/detect-hook-outages.js"
 
 | Exit | Meaning |
 |---|---|
-| `0` | No outage hour found in retained history. |
+| `0` | **All-clear** — hours were actually examined and none was silent. |
 | `1` | **Outage hours found.** Each is an hour where the session ran with no `security-blocker`, no permission hooks and no continuity lifecycle. |
-| `2` | Inconclusive — no hook-log coverage to be silent. |
+| `2` | **Inconclusive** — no log directory, no coverage, no hour with *both* coverage and tool calls, or a bad argument. **Not an all-clear.** |
+
+`0` and `2` are deliberately distinct: an earlier revision collapsed them, so a run that examined
+nothing at all printed `OK`. Treat only `0` as evidence of health.
 
 Add `--json` for machine-readable output, `--min-tools N` to change the pre-filter.
 

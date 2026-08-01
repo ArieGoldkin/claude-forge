@@ -11,7 +11,9 @@
  * against the shapes that made earlier versions wrong. This file is I/O only.
  *
  * Usage:  node dist/bin/detect-hook-outages.js [--json] [--min-tools N]
- * Exit:   0 no outages · 1 outages found · 2 inconclusive (no log coverage)
+ * Exit:   0 no outages · 1 outages found · 2 inconclusive (no coverage, nothing
+ *         analysed, or a bad argument). Exit 0 is an ALL-CLEAR and is only ever
+ *         emitted when hours were actually examined.
  */
 
 import * as fs from 'node:fs';
@@ -27,7 +29,8 @@ import {
 } from '../src/lib/hook-outage-detector.js';
 
 interface LogDir {
-  dir: string;
+  /** Every ctk log directory found. ALL are read — see `resolveLogDir`. */
+  dirs: string[];
   /** true when this is the legacy `~/.claude/logs/<name>/` fallback. */
   legacy: boolean;
 }
@@ -45,35 +48,41 @@ function resolveLogDir(configDir: string): LogDir | null {
   const fromEnv = process.env['CLAUDE_PLUGIN_DATA'];
   if (fromEnv) {
     const d = path.join(fromEnv, 'logs');
-    if (fs.existsSync(d)) return { dir: d, legacy: false };
+    if (fs.existsSync(d)) return { dirs: [d], legacy: false };
   }
-  // CC names the per-plugin data dir <plugin>-<marketplace>.
+  // CC names the per-plugin data dir <plugin>-<marketplace>, so a machine that
+  // predates the claude-dev-kit -> claude-forge rebrand has MORE THAN ONE.
+  // Picking candidates[0] from an unsorted readdir was a coin flip that could
+  // land on a stale, empty directory and report "hours analysed: 0 / OK" over a
+  // live outage. Read them ALL: extra hook lines can only ever prove hooks ran,
+  // so a union is strictly the conservative direction.
   const dataRoot = path.join(configDir, 'plugins', 'data');
   if (fs.existsSync(dataRoot)) {
     const candidates = fs
       .readdirSync(dataRoot)
+      .sort()
       .filter((n) => n.startsWith('ctk-') || n.startsWith('continuity'))
       .map((n) => path.join(dataRoot, n, 'logs'))
       .filter((d) => fs.existsSync(d));
-    const best = candidates[0];
-    if (best) return { dir: best, legacy: false };
+    if (candidates.length > 0) return { dirs: candidates, legacy: false };
   }
   const legacy = path.join(configDir, 'logs', 'continuity');
-  if (fs.existsSync(legacy)) return { dir: legacy, legacy: true };
+  if (fs.existsSync(legacy)) return { dirs: [legacy], legacy: true };
   return null;
 }
 
-function* logLines(dir: string): Generator<string> {
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.startsWith('permission-feedback.log') && !name.startsWith('hooks.log')) continue;
-    let text: string;
-    try {
-      text = fs.readFileSync(path.join(dir, name), 'utf8');
-    } catch {
-      continue;
+function* logLines(dirs: string[]): Generator<string> {
+  for (const dir of dirs)
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith('permission-feedback.log') && !name.startsWith('hooks.log')) continue;
+      let text: string;
+      try {
+        text = fs.readFileSync(path.join(dir, name), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const line of text.split('\n')) if (line) yield line;
     }
-    for (const line of text.split('\n')) if (line) yield line;
-  }
 }
 
 function* transcriptRecords(projectsRoot: string): Generator<unknown> {
@@ -125,7 +134,7 @@ function report({
   rejectedAsChance,
   log,
 }: ReportInput): void {
-  console.log(`log directory : ${log.dir}${log.legacy ? '  ⚠ LEGACY FALLBACK' : ''}`);
+  console.log(`log directory : ${log.dirs.join(', ')}${log.legacy ? '  ⚠ LEGACY FALLBACK' : ''}`);
   console.log(`log coverage  : ${coverage ? `${coverage.from} .. ${coverage.to}` : '(none)'}`);
   console.log(`hours analysed: ${hoursAnalysed}`);
   console.log(
@@ -142,6 +151,13 @@ function report({
   }
   if (!coverage) {
     console.log('\nVERDICT       : INCONCLUSIVE (no hook-log coverage — nothing to be silent)');
+    return;
+  }
+  if (hoursAnalysed === 0) {
+    console.log(
+      '\nVERDICT       : INCONCLUSIVE (no hour had BOTH log coverage and hooked tool calls —\n' +
+        '                nothing was actually examined, so this is not an all-clear)'
+    );
     return;
   }
   if (outages.length === 0) {
@@ -172,7 +188,15 @@ function main(): number {
   const argv = process.argv.slice(2);
   const json = argv.includes('--json');
   const mi = argv.indexOf('--min-tools');
-  const minTools = mi !== -1 && argv[mi + 1] ? Number(argv[mi + 1]) : DEFAULT_MIN_TOOLS;
+  const rawMin = mi !== -1 ? Number(argv[mi + 1]) : Number.NaN;
+  // NaN would silently disable the pre-filter, so a bad value is refused.
+  if (mi !== -1 && (!Number.isFinite(rawMin) || rawMin < 0)) {
+    console.error(
+      `--min-tools requires a non-negative number (got: ${argv[mi + 1] ?? '<missing>'})`
+    );
+    return 2;
+  }
+  const minTools = Number.isFinite(rawMin) ? rawMin : DEFAULT_MIN_TOOLS;
 
   const configDir = process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude');
   const log = resolveLogDir(configDir);
@@ -181,7 +205,7 @@ function main(): number {
     return 2;
   }
 
-  const hookHours = hookHoursFromLines(logLines(log.dir));
+  const hookHours = hookHoursFromLines(logLines(log.dirs));
   const activity = toolHoursFromRecords(transcriptRecords(path.join(configDir, 'projects')));
   const { outages, hoursAnalysed, coverage, baseRate, rejectedAsChance } = detectOutages(
     hookHours,
@@ -193,7 +217,7 @@ function main(): number {
     console.log(
       JSON.stringify(
         {
-          logDir: log.dir,
+          logDirs: log.dirs,
           legacy: log.legacy,
           coverage,
           hoursAnalysed,
@@ -208,7 +232,7 @@ function main(): number {
   } else {
     report({ outages, hoursAnalysed, coverage, baseRate, rejectedAsChance, log });
   }
-  if (!coverage) return 2;
+  if (!coverage || hoursAnalysed === 0) return 2; // analysing nothing is not an all-clear
   return outages.length > 0 ? 1 : 0;
 }
 

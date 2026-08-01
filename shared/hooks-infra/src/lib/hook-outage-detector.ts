@@ -28,8 +28,17 @@
  *     hour of Grep, Glob, Task or WebFetch legitimately logs nothing, so
  *     counting all tools reports noise as outages. Count hooked tools only.
  *
- * A third, subtler one: the LAST hour of log coverage is a snapshot artifact —
- * the log is mid-write — so it is excluded rather than reported as an outage.
+ * Two subtler ones, both of which produced a false ALL-CLEAR — the worse
+ * direction for a safety diagnostic, and the one this tool must never emit:
+ *
+ *  3. **The in-progress hour is mid-write**, so it is excluded. But the bound
+ *     must come from the LATEST hour in EITHER series, not from the last logged
+ *     hour: when hooks stop, the log stops, so a log-derived bound freezes at the
+ *     moment of failure and hides the entire ONGOING outage behind it. Measured:
+ *     90 hooked calls over three silent hours reported `OK`, exit 0.
+ *  4. **Silence is probabilistic, not binary** — only ~0.5 log lines are written
+ *     per hooked tool call, so a quiet 5-call hour is chance ~5% of the time.
+ *     See `DEFAULT_MIN_TOOLS` and the significance test in `detectOutages`.
  *
  * @module lib/hook-outage-detector
  */
@@ -199,14 +208,30 @@ export function detectOutages(
     return { outages: [], hoursAnalysed: 0, coverage: null, baseRate: 0, rejectedAsChance: 0 };
   }
   const from = covered[0] as string;
-  const to = covered[covered.length - 1] as string;
-  const inWindow = (h: string): boolean => h >= from && h < to; // exclusive upper: snapshot artifact
+
+  // UPPER BOUND — must NOT be the last logged hour.
+  //
+  // It was, and that made an ONGOING outage invisible: when hooks stop, the log
+  // stops, so the last logged hour freezes at the moment of failure and every
+  // subsequent hour falls outside the window. Measured: 90 hooked tool calls
+  // across three hours with zero hook activity reported `VERDICT: OK`, exit 0 —
+  // a confident all-clear in exactly the case a user most needs the alarm.
+  //
+  // The genuine artifact is narrower: only the single hour still IN PROGRESS is
+  // mid-write. That is the latest hour in EITHER series, not in the log alone.
+  // Deriving it from both keeps the function deterministic (no clock read, which
+  // would also make it untestable).
+  const toolHoursSorted = [...activity.hooked.keys()].sort();
+  const lastLogged = covered[covered.length - 1] as string;
+  const lastTool = toolHoursSorted[toolHoursSorted.length - 1];
+  const to = lastTool && lastTool > lastLogged ? lastTool : lastLogged;
+  const inWindow = (h: string): boolean => h >= from && h < to;
 
   // Pass 1 — the denominator, and the measured logging rate.
   const analysed: string[] = [];
   let totalTools = 0;
   let totalLines = 0;
-  for (const hour of [...activity.hooked.keys()].sort()) {
+  for (const hour of toolHoursSorted) {
     if (!inWindow(hour)) continue;
     analysed.push(hour);
     totalTools += activity.hooked.get(hour) ?? 0;

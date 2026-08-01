@@ -43,6 +43,24 @@ answer, not a hypothetical:
 3. **The trailing hour is a snapshot artifact** — the log is mid-write when read, so without an
    exclusive upper bound "now" is an outage on every run.
 4. **Silence is probabilistic** (above).
+5. **An ONGOING outage excluded itself.** The upper bound was the last *logged* hour — but when
+   hooks stop, the log stops, so that bound froze at the moment of failure and every hour of a
+   live outage fell outside the window. Measured: 90 hooked calls across three silent hours
+   reported `VERDICT: OK`, exit `0`. The bound now comes from the latest hour in **either**
+   series, so only the genuinely in-progress hour is excluded.
+6. **Analysing nothing reported `OK`.** `hoursAnalysed === 0` now exits `2` (inconclusive). This
+   was the amplifier that turned a mis-resolved log directory into a confident all-clear rather
+   than an honest "cannot tell".
+7. **An arbitrary pick among plugin-data directories.** A machine predating the
+   claude-dev-kit → claude-forge rebrand has more than one `ctk-*` data dir, and `candidates[0]`
+   off an unsorted `readdir` could land on a stale one. All candidate directories are now read —
+   extra hook lines can only ever prove hooks ran, so a union is the conservative direction.
+8. **`--min-tools abc` became `NaN`** and silently disabled the pre-filter; a bad value is now
+   refused with exit `2`.
+
+Defects 5–8 were found by `/etk:review-mr` on PR #102 **after** self-review had cleared the
+change. 5, 6 and 7 are three independent routes to printing an all-clear over a real outage —
+the one output this tool exists to never produce.
 
 ### Fixed
 

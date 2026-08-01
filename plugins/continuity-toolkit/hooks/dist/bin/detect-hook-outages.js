@@ -68,12 +68,15 @@ function detectOutages(hookHours, activity, opts = {}) {
     return { outages: [], hoursAnalysed: 0, coverage: null, baseRate: 0, rejectedAsChance: 0 };
   }
   const from = covered[0];
-  const to = covered[covered.length - 1];
+  const toolHoursSorted = [...activity.hooked.keys()].sort();
+  const lastLogged = covered[covered.length - 1];
+  const lastTool = toolHoursSorted[toolHoursSorted.length - 1];
+  const to = lastTool && lastTool > lastLogged ? lastTool : lastLogged;
   const inWindow = (h) => h >= from && h < to;
   const analysed = [];
   let totalTools = 0;
   let totalLines = 0;
-  for (const hour of [...activity.hooked.keys()].sort()) {
+  for (const hour of toolHoursSorted) {
     if (!inWindow(hour)) continue;
     analysed.push(hour);
     totalTools += activity.hooked.get(hour) ?? 0;
@@ -131,29 +134,29 @@ function resolveLogDir(configDir) {
   const fromEnv = process.env["CLAUDE_PLUGIN_DATA"];
   if (fromEnv) {
     const d = path.join(fromEnv, "logs");
-    if (fs.existsSync(d)) return { dir: d, legacy: false };
+    if (fs.existsSync(d)) return { dirs: [d], legacy: false };
   }
   const dataRoot = path.join(configDir, "plugins", "data");
   if (fs.existsSync(dataRoot)) {
-    const candidates = fs.readdirSync(dataRoot).filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n, "logs")).filter((d) => fs.existsSync(d));
-    const best = candidates[0];
-    if (best) return { dir: best, legacy: false };
+    const candidates = fs.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n, "logs")).filter((d) => fs.existsSync(d));
+    if (candidates.length > 0) return { dirs: candidates, legacy: false };
   }
   const legacy = path.join(configDir, "logs", "continuity");
-  if (fs.existsSync(legacy)) return { dir: legacy, legacy: true };
+  if (fs.existsSync(legacy)) return { dirs: [legacy], legacy: true };
   return null;
 }
-function* logLines(dir) {
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.startsWith("permission-feedback.log") && !name.startsWith("hooks.log")) continue;
-    let text;
-    try {
-      text = fs.readFileSync(path.join(dir, name), "utf8");
-    } catch {
-      continue;
+function* logLines(dirs) {
+  for (const dir of dirs)
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.startsWith("permission-feedback.log") && !name.startsWith("hooks.log")) continue;
+      let text;
+      try {
+        text = fs.readFileSync(path.join(dir, name), "utf8");
+      } catch {
+        continue;
+      }
+      for (const line of text.split("\n")) if (line) yield line;
     }
-    for (const line of text.split("\n")) if (line) yield line;
-  }
 }
 function* transcriptRecords(projectsRoot) {
   if (!fs.existsSync(projectsRoot)) return;
@@ -192,7 +195,7 @@ function report({
   rejectedAsChance,
   log
 }) {
-  console.log(`log directory : ${log.dir}${log.legacy ? "  \u26A0 LEGACY FALLBACK" : ""}`);
+  console.log(`log directory : ${log.dirs.join(", ")}${log.legacy ? "  \u26A0 LEGACY FALLBACK" : ""}`);
   console.log(`log coverage  : ${coverage ? `${coverage.from} .. ${coverage.to}` : "(none)"}`);
   console.log(`hours analysed: ${hoursAnalysed}`);
   console.log(
@@ -205,6 +208,12 @@ function report({
   }
   if (!coverage) {
     console.log("\nVERDICT       : INCONCLUSIVE (no hook-log coverage \u2014 nothing to be silent)");
+    return;
+  }
+  if (hoursAnalysed === 0) {
+    console.log(
+      "\nVERDICT       : INCONCLUSIVE (no hour had BOTH log coverage and hooked tool calls \u2014\n                nothing was actually examined, so this is not an all-clear)"
+    );
     return;
   }
   if (outages.length === 0) {
@@ -233,14 +242,21 @@ function main() {
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
   const mi = argv.indexOf("--min-tools");
-  const minTools = mi !== -1 && argv[mi + 1] ? Number(argv[mi + 1]) : DEFAULT_MIN_TOOLS;
+  const rawMin = mi !== -1 ? Number(argv[mi + 1]) : Number.NaN;
+  if (mi !== -1 && (!Number.isFinite(rawMin) || rawMin < 0)) {
+    console.error(
+      `--min-tools requires a non-negative number (got: ${argv[mi + 1] ?? "<missing>"})`
+    );
+    return 2;
+  }
+  const minTools = Number.isFinite(rawMin) ? rawMin : DEFAULT_MIN_TOOLS;
   const configDir = process.env["CLAUDE_CONFIG_DIR"] || path.join(os.homedir(), ".claude");
   const log = resolveLogDir(configDir);
   if (!log) {
     console.log("VERDICT: INCONCLUSIVE (no ctk log directory found)");
     return 2;
   }
-  const hookHours = hookHoursFromLines(logLines(log.dir));
+  const hookHours = hookHoursFromLines(logLines(log.dirs));
   const activity = toolHoursFromRecords(transcriptRecords(path.join(configDir, "projects")));
   const { outages, hoursAnalysed, coverage, baseRate, rejectedAsChance } = detectOutages(
     hookHours,
@@ -251,7 +267,7 @@ function main() {
     console.log(
       JSON.stringify(
         {
-          logDir: log.dir,
+          logDirs: log.dirs,
           legacy: log.legacy,
           coverage,
           hoursAnalysed,
@@ -266,7 +282,7 @@ function main() {
   } else {
     report({ outages, hoursAnalysed, coverage, baseRate, rejectedAsChance, log });
   }
-  if (!coverage) return 2;
+  if (!coverage || hoursAnalysed === 0) return 2;
   return outages.length > 0 ? 1 : 0;
 }
 process.exit(main());
