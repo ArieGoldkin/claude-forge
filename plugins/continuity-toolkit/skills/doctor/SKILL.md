@@ -184,6 +184,42 @@ is why no command can be credited with the repair.
 **Do not report this check as OK on the strength of a passing Step 1 or 1a.** Their agreement
 is exactly what was true while the hooks were dead.
 
+### Step 1c: Look for PAST Hook Outages (#82)
+
+Step 1b answers *"is a hook firing in **this** session?"* — it cannot see an outage that has
+already ended. That is why #82 was believed to be a single event: nobody could look backwards.
+
+This step looks backwards. It joins two per-hour series — hooked tool calls from CC's
+transcripts, and lines in ctk's own permission/hook logs — and reports hours where tools ran and
+hooks did not:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/hooks/dist/bin/detect-hook-outages.js"
+```
+
+| Exit | Meaning |
+|---|---|
+| `0` | **All-clear** — hours were actually examined and none was silent. |
+| `1` | **Outage hours found.** Each is an hour where the session ran with no `security-blocker`, no permission hooks and no continuity lifecycle. |
+| `2` | **Inconclusive** — no log directory, no coverage, no hour with *both* coverage and tool calls, or a bad argument. **Not an all-clear.** |
+
+`0` and `2` are deliberately distinct: an earlier revision collapsed them, so a run that examined
+nothing at all printed `OK`. Treat only `0` as evidence of health.
+
+Add `--json` for machine-readable output, `--min-tools N` to change the pre-filter.
+
+**Silence is probabilistic, not binary — do not lower the bar.** `bash-combined` writes a
+permission line on auto-approve or deny but **not** when a command defers to a user prompt, and
+`hooks.log` is WARN-level, so only ~0.5 log lines are written per hooked tool call. A quiet hour
+of 5 tool calls happens by chance about 5% of the time. The tool therefore applies a
+family-wise significance test against the **measured** rate rather than a fixed threshold, and
+prints both (`logging rate`, and how many quiet hours it rejected as chance). On the machine
+this was built against, a naive fixed threshold reported **18** outages where **7** were real.
+
+**A finding here is historical, not live.** It says hooks were absent then. Run Step 1b to
+learn whether they are absent *now*, and only follow the capture-before-repair checklist there
+if 1b also fails.
+
 ### Step 2: Verify Hook Builds
 
 For each installed plugin:
@@ -279,8 +315,19 @@ gh --version      (optional, for /review-mr with GitHub)
 
 ### Step 6: Check Log Health
 
+⚠ **Check `$CLAUDE_PLUGIN_DATA/logs/`, not `~/.claude/logs/<short-name>/`.** `logging.ts`
+prefers `CLAUDE_PLUGIN_DATA` for live hooks; the `~/.claude/logs/` path is a fallback written
+only when that variable is unset — in practice by the **test suite**. Its newest entries
+(`session=unknown`, fixture commands like `echo hi`) read exactly like recent live activity, so
+sizing up the legacy directory reports on a file no live hook has touched.
+
+```bash
+# Resolve the real directory first — do not assume either path.
+find ~/.claude -name "permission-feedback.log" -newermt "-24 hours"
 ```
-For each plugin, check ~/.claude/logs/[short-name]/hooks.log size
+
+```
+For each plugin, check <resolved-log-dir>/hooks.log size
 Check review-history.jsonl entry count
 Flag logs >1MB for rotation
 ```

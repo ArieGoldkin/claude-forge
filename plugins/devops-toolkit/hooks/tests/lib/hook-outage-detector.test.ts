@@ -1,0 +1,1 @@
+../../../../../shared/hooks-infra/tests/lib/hook-outage-detector.test.ts

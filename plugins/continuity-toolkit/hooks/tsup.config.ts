@@ -1,7 +1,12 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'bin/run-hook.ts', 'src/statusline/context-percentage.ts'],
+  entry: [
+    'src/index.ts',
+    'bin/run-hook.ts',
+    'bin/detect-hook-outages.ts',
+    'src/statusline/context-percentage.ts',
+  ],
   format: ['esm'],
   dts: false,
   clean: true,
