@@ -2,6 +2,35 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.14] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
+
+### Fixed
+
+- **`getLogDir()`'s fallback now honors `CLAUDE_CONFIG_DIR`** before `$HOME/.claude`. Keying it off
+  `HOME` alone meant the per-plugin `CLAUDE_CONFIG_DIR` isolation in every `vitest.config.ts` could
+  never cover logging — that isolation (added during #82) made snapshot-writing hermetic and left
+  log-writing exactly as leaky as before. Test runs wrote **28 MB across 6 directories** into the
+  developer's real home, and a shipped command (#106) read those fixtures back as real data.
+- **`shared/hooks-infra/vitest.config.ts` gained `CLAUDE_CONFIG_DIR`** — it was the one config of
+  six without it, which is why `~/.claude/logs/plugin/` accumulated 1026 fabricated rows.
+
+`CLAUDE_PLUGIN_DATA` still takes precedence, so **live hook logging is unchanged**: CC sets that
+variable for real dispatch, which is why the fallback runs almost exclusively under test and on
+pre-`CLAUDE_PLUGIN_DATA` CC versions. Where it does run, respecting `CLAUDE_CONFIG_DIR` is the
+correct behaviour — a user who relocates `.claude` expects their logs to move with it.
+
+Pinned by 4 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
+resolved directory is **not** under the real `HOME` when `CLAUDE_CONFIG_DIR` isolates it. Mutation
+control: reverting the fallback to `HOME`-only fails the guard (the precedence case still passes,
+which is why the guard is the one that pins it).
+
+
+⚠ **Existing logs are not migrated.** For a user with `CLAUDE_CONFIG_DIR` set, prior logs stay at
+`$HOME/.claude/logs/<plugin>/` while new writes go to `$CLAUDE_CONFIG_DIR/logs/<plugin>/` — chasing
+history means reading both. The realistic path to hitting this is `bin/` scripts and manual `tsx`
+invocations, which run with `CLAUDE_PLUGIN_DATA` unset. `/ctk:doctor` and `/etk:review-stats` were
+updated in the same change to search the relocated tree (and to keep excluding the `logs/plugin/`
+fixture directory, whose filter was `.claude`-anchored and would have missed a relocated one).
 ## [2.0.13] - 2026-07-31 — document the real hook-log location
 
 ### Fixed

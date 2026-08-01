@@ -343,11 +343,13 @@ gh --version      (optional, for /review-mr with GitHub)
 
 ### Step 6: Check Log Health
 
-⚠ **Check `$CLAUDE_PLUGIN_DATA/logs/`, not `~/.claude/logs/<short-name>/`.** `logging.ts`
-prefers `CLAUDE_PLUGIN_DATA` for live hooks; the `~/.claude/logs/` path is a fallback written
-only when that variable is unset — in practice by the **test suite**. Its newest entries
-(`session=unknown`, fixture commands like `echo hi`) read exactly like recent live activity, so
-sizing up the legacy directory reports on a file no live hook has touched.
+⚠ **Check `$CLAUDE_PLUGIN_DATA/logs/`, not a fallback path.** `logging.ts` prefers
+`CLAUDE_PLUGIN_DATA` for live hooks. When it is unset the path falls back to
+`$CLAUDE_CONFIG_DIR/logs/<short-name>/` (the tier added in #105, where the test suite now writes),
+and only then to `~/.claude/logs/<short-name>/`. Neither fallback holds live-hook output: their
+newest entries (`session=unknown`, fixture commands like `echo hi`) read exactly like recent live
+activity, so sizing up a fallback directory reports on a file no live hook has touched. **The
+three-tier rule is stated once, in ctk's CLAUDE.md → "Log locations".**
 
 ```bash
 # Resolve the real directory first — do not assume either path.

@@ -47,6 +47,6 @@ cd hooks && npm install && npm run build && npm test
 
 ---
 
-**Version**: 2.0.12
+**Version**: 2.0.13
 **Repository**: https://github.com/ArieGoldkin/claude-forge
 **Maintainer**: Arie Goldkin

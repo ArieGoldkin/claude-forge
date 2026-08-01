@@ -25,15 +25,26 @@ Read and display statistics from the review history log.
 # reached a user writes there. (Do NOT filter by session_id instead: fixtures
 # use many ids -- abc, s1, test, a5f8a1c4 -- so an id blocklist is a guess.)
 # Residual test rows in the OTHER legacy dirs are issue #105's to fix at source.
+# CLAUDE_CONFIG_DIR relocates the whole .claude tree, and since #105 the log
+# fallback honors it — so a user who sets it has BOTH their plugin-data and
+# their legacy logs under $CLAUDE_CONFIG_DIR, not under $HOME.
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SEARCH_ROOTS=""
-for root in "$CLAUDE_PLUGIN_DATA" "$HOME/.claude/plugins/data" "$HOME/.claude/logs"; do
+for root in "$CLAUDE_PLUGIN_DATA" "$CFG/plugins/data" "$CFG/logs" \
+            "$HOME/.claude/plugins/data" "$HOME/.claude/logs"; do
   [ -n "$root" ] && [ -d "$root" ] && SEARCH_ROOTS="$SEARCH_ROOTS $root"
 done
 
 # Roots are existence-checked above, so find needs no error suppression here --
 # a failure now is a real failure and should be visible, not swallowed.
+# The exclusion is anchored on `/logs/plugin/`, NOT on `/.claude/logs/plugin/`.
+# Anchoring it to `.claude` was correct only while the tree lived under $HOME;
+# a relocated CLAUDE_CONFIG_DIR puts the fixtures at $CFG/logs/plugin/, which a
+# `.claude`-anchored filter silently misses — reintroducing the 1026 fabricated
+# rows this command exists to keep out. The roots and the filter are coupled:
+# widen one, widen the other.
 REVIEW_LOGS=$(find $SEARCH_ROOTS -name "review-history.jsonl" \
-  | grep -v "/\.claude/logs/plugin/" | sort -u)
+  | grep -v "/logs/plugin/" | sort -u)
 
 if [ -z "$REVIEW_LOGS" ]; then
   echo "No review history found."

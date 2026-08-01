@@ -497,7 +497,10 @@ function getPluginName() {
 var PLUGIN_NAME = getPluginName();
 function computeLogDir() {
   const pluginDataDir = process.env["CLAUDE_PLUGIN_DATA"];
-  return pluginDataDir ? path4.join(pluginDataDir, "logs") : path4.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
+  if (pluginDataDir) return path4.join(pluginDataDir, "logs");
+  const configDir = process.env["CLAUDE_CONFIG_DIR"];
+  const base = configDir || path4.join(process.env["HOME"] || "/tmp", ".claude");
+  return path4.join(base, "logs", PLUGIN_NAME);
 }
 var cachedLogDir = null;
 function resolveLogDir() {
