@@ -193,11 +193,22 @@ for PLUGIN in $INSTALLED_PLUGINS; do
   fi
 done
 
-# Check review history
-REVIEW_LOG=$(find ~/.claude/logs -name "review-history.jsonl" 2>/dev/null | head -1)
+# Check review history.
+# Live hooks write under $CLAUDE_PLUGIN_DATA/logs/; the fallback honors
+# CLAUDE_CONFIG_DIR since #105. Searching ~/.claude/logs alone found only the
+# legacy tree — which on a machine with test residue holds nothing but fixtures
+# (#106). Skip the `plugin/` fixture dir: `plugin` is the log-dir name only when
+# CLAUDE_PLUGIN_NAME is unset, i.e. the test suite, never a real install.
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+REVIEW_ROOTS=""
+for root in "$CLAUDE_PLUGIN_DATA" "$CFG/plugins/data" "$CFG/logs" \
+            "$HOME/.claude/plugins/data" "$HOME/.claude/logs"; do
+  [ -n "$root" ] && [ -d "$root" ] && REVIEW_ROOTS="$REVIEW_ROOTS $root"
+done
+REVIEW_LOG=$(find $REVIEW_ROOTS -name "review-history.jsonl" | grep -v "/logs/plugin/" | head -1)
 if [ -n "$REVIEW_LOG" ]; then
   REVIEW_COUNT=$(wc -l < "$REVIEW_LOG")
-  echo "Review history: $REVIEW_COUNT entries"
+  echo "Review history: $REVIEW_COUNT entries ($REVIEW_LOG)"
 fi
 ```
 

@@ -18,9 +18,16 @@ All notable changes to the engineering-toolkit (`etk`) plugin will be documented
 `CLAUDE_PLUGIN_DATA` still takes precedence, so **live hook logging is unchanged**. etk bundles the
 shared library, so its `dist` changed and this bump ships it.
 
-Pinned by 3 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
+Pinned by 4 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
 resolved directory is **not** under the real `HOME` when `CLAUDE_CONFIG_DIR` isolates it.
 
+
+⚠ **Existing logs are not migrated.** For a user with `CLAUDE_CONFIG_DIR` set, prior logs stay at
+`$HOME/.claude/logs/<plugin>/` while new writes go to `$CLAUDE_CONFIG_DIR/logs/<plugin>/` — chasing
+history means reading both. The realistic path to hitting this is `bin/` scripts and manual `tsx`
+invocations, which run with `CLAUDE_PLUGIN_DATA` unset. `/ctk:doctor` and `/etk:review-stats` were
+updated in the same change to search the relocated tree (and to keep excluding the `logs/plugin/`
+fixture directory, whose filter was `.claude`-anchored and would have missed a relocated one).
 ## [2.18.1] - 2026-08-01 — `/review-stats` read the wrong log tree (#106)
 
 ### Fixed

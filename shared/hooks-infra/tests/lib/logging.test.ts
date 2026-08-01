@@ -377,6 +377,29 @@ describe('logging module', () => {
       }
     });
 
+    /**
+     * Pins the `||` in computeLogDir against a `??` regression.
+     *
+     * Found by review of #108: `??` passes all other cases, because they either
+     * set CLAUDE_CONFIG_DIR to a real path or delete it. An exported-but-EMPTY
+     * value is the one input that separates them — `'' ?? x` is `''`, and
+     * `path.join('', 'logs', name)` is the RELATIVE `logs/<name>`, which
+     * `ensureLogDir()` would mkdir inside the user's cwd. The pre-existing
+     * absolute-path test cannot reach this: `beforeEach` deletes the variable.
+     */
+    it('should stay absolute when CLAUDE_CONFIG_DIR is set but EMPTY (#108 review)', () => {
+      process.env['CLAUDE_CONFIG_DIR'] = '';
+      resetLogDir();
+      try {
+        const logDir = getLogDir();
+        expect(path.isAbsolute(logDir)).toBe(true);
+        expect(logDir.endsWith(IDENTITY.logDirName)).toBe(true);
+      } finally {
+        delete process.env['CLAUDE_CONFIG_DIR'];
+        resetLogDir();
+      }
+    });
+
     it('should keep CLAUDE_PLUGIN_DATA winning over CLAUDE_CONFIG_DIR (#105 preserves precedence)', () => {
       const dataDir = path.join(tmpHome, 'plugin-data-precedence');
       process.env['CLAUDE_PLUGIN_DATA'] = dataDir;

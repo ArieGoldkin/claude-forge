@@ -19,11 +19,18 @@ variable for real dispatch, which is why the fallback runs almost exclusively un
 pre-`CLAUDE_PLUGIN_DATA` CC versions. Where it does run, respecting `CLAUDE_CONFIG_DIR` is the
 correct behaviour — a user who relocates `.claude` expects their logs to move with it.
 
-Pinned by 3 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
+Pinned by 4 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
 resolved directory is **not** under the real `HOME` when `CLAUDE_CONFIG_DIR` isolates it. Mutation
 control: reverting the fallback to `HOME`-only fails the guard (the precedence case still passes,
 which is why the guard is the one that pins it).
 
+
+⚠ **Existing logs are not migrated.** For a user with `CLAUDE_CONFIG_DIR` set, prior logs stay at
+`$HOME/.claude/logs/<plugin>/` while new writes go to `$CLAUDE_CONFIG_DIR/logs/<plugin>/` — chasing
+history means reading both. The realistic path to hitting this is `bin/` scripts and manual `tsx`
+invocations, which run with `CLAUDE_PLUGIN_DATA` unset. `/ctk:doctor` and `/etk:review-stats` were
+updated in the same change to search the relocated tree (and to keep excluding the `logs/plugin/`
+fixture directory, whose filter was `.claude`-anchored and would have missed a relocated one).
 ## [2.0.12] - 2026-07-30 — correct declared skill/command counts (16 · 1 · 25)
 
 ### Fixed

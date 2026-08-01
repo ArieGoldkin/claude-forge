@@ -5,7 +5,8 @@
  * Provides logging functions with rotation and permission audit trail.
  *
  * Uses CLAUDE_PLUGIN_DATA env var for persistent log storage when available,
- * falling back to ~/.claude/logs/<plugin-name>/ for backward compatibility.
+ * falling back to $CLAUDE_CONFIG_DIR/logs/<plugin-name>/ and then to
+ * ~/.claude/logs/<plugin-name>/ for backward compatibility (#105).
  * Uses CLAUDE_PLUGIN_NAME env var (set by each plugin's run-hook-wrapper.sh)
  * to determine the fallback log directory and log level env var prefix.
  * Defaults to 'plugin' when unset.
@@ -51,8 +52,15 @@ const PLUGIN_NAME = getPluginName();
  * Compute the log directory path.
  *
  * Prefers CLAUDE_PLUGIN_DATA env var (persistent across plugin updates) with a
- * `logs/` subdirectory. Falls back to `~/.claude/logs/<plugin-name>/` for
- * backward compatibility when the env var is not set.
+ * `logs/` subdirectory. When that is unset, falls back to
+ * `$CLAUDE_CONFIG_DIR/logs/<plugin-name>/`, and only then to
+ * `~/.claude/logs/<plugin-name>/` for backward compatibility (#105).
+ *
+ * ⚠ The `||` below is load-bearing and must NOT become `??`. An exported but
+ * EMPTY `CLAUDE_CONFIG_DIR` is a realistic shell case; `??` treats `''` as a
+ * value, and `path.join('', 'logs', name)` yields the RELATIVE `logs/<name>`,
+ * which `ensureLogDir()` would then mkdir inside the user's cwd. Pinned by the
+ * `CLAUDE_CONFIG_DIR=''` absolute-path test in tests/lib/logging.test.ts.
  */
 function computeLogDir(): string {
   const pluginDataDir = process.env['CLAUDE_PLUGIN_DATA'];

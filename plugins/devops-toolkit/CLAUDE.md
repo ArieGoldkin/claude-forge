@@ -115,11 +115,13 @@ guardSkipInternal(input)       // Skip node_modules, .git, __pycache__, .venv
 **Log files**: `$CLAUDE_PLUGIN_DATA/logs/hooks.log` (200KB rotation)
 **Audit file**: `$CLAUDE_PLUGIN_DATA/logs/permission-feedback.log` (100KB rotation)
 
-⚠ `~/.claude/logs/devops/` is the **legacy fallback**, used only when `CLAUDE_PLUGIN_DATA` is
-unset — which in practice means the **test suite**. Its newest entries read like live activity
-and are not. Resolve the real path with
+⚠ When `CLAUDE_PLUGIN_DATA` is unset the log path falls back to
+`$CLAUDE_CONFIG_DIR/logs/devops/`, and only then to `~/.claude/logs/devops/`. Neither fallback
+holds live-hook output. Resolve the real path with
 `find ~/.claude -name permission-feedback.log -newermt "-1 hour"` before treating an absence of
-log lines as evidence. See ctk's CLAUDE.md → "Log locations" for the full note.
+log lines as evidence. **ctk's CLAUDE.md → "Log locations" is the single source of truth for this
+three-tier rule — consult it rather than trusting a restatement.** (The `CLAUDE_CONFIG_DIR` tier
+was added in #105; before it, test runs wrote into the developer's real home.)
 
 ## Development
 
