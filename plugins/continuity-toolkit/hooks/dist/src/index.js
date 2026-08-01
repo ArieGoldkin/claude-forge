@@ -3054,7 +3054,22 @@ var BASH_SECRET_PATTERNS = [
 var BASH_SYSTEM_DIR_PATTERNS = [
   /\/etc\//,
   /\/usr\//,
-  /\/var\//,
+  // #99: macOS puts each user's TMPDIR under /var/folders/, so any build,
+  // installer, or test harness that writes there and then runs the result was
+  // denied. That is ordinary work, not a risky operation. Narrowed rather than
+  // removed — /var/log, /var/root and /var/db stay protected.
+  //
+  // One pattern covers BOTH spellings on purpose: /var is a symlink to
+  // /private/var, and `/private/var/folders/` contains `/var/folders/` as a
+  // substring, so the lookahead suppresses the private spelling too. Verified,
+  // not assumed — see the both-spellings cases in security-blocker-macos-temp.
+  /\/var\/(?!folders\/)/,
+  // Companion traversal guard, mirroring the scratchpad carve-out above.
+  // Patterns match RAW text with no `..` normalization, so without this a path
+  // spelled from inside the exempt prefix walks straight back out:
+  // `/var/folders/x/../../../log/system.log` contains exactly one `/var/`, and
+  // it is followed by `folders/`, so the lookahead above lets it through.
+  /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
   /\/proc\//,
   /\/boot\//

@@ -2,6 +2,53 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.5] - 2026-08-02 — macOS per-user temp paths are no longer denied (#99)
+
+### Fixed
+
+- **`security-blocker` denied any command naming a macOS TMPDIR path.**
+  `BASH_SYSTEM_DIR_PATTERNS` carried a bare `/\/var\//`, and macOS puts every user's temp tree
+  under `/var/folders/`. Since system directories are blocked on **any** reference, any installer,
+  build tool, or test harness that wrote to `TMPDIR` and then ran the result was denied — ordinary
+  work, refused on path text alone. Narrowed to `/\/var\/(?!folders\/)/`; `/var/log`, `/var/root`
+  and `/var/db` stay protected.
+- **Added a companion traversal guard — the narrowing alone was exploitable.** The issue proposed
+  only the lookahead. That opens a bypass: `/var/folders/x/../../../log/system.log` contains
+  exactly one `/var/`, followed by `folders/`, so the lookahead suppresses the only match and the
+  path — which resolves into `/var/log` — passes. Patterns match raw text with no `..`
+  normalization. `/\/var\/folders\/\S*\.\.(\/|\s|$)/` closes it, mirroring the guard the scratchpad
+  carve-out has shipped for the same reason.
+- **Both spellings are covered by one pattern, verified rather than assumed.** `/var` is a symlink
+  to `/private/var`, and the issue warned a carve-out honouring one spelling is bypassed via the
+  other. It needs no second pattern: `/private/var/folders/` *contains* `/var/folders/`, so the
+  same lookahead suppresses it. Pinned in both directions.
+
+### Changed
+
+- **Corrected three comments describing a mutation gate that does not exist.** The
+  `BASH_SYSTEM_DIR_PATTERNS` docstring, `matchesSystemDirMutation`'s docstring, and the call site
+  all said system dirs were "blocked only when the path is the TARGET of a mutating operation",
+  and the function docstring specifically claimed `cat /etc/hosts > out.txt` was **allowed** while
+  `echo x > /etc/hosts` was **blocked**. Measured on the live code: **both are denied**, and so is
+  `ls /usr/bin` — a bare read with no verb. The described gate was built, demolished by adversarial
+  review, and abandoned; only the comments survived. They are now marked, with an explicit warning
+  **not to "restore" the gate to match them** — the two regex attempts leaked arbitrary writes to
+  `/usr/local/bin` and `/etc/cron.d`.
+
+### Testing
+
+- **New `tests/pretool/security-blocker-macos-temp.test.ts`** (28 cases): both spellings allowed,
+  genuine `/var` paths still denied, four traversal-escape cases, sibling system dirs unaffected,
+  a `whichRuleFires` test pinning that the **companion guard** — not the lookahead — denies each
+  escape, and a must-fail control proving the pre-fix pattern denied what the new one allows.
+- **`security-blocker-fp-corpus` now separates two axes it had conflated.** `truth` answers "does
+  the command touch its literal?"; it does not answer "should this be denied?", which also depends
+  on whether the resource is protected. M1 touches a path that is now deliberately unprotected, so
+  the old classifier turned a correct allow into a FALSE-NEGATIVE. A new `unprotected` flag carries
+  that fact and **M1's `truth` stays `'touches'`** — the issue explicitly warned against relabelling
+  it, and it is simply true. M1 is now a live regression guard: re-broadening `/var/` makes it a
+  false positive and trips `expect(fp).toBe(0)`. Corpus stays at 31 entries, fp=0, fn=0.
+
 ## [2.17.4] - 2026-08-01 — correction: command bash blocks are a spec, not executed code
 
 ### Changed
