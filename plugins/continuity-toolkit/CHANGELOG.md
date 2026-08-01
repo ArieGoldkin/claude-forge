@@ -52,6 +52,17 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
   directory that **already holds snapshots** so a rebrand cannot orphan an existing history.
 - Directory counting in the walk was `O(n²)` at the entry cap; the CLI header now states
   `--state-diff`'s exit contract and that `--json` applies to the outage scan only.
+- **Snapshot writes are atomic** (temp file + `rename` within the same directory). A plain write
+  leaves a truncated file if the process dies mid-write, and a truncated snapshot is worse than
+  none — it is unparseable at exactly the moment it is needed. The reader also **falls back through
+  older snapshots** rather than giving up on an unreadable newest one, reporting which files it
+  skipped, and ignores `.tmp` leftovers.
+- **Captured file content is now compared, instead of being dead weight.** `diffSnapshots` looked
+  only at size and mtime, so a same-size edit — a version string swapped for another of equal
+  length, exactly the shape a rebrand produces — compared as unchanged. Content is kept (it is the
+  forensic record of which plugins and marketplaces were registered) and is now load-bearing.
+- Each plugin's test suite gets **its own** temp `CLAUDE_CONFIG_DIR` rather than sharing one, so
+  concurrent local runs cannot interfere.
 
 ### Known limits, stated rather than implied
 

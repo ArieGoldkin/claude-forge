@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as fs2 from 'fs';
 import * as os from 'os';
-import * as path2 from 'path';
+import * as path from 'path';
 
 // src/lib/hook-outage-detector.ts
 var HOOKED_TOOLS = /* @__PURE__ */ new Set(["Bash", "Write", "Edit", "MultiEdit"]);
@@ -143,10 +143,10 @@ function capturePluginState(pluginsRoot, opts = {}) {
   const files = {};
   let truncated = false;
   let dirCount = 0;
-  const excluded = opts.snapshotDir ? path2.resolve(opts.snapshotDir) : null;
+  const excluded = opts.snapshotDir ? path.resolve(opts.snapshotDir) : null;
   const walk = (abs, rel, depth) => {
     if (truncated) return;
-    if (excluded && path2.resolve(abs) === excluded) return;
+    if (excluded && path.resolve(abs) === excluded) return;
     let entries;
     try {
       entries = fs2.readdirSync(abs, { withFileTypes: true });
@@ -166,12 +166,12 @@ function capturePluginState(pluginsRoot, opts = {}) {
     if (depth >= maxDepth) return;
     for (const e of entries) {
       if (e.isDirectory())
-        walk(path2.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+        walk(path.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(pluginsRoot, "", 0);
   for (const name of STATE_FILES) {
-    const p = path2.join(pluginsRoot, name);
+    const p = path.join(pluginsRoot, name);
     try {
       const st = fs2.statSync(p);
       const entry = { size: st.size, m: Math.round(st.mtimeMs) };
@@ -200,6 +200,7 @@ function diffSnapshots(before, after) {
     const x = before.files[n];
     const y = after.files[n];
     if (!x || !y) return true;
+    if (x.content !== void 0 && y.content !== void 0) return x.content !== y.content;
     return x.size !== y.size || x.m !== y.m;
   }).sort();
   return {
@@ -212,39 +213,61 @@ function diffSnapshots(before, after) {
 }
 function resolvePluginStateDir(configDir, env = process.env) {
   const explicit = env["CLAUDE_PLUGIN_DATA"];
-  if (explicit) return { dir: path2.join(explicit, "plugin-state"), legacy: false };
-  const dataRoot = path2.join(configDir, "plugins", "data");
+  if (explicit) return { dir: path.join(explicit, "plugin-state"), legacy: false };
+  const dataRoot = path.join(configDir, "plugins", "data");
   let candidates = [];
   try {
-    candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path2.join(dataRoot, n));
+    candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n));
   } catch {
     candidates = [];
   }
   const populated = candidates.find((c) => {
     try {
-      return fs2.readdirSync(path2.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
+      return fs2.readdirSync(path.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
     } catch {
       return false;
     }
   });
   const chosen = populated ?? candidates[candidates.length - 1];
-  if (chosen) return { dir: path2.join(chosen, "plugin-state"), legacy: false };
-  return { dir: path2.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
+  if (chosen) return { dir: path.join(chosen, "plugin-state"), legacy: false };
+  return { dir: path.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
+}
+function readNewestSnapshot(snapDir) {
+  let names;
+  try {
+    names = fs2.readdirSync(snapDir).filter((n) => n.endsWith(".json")).sort();
+  } catch {
+    return null;
+  }
+  const skipped = [];
+  for (let i = names.length - 1; i >= 0; i--) {
+    const name = names[i];
+    try {
+      const parsed = JSON.parse(fs2.readFileSync(path.join(snapDir, name), "utf8"));
+      if (parsed && typeof parsed === "object" && parsed.dirs) {
+        return { snapshot: parsed, file: name, skipped };
+      }
+      skipped.push(name);
+    } catch {
+      skipped.push(name);
+    }
+  }
+  return null;
 }
 
 // bin/detect-hook-outages.ts
 function resolveLogDir(configDir) {
   const fromEnv = process.env["CLAUDE_PLUGIN_DATA"];
   if (fromEnv) {
-    const d = path2.join(fromEnv, "logs");
+    const d = path.join(fromEnv, "logs");
     if (fs2.existsSync(d)) return { dirs: [d], legacy: false };
   }
-  const dataRoot = path2.join(configDir, "plugins", "data");
+  const dataRoot = path.join(configDir, "plugins", "data");
   if (fs2.existsSync(dataRoot)) {
-    const candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path2.join(dataRoot, n, "logs")).filter((d) => fs2.existsSync(d));
+    const candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n, "logs")).filter((d) => fs2.existsSync(d));
     if (candidates.length > 0) return { dirs: candidates, legacy: false };
   }
-  const legacy = path2.join(configDir, "logs", "continuity");
+  const legacy = path.join(configDir, "logs", "continuity");
   if (fs2.existsSync(legacy)) return { dirs: [legacy], legacy: true };
   return null;
 }
@@ -254,7 +277,7 @@ function* logLines(dirs) {
       if (!name.startsWith("permission-feedback.log") && !name.startsWith("hooks.log")) continue;
       let text;
       try {
-        text = fs2.readFileSync(path2.join(dir, name), "utf8");
+        text = fs2.readFileSync(path.join(dir, name), "utf8");
       } catch {
         continue;
       }
@@ -264,7 +287,7 @@ function* logLines(dirs) {
 function* transcriptRecords(projectsRoot) {
   if (!fs2.existsSync(projectsRoot)) return;
   for (const proj of fs2.readdirSync(projectsRoot)) {
-    const dir = path2.join(projectsRoot, proj);
+    const dir = path.join(projectsRoot, proj);
     let entries;
     try {
       if (!fs2.statSync(dir).isDirectory()) continue;
@@ -276,7 +299,7 @@ function* transcriptRecords(projectsRoot) {
       if (!name.endsWith(".jsonl")) continue;
       let text;
       try {
-        text = fs2.readFileSync(path2.join(dir, name), "utf8");
+        text = fs2.readFileSync(path.join(dir, name), "utf8");
       } catch {
         continue;
       }
@@ -348,27 +371,17 @@ function stateDiff(configDir) {
     console.log("\u26A0 Falling back to the LEGACY data directory \u2014 snapshots there are written by");
     console.log("  the test suite, not by live hooks. Treat any result below as unreliable.\n");
   }
-  let names;
-  try {
-    names = fs2.readdirSync(snapDir).filter((n) => n.endsWith(".json")).sort();
-  } catch {
-    console.log(`VERDICT: INCONCLUSIVE (no snapshots yet at ${snapDir})`);
+  const loaded = readNewestSnapshot(snapDir);
+  if (!loaded) {
+    console.log(`VERDICT: INCONCLUSIVE (no readable snapshot at ${snapDir})`);
     console.log("Snapshots begin at the next session start with ctk >= 2.17.0 loaded.");
     return 2;
   }
-  const newest = names[names.length - 1];
-  if (!newest) {
-    console.log("VERDICT: INCONCLUSIVE (snapshot directory is empty)");
-    return 2;
+  const { snapshot: before, file: newest, skipped } = loaded;
+  if (skipped.length > 0) {
+    console.log(`\u26A0 Skipped ${skipped.length} unreadable snapshot(s): ${skipped.join(", ")}`);
   }
-  let before;
-  try {
-    before = JSON.parse(fs2.readFileSync(path2.join(snapDir, newest), "utf8"));
-  } catch {
-    console.log(`VERDICT: INCONCLUSIVE (snapshot ${newest} is unreadable)`);
-    return 2;
-  }
-  const after = capturePluginState(path2.join(configDir, "plugins"), { sessionId: "live" });
+  const after = capturePluginState(path.join(configDir, "plugins"), { sessionId: "live" });
   const d = diffSnapshots(before, after);
   console.log(`snapshot      : ${newest}`);
   console.log(`captured      : ${before.capturedAt}  session=${before.sessionId}`);
@@ -418,7 +431,7 @@ function main() {
     return 2;
   }
   const minTools = Number.isFinite(rawMin) ? rawMin : DEFAULT_MIN_TOOLS;
-  const configDir = process.env["CLAUDE_CONFIG_DIR"] || path2.join(os.homedir(), ".claude");
+  const configDir = process.env["CLAUDE_CONFIG_DIR"] || path.join(os.homedir(), ".claude");
   if (argv.includes("--state-diff")) return stateDiff(configDir);
   const log = resolveLogDir(configDir);
   if (!log) {
@@ -426,7 +439,7 @@ function main() {
     return 2;
   }
   const hookHours = hookHoursFromLines(logLines(log.dirs));
-  const activity = toolHoursFromRecords(transcriptRecords(path2.join(configDir, "projects")));
+  const activity = toolHoursFromRecords(transcriptRecords(path.join(configDir, "projects")));
   const { outages, hoursAnalysed, coverage, baseRate, rejectedAsChance } = detectOutages(
     hookHours,
     activity,

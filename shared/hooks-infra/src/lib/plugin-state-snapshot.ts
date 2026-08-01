@@ -192,6 +192,13 @@ export function diffSnapshots(
       const x = before.files[n];
       const y = after.files[n];
       if (!x || !y) return true;
+      // Compare CONTENT when both sides carry it. Reviewing this, the captured
+      // content was dead weight — `diffSnapshots` only looked at size and mtime,
+      // so a same-size edit (a version string swapped for another of equal
+      // length, exactly the shape a rebrand produces) compared as unchanged.
+      // The fix is to use the content, not to stop storing it: it is also the
+      // forensic record of which plugins and marketplaces were registered.
+      if (x.content !== undefined && y.content !== undefined) return x.content !== y.content;
       return x.size !== y.size || x.m !== y.m;
     })
     .sort();
@@ -279,6 +286,42 @@ export function resolvePluginStateDir(
   return { dir: path.join(configDir, 'logs', 'continuity', 'plugin-state'), legacy: true };
 }
 
+/**
+ * Read the newest parseable snapshot, walking backwards on failure.
+ *
+ * Even with an atomic write, a snapshot can be unreadable — a truncated file
+ * from an older ctk, a partial disk, a manual edit. Failing on the newest one
+ * would discard a whole usable history, so this falls back through the list and
+ * reports which file it actually used.
+ */
+export function readNewestSnapshot(
+  snapDir: string
+): { snapshot: PluginStateSnapshot; file: string; skipped: string[] } | null {
+  let names: string[];
+  try {
+    names = fs
+      .readdirSync(snapDir)
+      .filter((n) => n.endsWith('.json'))
+      .sort();
+  } catch {
+    return null;
+  }
+  const skipped: string[] = [];
+  for (let i = names.length - 1; i >= 0; i--) {
+    const name = names[i] as string;
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(snapDir, name), 'utf8'));
+      if (parsed && typeof parsed === 'object' && parsed.dirs) {
+        return { snapshot: parsed as PluginStateSnapshot, file: name, skipped };
+      }
+      skipped.push(name);
+    } catch {
+      skipped.push(name);
+    }
+  }
+  return null;
+}
+
 /** Snapshot filename: ISO timestamp first so lexicographic === chronological. */
 export function snapshotFilename(capturedAt: string, sessionId: string): string {
   const stamp = capturedAt.replace(/[:.]/g, '-');
@@ -304,7 +347,13 @@ export function writePluginStateSnapshot(
     fs.mkdirSync(outDir, { recursive: true });
     const snap = capturePluginState(pluginsRoot, { ...opts, snapshotDir: outDir });
     const file = path.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
-    fs.writeFileSync(file, JSON.stringify(snap), 'utf8');
+    // Atomic: write to a temp name in the SAME directory, then rename. A plain
+    // writeFileSync leaves a truncated file if the process dies mid-write, and a
+    // truncated snapshot is worse than none — it is unparseable at exactly the
+    // moment it is needed. `rename` within one directory is atomic on POSIX.
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(snap), 'utf8');
+    fs.renameSync(tmp, file);
     pruneSnapshots(outDir, opts.keep ?? 20);
     return file;
   } catch {

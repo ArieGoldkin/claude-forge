@@ -17,6 +17,7 @@ import {
   capturePluginState,
   diffSnapshots,
   pruneSnapshots,
+  readNewestSnapshot,
   resolvePluginStateDir,
   snapshotFilename,
   writePluginStateSnapshot,
@@ -285,5 +286,59 @@ describe('consecutive session starts', () => {
     const a = JSON.parse(fs.readFileSync(f1 as string, 'utf8'));
     const b = JSON.parse(fs.readFileSync(f2 as string, 'utf8'));
     expect(diffSnapshots(a, b).identical).toBe(true);
+  });
+});
+
+describe('review #103 follow-ups', () => {
+  it('detects a SAME-SIZE content edit that size/mtime alone would miss', () => {
+    // The must-fail control for making content load-bearing. A version string
+    // swapped for another of equal length is exactly the shape a rebrand
+    // produces, and it compared as unchanged before.
+    const f = path.join(root, 'known_marketplaces.json');
+    fs.writeFileSync(f, '{"m":"claude-dev-kit-aa"}');
+    const before = capturePluginState(root);
+    const sizeBefore = before.files['known_marketplaces.json']?.size;
+    fs.writeFileSync(f, '{"m":"claude-forge-xxxx"}');
+    const after = capturePluginState(root);
+    expect(after.files['known_marketplaces.json']?.size).toBe(sizeBefore); // identical size
+    expect(diffSnapshots(before, after).filesChanged).toContain('known_marketplaces.json');
+  });
+
+  it('writes atomically — no .tmp file survives a completed write', () => {
+    makePlugin('ctk', '2.17.0');
+    const out = path.join(root, 'data', 'ctk-claude-forge', 'plugin-state');
+    writePluginStateSnapshot(root, out, { sessionId: 's1' });
+    expect(fs.readdirSync(out).filter((n) => n.endsWith('.tmp'))).toHaveLength(0);
+  });
+
+  it('falls back past an unreadable newest snapshot instead of giving up', () => {
+    const out = path.join(root, 'plugin-state');
+    fs.mkdirSync(out, { recursive: true });
+    const good = snapshotFilename('2026-08-01T00:00:00.000Z', 'good');
+    const bad = snapshotFilename('2026-08-01T01:00:00.000Z', 'trunc');
+    fs.writeFileSync(path.join(out, good), JSON.stringify({ version: 1, dirs: {}, files: {} }));
+    fs.writeFileSync(path.join(out, bad), '{"dirs": {trunca'); // torn write
+    const loaded = readNewestSnapshot(out);
+    expect(loaded?.file).toBe(good);
+    expect(loaded?.skipped).toEqual([bad]);
+  });
+
+  it('returns null when every snapshot is unreadable — never a silent empty diff', () => {
+    const out = path.join(root, 'plugin-state');
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, snapshotFilename('2026-08-01T00:00:00.000Z', 'x')), 'garbage');
+    expect(readNewestSnapshot(out)).toBeNull();
+  });
+
+  it('ignores .tmp files when choosing the newest', () => {
+    const out = path.join(root, 'plugin-state');
+    fs.mkdirSync(out, { recursive: true });
+    const good = snapshotFilename('2026-08-01T00:00:00.000Z', 'good');
+    fs.writeFileSync(path.join(out, good), JSON.stringify({ version: 1, dirs: {}, files: {} }));
+    fs.writeFileSync(
+      path.join(out, `${snapshotFilename('2026-08-01T09:00:00.000Z', 'z')}.tmp`),
+      'x'
+    );
+    expect(readNewestSnapshot(out)?.file).toBe(good);
   });
 });

@@ -1389,7 +1389,9 @@ function writePluginStateSnapshot(pluginsRoot, outDir, opts = {}) {
     fs7.mkdirSync(outDir, { recursive: true });
     const snap = capturePluginState(pluginsRoot, { ...opts, snapshotDir: outDir });
     const file = path4.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
-    fs7.writeFileSync(file, JSON.stringify(snap), "utf8");
+    const tmp = `${file}.tmp`;
+    fs7.writeFileSync(tmp, JSON.stringify(snap), "utf8");
+    fs7.renameSync(tmp, file);
     pruneSnapshots(outDir, opts.keep ?? 20);
     return file;
   } catch {

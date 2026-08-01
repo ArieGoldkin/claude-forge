@@ -14,7 +14,7 @@ export default defineConfig({
       // during tests. session-loader's #82 snapshot wrote 20 files into the
       // developer's plugin-state directory before this existed, and a
       // diagnostic then read them back as if they were evidence.
-      CLAUDE_CONFIG_DIR: path.join(os.tmpdir(), 'ctk-test-config'),
+      CLAUDE_CONFIG_DIR: path.join(os.tmpdir(), 'ctk-test-config-engineering-toolkit'),
       CLAUDE_PLUGIN_NAME: 'engineering',
     },
     include: ['tests/**/*.test.ts'],

@@ -31,9 +31,9 @@ import {
   toolHoursFromRecords,
 } from '../src/lib/hook-outage-detector.js';
 import {
-  type PluginStateSnapshot,
   capturePluginState,
   diffSnapshots,
+  readNewestSnapshot,
   resolvePluginStateDir,
 } from '../src/lib/plugin-state-snapshot.js';
 
@@ -215,29 +215,17 @@ function stateDiff(configDir: string): number {
     console.log('⚠ Falling back to the LEGACY data directory — snapshots there are written by');
     console.log('  the test suite, not by live hooks. Treat any result below as unreliable.\n');
   }
-  let names: string[];
-  try {
-    names = fs
-      .readdirSync(snapDir)
-      .filter((n) => n.endsWith('.json'))
-      .sort();
-  } catch {
-    console.log(`VERDICT: INCONCLUSIVE (no snapshots yet at ${snapDir})`);
+  const loaded = readNewestSnapshot(snapDir);
+  if (!loaded) {
+    console.log(`VERDICT: INCONCLUSIVE (no readable snapshot at ${snapDir})`);
     console.log('Snapshots begin at the next session start with ctk >= 2.17.0 loaded.');
     return 2;
   }
-  const newest = names[names.length - 1];
-  if (!newest) {
-    console.log('VERDICT: INCONCLUSIVE (snapshot directory is empty)');
-    return 2;
+  const { snapshot: before, file: newest, skipped } = loaded;
+  if (skipped.length > 0) {
+    console.log(`⚠ Skipped ${skipped.length} unreadable snapshot(s): ${skipped.join(', ')}`);
   }
-  let before: PluginStateSnapshot;
-  try {
-    before = JSON.parse(fs.readFileSync(path.join(snapDir, newest), 'utf8'));
-  } catch {
-    console.log(`VERDICT: INCONCLUSIVE (snapshot ${newest} is unreadable)`);
-    return 2;
-  }
+
   const after = capturePluginState(path.join(configDir, 'plugins'), { sessionId: 'live' });
   const d = diffSnapshots(before, after);
 
