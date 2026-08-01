@@ -11,6 +11,7 @@
  * against the shapes that made earlier versions wrong. This file is I/O only.
  *
  * Usage:  node dist/bin/detect-hook-outages.js [--json] [--min-tools N]
+ *         node dist/bin/detect-hook-outages.js --state-diff
  * Exit:   0 no outages · 1 outages found · 2 inconclusive (no coverage, nothing
  *         analysed, or a bad argument). Exit 0 is an ALL-CLEAR and is only ever
  *         emitted when hours were actually examined.
@@ -27,6 +28,11 @@ import {
   hookHoursFromLines,
   toolHoursFromRecords,
 } from '../src/lib/hook-outage-detector.js';
+import {
+  type PluginStateSnapshot,
+  capturePluginState,
+  diffSnapshots,
+} from '../src/lib/plugin-state-snapshot.js';
 
 interface LogDir {
   /** Every ctk log directory found. ALL are read — see `resolveLogDir`. */
@@ -184,6 +190,97 @@ function report({
   );
 }
 
+/**
+ * Compare the newest session-start plugin-tree snapshot against live state.
+ *
+ * This is the half that retained artifacts could never provide. `mtime` is
+ * last-write-wins, so correlating a past outage against directory stamps proves
+ * nothing; a snapshot taken while ctk was demonstrably alive gives a real
+ * "before". `dirsRemoved` is the field that matters — a plugin directory present
+ * at session start and gone now is the strongest available evidence for the
+ * sweep hypothesis, and is exactly what the issue's version-name comparison
+ * could not see.
+ */
+function stateDiff(configDir: string): number {
+  // Resolve via the SAME hardened discovery the log reader uses, not the env var
+  // alone. `CLAUDE_PLUGIN_DATA` is set for hooks but not for a shell, so keying
+  // off it here silently fell back to the legacy directory — where the TEST SUITE
+  // writes. Measured: this read 20 snapshots stamped `test-session-loader-*` and
+  // compared them to live state as though they were evidence. Same defect class
+  // as the legacy log path (#101), recreated one directory over.
+  const resolved = resolveLogDir(configDir);
+  if (!resolved) {
+    console.log('VERDICT: INCONCLUSIVE (no ctk data directory found)');
+    return 2;
+  }
+  const snapDir = path.join(path.dirname(resolved.dirs[0] as string), 'plugin-state');
+  if (resolved.legacy) {
+    console.log('⚠ Falling back to the LEGACY data directory — snapshots there are written by');
+    console.log('  the test suite, not by live hooks. Treat any result below as unreliable.\n');
+  }
+  let names: string[];
+  try {
+    names = fs
+      .readdirSync(snapDir)
+      .filter((n) => n.endsWith('.json'))
+      .sort();
+  } catch {
+    console.log(`VERDICT: INCONCLUSIVE (no snapshots yet at ${snapDir})`);
+    console.log('Snapshots begin at the next session start with ctk >= 2.17.0 loaded.');
+    return 2;
+  }
+  const newest = names[names.length - 1];
+  if (!newest) {
+    console.log('VERDICT: INCONCLUSIVE (snapshot directory is empty)');
+    return 2;
+  }
+  let before: PluginStateSnapshot;
+  try {
+    before = JSON.parse(fs.readFileSync(path.join(snapDir, newest), 'utf8'));
+  } catch {
+    console.log(`VERDICT: INCONCLUSIVE (snapshot ${newest} is unreadable)`);
+    return 2;
+  }
+  const after = capturePluginState(path.join(configDir, 'plugins'), { sessionId: 'live' });
+  const d = diffSnapshots(before, after);
+
+  console.log(`snapshot      : ${newest}`);
+  console.log(`captured      : ${before.capturedAt}  session=${before.sessionId}`);
+  console.log(
+    `snapshot dirs : ${Object.keys(before.dirs).length}${before.truncated ? '  ⚠ TRUNCATED' : ''}`
+  );
+  console.log(
+    `live dirs     : ${Object.keys(after.dirs).length}${after.truncated ? '  ⚠ TRUNCATED' : ''}`
+  );
+  if (before.truncated || after.truncated) {
+    console.log(
+      '\n⚠ A truncated snapshot cannot be compared safely — missing entries look like\n' +
+        '  removals. Treat any "removed" list below as unreliable.'
+    );
+  }
+  if (d.identical) {
+    console.log(
+      '\nVERDICT       : IDENTICAL — the plugin tree has not changed since session start'
+    );
+    return 0;
+  }
+  console.log(
+    `\nVERDICT       : CHANGED  (removed ${d.dirsRemoved.length}, added ${d.dirsAdded.length}, ` +
+      `touched ${d.dirsTouched.length}, files ${d.filesChanged.length})`
+  );
+  const show = (label: string, xs: string[]): void => {
+    if (xs.length === 0) return;
+    console.log(`\n  ${label}:`);
+    for (const x of xs.slice(0, 25)) console.log(`    ${x}`);
+    if (xs.length > 25) console.log(`    … and ${xs.length - 25} more`);
+  };
+  show('REMOVED since session start (strongest sweep evidence)', d.dirsRemoved);
+  show('added', d.dirsAdded);
+  show('contents changed (mtime or entry count)', d.dirsTouched);
+  show('state files changed', d.filesChanged);
+  return 1;
+}
+
 function main(): number {
   const argv = process.argv.slice(2);
   const json = argv.includes('--json');
@@ -199,6 +296,8 @@ function main(): number {
   const minTools = Number.isFinite(rawMin) ? rawMin : DEFAULT_MIN_TOOLS;
 
   const configDir = process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude');
+  if (argv.includes('--state-diff')) return stateDiff(configDir);
+
   const log = resolveLogDir(configDir);
   if (!log) {
     console.log('VERDICT: INCONCLUSIVE (no ctk log directory found)');

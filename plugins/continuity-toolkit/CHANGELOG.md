@@ -2,6 +2,46 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.0] - 2026-08-01 — record plugin-tree state so #82 becomes diagnosable
+
+### Added
+
+- **`session-loader` writes a plugin-tree snapshot at every session start**, and `/doctor` gains
+  **Step 1d** (`--state-diff`) to compare it against live state.
+
+  Two investigations into #82 ended "trigger unidentified" for the same structural reason: every
+  candidate artifact records only **current state**. `.last_inuse_sweep` is one overwritten
+  timestamp, `installed_plugins.json` carries one `lastUpdated`, and a directory carries one
+  `mtime` — which is last-write-wins, so a directory touched during one outage and touched again a
+  week later shows only the later stamp. **The instruments record a state; the question is about a
+  history.** Correlating seven measured outages against them proved nothing in either direction.
+
+  Because measured outages begin **mid-session**, a session-start snapshot is a healthy "before".
+  `dirsRemoved` is the field that matters: a plugin directory present at session start and gone
+  when the outage is noticed is the strongest available evidence for the sweep hypothesis — and is
+  exactly what #82's version-name comparison could not see, since a rewritten directory leaves the
+  version *set* unchanged.
+
+  Cost measured on a five-plugin install: **196 directories, 8 ms, 17.8 KB**, newest 20 retained.
+  Every entry point is failure-tolerant; a diagnostic must never cost a session start.
+
+### Fixed
+
+- **The test suite was writing snapshots into the developer's real `~/.claude`** — 20 files stamped
+  `test-session-loader-*` — and `--state-diff` then read them back as if they were evidence. Both
+  halves are the repo's own recurring trap: a test suite arming a diagnostic, and a tool silently
+  falling back to the legacy directory that only tests write to (the #101 defect, one directory
+  over). `CLAUDE_CONFIG_DIR` is now isolated to a temp path in every plugin's `vitest.config.ts`,
+  so **any** hook that touches `~/.claude` is hermetic under test, and `--state-diff` resolves via
+  the same hardened discovery the log reader uses, warning loudly on a legacy fallback.
+
+### Known limits, stated rather than implied
+
+- A session that starts **already** broken has no snapshot — nothing of ctk's runs to write one.
+  Step 1b remains the live check for that case.
+- A snapshot marked `TRUNCATED` cannot be compared safely: its missing entries are
+  indistinguishable from removals. The flag is surfaced rather than silently tolerated.
+
 ## [2.16.0] - 2026-08-01 — retrospective detector for silent plugin unloads (#82)
 
 ### Added

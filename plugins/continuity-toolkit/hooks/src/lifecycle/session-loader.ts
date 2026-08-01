@@ -13,6 +13,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   CONTINUITY_DIRS,
@@ -34,12 +35,43 @@ import {
   logWarn,
 } from '../lib/logging.js';
 import { outputSuccess } from '../lib/output.js';
+import { writePluginStateSnapshot } from '../lib/plugin-state-snapshot.js';
 import { ensureSessionDir, evictOldSessions } from '../lib/read-cache/index.js';
 import { resolveSessionId } from '../lib/session-key.js';
 import { buildWindowTitleSequence } from '../lib/terminal-sequence.js';
 import type { HookInput, HookResult, SharedContext } from '../types.js';
 
 const HOOK_NAME = 'session-start';
+
+/** Snapshots retained. ~20 sessions of history at a few KB each. */
+const SNAPSHOT_KEEP = 20;
+
+/**
+ * Write a plugin-tree snapshot for #82, swallowing every failure.
+ *
+ * Resolves the same way `logging.ts` does — `CLAUDE_PLUGIN_DATA` when CC sets it,
+ * the legacy `~/.claude/logs/<plugin>/` otherwise — so snapshots land beside the
+ * logs a diagnosis will already be reading.
+ */
+function captureStartupPluginState(sessionId: string): void {
+  try {
+    const home = process.env['HOME'] || os.homedir();
+    const configDir = process.env['CLAUDE_CONFIG_DIR'] || path.join(home, '.claude');
+    const pluginsRoot = path.join(configDir, 'plugins');
+    if (!fs.existsSync(pluginsRoot)) return;
+    const dataDir = process.env['CLAUDE_PLUGIN_DATA'];
+    const outDir = dataDir
+      ? path.join(dataDir, 'plugin-state')
+      : path.join(configDir, 'logs', 'continuity', 'plugin-state');
+    const written = writePluginStateSnapshot(pluginsRoot, outDir, {
+      sessionId,
+      keep: SNAPSHOT_KEEP,
+    });
+    if (written) logDebug(HOOK_NAME, `plugin-state snapshot: ${written}`);
+  } catch {
+    /* a diagnostic must never cost a session start */
+  }
+}
 
 // =============================================================================
 // SESSION STATE MANAGEMENT
@@ -417,6 +449,18 @@ export async function sessionLoader(input: HookInput): Promise<HookResult> {
   // draft of this comment called it "a different precedence" whose repair would
   // "move real cache directories", and both halves of that were wrong.
   stampHookLiveness(resolveSessionId(input.session_id), HOOK_NAME);
+
+  // Snapshot the plugin tree (#82). Every candidate mechanism for a silent
+  // unload is recorded on disk only as CURRENT state — `.last_inuse_sweep` is one
+  // overwritten timestamp, a directory carries one mtime — so correlating past
+  // outages against those artifacts proves nothing either way. Two separate
+  // investigations ended "trigger unidentified" for exactly that reason.
+  //
+  // Measured outages begin MID-session, so this snapshot is the healthy "before"
+  // and the next occurrence finally has a real before/after. Deliberately after
+  // the liveness stamp and wrapped so it can never delay or break a session
+  // start: a diagnostic that costs a session is worse than the gap it closes.
+  captureStartupPluginState(resolveSessionId(input.session_id));
 
   logDebug(HOOK_NAME, `Provider: ${provider}, project: ${projectDir}`);
 

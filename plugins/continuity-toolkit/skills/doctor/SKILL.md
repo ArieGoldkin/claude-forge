@@ -220,6 +220,34 @@ this was built against, a naive fixed threshold reported **18** outages where **
 learn whether they are absent *now*, and only follow the capture-before-repair checklist there
 if 1b also fails.
 
+### Step 1d: Compare the Plugin Tree Against Session Start (#82)
+
+Steps 1b and 1c answer *whether* hooks stopped. This answers **what changed on disk when they
+did** — the question two investigations could not answer, because every candidate artifact
+(`.last_inuse_sweep`, a directory `mtime`, `installed_plugins.json`) records only current state,
+and `mtime` is last-write-wins.
+
+ctk now writes a compact plugin-tree snapshot at every session start (`session-loader`, ~8 ms,
+~18 KB, newest 20 kept). Because measured outages begin **mid-session**, that snapshot is a
+healthy "before":
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/hooks/dist/bin/detect-hook-outages.js" --state-diff
+```
+
+| Exit | Meaning |
+|---|---|
+| `0` | Tree identical to session start. |
+| `1` | **Changed.** `REMOVED since session start` is the strongest available evidence for the sweep hypothesis. |
+| `2` | Inconclusive — no snapshots yet, or the snapshot is unreadable. **Not an all-clear.** |
+
+**Run this at the moment an outage is noticed, before repairing anything.** The repair is what
+destroyed the evidence in 2026-07-29, and a snapshot is only useful against live state.
+
+Two honest limits: a session that started *already* broken has no snapshot, because nothing of
+ctk's ran to write one; and a snapshot marked `⚠ TRUNCATED` cannot be compared safely, since its
+missing entries look identical to removals.
+
 ### Step 2: Verify Hook Builds
 
 For each installed plugin:
