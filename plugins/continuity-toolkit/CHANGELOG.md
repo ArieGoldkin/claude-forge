@@ -2,6 +2,43 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.3] - 2026-08-01 — /doctor's three per-plugin checks actually run (#109)
+
+### Fixed
+
+- **Steps 2, 3 and 7 of `/ctk:doctor` never executed.** Each looped over `$INSTALLED_PLUGINS`,
+  unassigned since the initial commit, so all three iterated an empty list. A loop over an empty
+  list emits nothing and exits 0 — **indistinguishable from "checked, nothing to report"**, which
+  for a diagnostic is the false all-clear it must never produce. (The issue reported all three as
+  living in Step 7; they are in Steps 2, 3 and 7.)
+- **Two further unassigned variables made the minimal repair unsafe.** `$PLUGIN_ROOT` (Steps 2, 3)
+  and `$PLUGIN_SHORT_NAME` (Step 7) were also never assigned, and neither varied with the loop
+  variable. Assigning `INSTALLED_PLUGINS` alone would have checked **one** path N times and
+  labelled that single result with N plugin names — a confident wrong answer replacing a silent
+  one. Replaced by a Step 2 inventory carrying name, marketplace, version and install path
+  together, reused by Steps 3 and 7 via a temp file so they survive separate shells.
+- **Step 3 read the wrong path** — `$PLUGIN_ROOT/hooks.json`; the manifest is at
+  `hooks/hooks.json`. Wrong independently of the dead variable.
+- **Step 3 counted `"matcher"` keys**, an *optional* field absent from non-tool events. Measured
+  **0 registrations for dtk, atk, ftk and etk**, each of which registers real hooks. Now parses the
+  manifest and counts handler entries (verified against `registerHook()`: dtk 2, atk 1, ftk 1,
+  etk 1; ctk reports 50 handlers for 34 registrations because it wires hooks onto several events).
+- **Step 3's `grep -c … || echo 0` yielded the two-line string `0\n0`** — `grep -c` prints `0` and
+  exits 1 on no match, so the fallback appended a second `0`. Dormant while the loop never ran.
+- **Step 7 read only the legacy log tree** (`~/.claude/logs/<short-name>/`), which #105/#106
+  established holds test fixtures rather than live output. Now checks the live
+  `<plugin>-<marketplace>` data dir first and labels a legacy reading as history. The short name is
+  read from the installed plugin's own wrapper instead of a hardcoded map.
+- **Skills-only and script-based plugins are no longer reported NOT BUILT.** The inventory spans
+  every installed plugin, including third-party ones that ship `.mjs` hooks with no build step.
+
+### Added
+
+- **`tests/doctor-command-shell-vars.test.ts`** — fails if any variable expanded in `doctor.md` is
+  never bound. Carries a must-fail control verified against the real pre-fix file extracted with
+  `git cat-file blob` (reports exactly the three variables, exit 1), plus an inverse control so a
+  variable named only in a comment is not counted as an expansion.
+
 ## [2.17.2] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
 
 ### Fixed

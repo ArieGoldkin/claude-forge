@@ -101,35 +101,99 @@ in 2.14.0 — the passive statusline warning was cut before release.
 > not a failure, and an earlier revision of this check reported FAIL on a healthy install by
 > inferring capability from a side effect any process could produce.
 
-### Step 2: Check Hook Build Status
+### Step 2: Build the Per-Plugin Inventory, Then Check Hook Builds
 
-For each installed plugin, verify hooks are compiled:
+Steps 2, 3 and 7 are per-plugin checks, and each needs the plugin's **install path** — which is
+not derivable from its name. Build one inventory that carries both.
+
+> **Why this exists (#109).** These three steps used to loop over `$INSTALLED_PLUGINS` while
+> checking a path built from `$PLUGIN_ROOT` / `$PLUGIN_SHORT_NAME`. All three variables were
+> unassigned, present since the initial commit. The loops therefore iterated an empty list and
+> printed nothing — and **a loop over an empty list exits 0, which is indistinguishable from
+> "checked, nothing to report."** ⚠ Note what the minimal-looking repair would have done: because
+> the path variables never varied with the loop variable, assigning `INSTALLED_PLUGINS` alone
+> would have checked **one** path N times and labelled the single result with N different plugin
+> names — a confident wrong answer in place of a silent one. The name and the path must travel
+> together, which is what the inventory is for.
 
 ```bash
-for PLUGIN in $INSTALLED_PLUGINS; do
-  DIST="$PLUGIN_ROOT/hooks/dist/bin/run-hook.js"
-  if [ -f "$DIST" ]; then
+# Written to a file, not a shell variable: Steps 3 and 7 may run in separate shells.
+INVENTORY="${TMPDIR:-/tmp}/claude-doctor-inventory.tsv"
+python3 -c "
+import json,os
+d=json.load(open(os.path.expanduser('~/.claude/plugins/installed_plugins.json')))
+for key,entries in sorted(d.get('plugins',{}).items()):
+    name,_,market=key.partition('@')   # 'ctk@claude-forge' -> ctk, claude-forge
+    for e in entries:
+        print(name, market, e.get('version',''), e.get('installPath',''), sep='\t')
+" > "$INVENTORY"
+
+COUNT=$(wc -l < "$INVENTORY" | tr -d ' ')
+if [ "$COUNT" -eq 0 ]; then
+  echo "INVENTORY: EMPTY — Steps 2, 3 and 7 CANNOT RUN. Report this as a FAILED CHECK, never as 'all healthy'."
+else
+  echo "INVENTORY: $COUNT plugin record(s)"
+fi
+```
+
+Then verify hooks are compiled. **A missing `dist/` is only a fault for plugins that compile their
+hooks.** The inventory covers every installed plugin, including third-party ones: some ship no
+hooks at all, and others (e.g. Vercel's) ship executable `.mjs` hooks with no build step. Both
+would be reported NOT BUILT by a bare `dist/` check — a false fault against a healthy plugin.
+`hooks/package.json` is the discriminator for our compiled architecture:
+
+```bash
+while IFS=$'\t' read -r PLUGIN MARKET VERSION PLUGIN_ROOT; do
+  if [ ! -d "$PLUGIN_ROOT/hooks" ]; then
+    echo "$PLUGIN hooks: n/a (no hooks directory — skills/commands only)"
+  elif [ ! -f "$PLUGIN_ROOT/hooks/package.json" ]; then
+    echo "$PLUGIN hooks: n/a (script-based hooks, no build step)"
+  elif [ -f "$PLUGIN_ROOT/hooks/dist/bin/run-hook.js" ]; then
     echo "$PLUGIN hooks: BUILT"
   else
-    echo "$PLUGIN hooks: NOT BUILT (run: cd hooks && npm run build)"
+    echo "$PLUGIN hooks: NOT BUILT (run: cd '$PLUGIN_ROOT/hooks' && npm run build)"
   fi
-done
+done < "$INVENTORY"
 ```
 
 ### Step 3: Check Hook Configuration
 
 Read hooks.json for each installed plugin and count registered hooks:
 
+⚠ **Do not count `"matcher"` occurrences.** `matcher` is an *optional* key — it appears only on
+tool-matching events. A `SessionStart` group carries none, so a `grep -c '"matcher"'` reports
+**0 registrations for a plugin that has real hooks**: measured 0 for dtk, atk, ftk and etk, each
+of which does register hooks. Parse the manifest and count handler entries instead.
+
+⚠ **`grep -c` also can't be totalled with `|| echo 0`.** On no match it prints `0` *and* exits 1,
+so the fallback appends a second `0` and the value becomes the two-line string `0\n0`. Both traps
+were dormant in this step for as long as the loop never ran.
+
 ```bash
-for PLUGIN in $INSTALLED_PLUGINS; do
-  HOOKS_JSON="$PLUGIN_ROOT/hooks.json"
+INVENTORY="${TMPDIR:-/tmp}/claude-doctor-inventory.tsv"
+[ -s "$INVENTORY" ] || echo "INVENTORY MISSING — run Step 2 first. Do NOT report Step 3 as healthy."
+
+while IFS=$'\t' read -r PLUGIN MARKET VERSION PLUGIN_ROOT; do
+  # NOTE: hooks/hooks.json, not hooks.json. The manifest sits inside the hooks
+  # directory; the old path was wrong independently of the unassigned variable.
+  HOOKS_JSON="$PLUGIN_ROOT/hooks/hooks.json"
   if [ -f "$HOOKS_JSON" ]; then
-    # Count hook events registered
-    EVENT_COUNT=$(grep -c '"matcher"' "$HOOKS_JSON" 2>/dev/null || echo 0)
-    echo "$PLUGIN: $EVENT_COUNT hook registrations"
+    python3 -c "
+import json,sys
+name, path = sys.argv[1], sys.argv[2]
+h = json.load(open(path)).get('hooks', {})
+handlers = sum(len(g.get('hooks', [])) for groups in h.values() for g in groups)
+print(f'{name}: {handlers} hook handler(s) across {len(h)} event(s)')
+" "$PLUGIN" "$HOOKS_JSON"
+  else
+    echo "$PLUGIN: no hooks.json (skills/commands only)"
   fi
-done
+done < "$INVENTORY"
 ```
+
+A plugin may wire one hook onto several events, so the handler count is expected to meet or exceed
+its `registerHook()` count (ctk: 50 handlers, 34 registered). A count *below* the registry is the
+signal worth chasing.
 
 Verify no duplicate hooks across plugins (ctk should own shared hooks exclusively).
 
@@ -183,15 +247,35 @@ gh --version 2>/dev/null && echo "gh: AVAILABLE" || echo "gh: NOT INSTALLED"
 
 ### Step 7: Check Log Directory Health
 
+Per-plugin hook logs live under **two different naming schemes**, which is why one variable could
+never serve both: the live tier is keyed by `<plugin>-<marketplace>` (`ctk-claude-forge`), the
+legacy tier by `CLAUDE_PLUGIN_NAME` (`continuity`). The tier rule itself is stated once, in ctk's
+CLAUDE.md → "Log locations" — read it there rather than inferring it from this snippet.
+
 ```bash
-# Check log sizes
-for PLUGIN in $INSTALLED_PLUGINS; do
-  LOG="$HOME/.claude/logs/$PLUGIN_SHORT_NAME/hooks.log"
-  if [ -f "$LOG" ]; then
-    SIZE=$(wc -c < "$LOG")
-    echo "$PLUGIN log: $(($SIZE / 1024))KB"
+INVENTORY="${TMPDIR:-/tmp}/claude-doctor-inventory.tsv"
+[ -s "$INVENTORY" ] || echo "INVENTORY MISSING — run Step 2 first. Do NOT report Step 7 as healthy."
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+while IFS=$'\t' read -r PLUGIN MARKET VERSION PLUGIN_ROOT; do
+  LIVE="$CFG/plugins/data/$PLUGIN-$MARKET/logs/hooks.log"
+  # The legacy dir is keyed by CLAUDE_PLUGIN_NAME, which differs from the install
+  # name (ctk -> continuity). Read it from the installed wrapper instead of
+  # hardcoding a map here — this is what the old $PLUGIN_SHORT_NAME reached for.
+  SHORT=$(grep -o 'CLAUDE_PLUGIN_NAME="[^"]*"' \
+          "$PLUGIN_ROOT/hooks/bin/run-hook-wrapper.sh" 2>/dev/null | cut -d'"' -f2)
+
+  if [ -f "$LIVE" ]; then
+    KB=$(( $(wc -c < "$LIVE") / 1024 ))
+    [ "$KB" -gt 1024 ] && echo "$PLUGIN log: ${KB}KB (live) — >1MB, consider rotation" \
+                       || echo "$PLUGIN log: ${KB}KB (live)"
+  elif [ -n "$SHORT" ] && [ -f "$CFG/logs/$SHORT/hooks.log" ]; then
+    KB=$(( $(wc -c < "$CFG/logs/$SHORT/hooks.log") / 1024 ))
+    echo "$PLUGIN log: ${KB}KB (LEGACY tree — history, not live-hook output)"
+  else
+    echo "$PLUGIN log: — (no hook log; normal for a plugin whose hooks have not fired)"
   fi
-done
+done < "$INVENTORY"
 
 # Check review history.
 # Live hooks write under $CLAUDE_PLUGIN_DATA/logs/; the fallback honors
@@ -254,11 +338,16 @@ verify whether its skills/agents/hooks are actually present before treating it a
 | Other plugins | OK — only domain-specific hooks registered |
 
 ### Log Health
-| Plugin | Log Size | Review History |
-|--------|----------|----------------|
-| continuity | 45KB | 23 entries |
-| engineering | 12KB | — |
-| frontend | 8KB | — |
+Rows are labelled by **install name** (`ctk`), which is what the inventory carries — not by
+`CLAUDE_PLUGIN_NAME` (`continuity`). A `—` is the normal result for a plugin whose hooks have not
+fired; it is not a fault. `LEGACY` means the live tree holds nothing for that plugin, so the figure
+is history rather than current activity.
+
+| Plugin | Log Size | Tier | Review History |
+|--------|----------|------|----------------|
+| ctk | 127KB | live | 23 entries |
+| dtk | 163KB | LEGACY | — |
+| atk | — | — | — |
 
 ### Recommendations
 {Priority-ordered list of actions, or "All systems healthy — no action needed"}
