@@ -299,11 +299,27 @@ export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   // substring, so the lookahead suppresses the private spelling too. Verified,
   // not assumed — see the both-spellings cases in security-blocker-macos-temp.
   /\/var\/(?!folders\/)/,
-  // Companion traversal guard, mirroring the scratchpad carve-out above.
-  // Patterns match RAW text with no `..` normalization, so without this a path
-  // spelled from inside the exempt prefix walks straight back out:
-  // `/var/folders/x/../../../log/system.log` contains exactly one `/var/`, and
-  // it is followed by `folders/`, so the lookahead above lets it through.
+  // Partial traversal guard, mirroring the scratchpad carve-out above. It
+  // catches the CONTIGUOUS form — `/var/folders/x/../../../log/system.log` —
+  // which is what a build tool or installer actually emits by accident.
+  //
+  // ⚠ IT IS PARTIAL, AND THE PRECISE LIMITS ARE MEASURED, NOT GUESSED. An
+  // earlier revision of this comment claimed it "closes" the traversal bypass.
+  // It does not. `\S*` cannot cross whitespace and the `..` must be followed by
+  // `/`, whitespace, or end, so ALL of these defeat it — each verified DENY
+  // before the #99 narrowing and ALLOW after, and each pinned as a known gap in
+  // security-blocker-macos-temp.test.ts:
+  //   - a space or tab inside the path         `"…/my dir/../../../log/x"`
+  //   - a `..` segment ending in a quote        `…/'..'/'..'/…`  ·  `"…/.."`
+  //   - `cd <exempt> && cat ../../../log/x`     (traversal in a later segment)
+  //   - traversal built through a variable      `d=<exempt>; cat $d/../…`
+  //
+  // This cannot be fixed by widening the regex: deciding "where does this path
+  // resolve?" needs a shell parse, the same wall the abandoned mutation gate hit
+  // (see the docstring above). The guard is kept because it is free and catches
+  // the accidental case; it is NOT a security boundary. What actually bounds the
+  // exposure is that BASH_SECRET_PATTERNS run first and independently, and the
+  // dangerous-bash registry runs before both.
   /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
   /\/proc\//,

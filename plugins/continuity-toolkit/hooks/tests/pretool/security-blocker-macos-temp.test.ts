@@ -12,22 +12,44 @@
  * `/var/folders/x/../../../log/system.log` contains exactly ONE `/var/`, and it
  * is followed by `folders/`, so the lookahead suppresses the only match and the
  * path — which resolves to `/var/log/system.log` — sails through. Patterns match
- * RAW text with no `..` normalization. The companion guard is what closes it,
- * mirroring the scratchpad carve-out that already ships one for the same reason.
- * The `whichRuleFires` test below pins that the guard, not the lookahead, is
- * what denies each traversal case.
+ * RAW text with no `..` normalization.
  *
- * ⚠ ONE PATTERN COVERS BOTH SPELLINGS ON PURPOSE. `/var` is a symlink to
- * `/private/var`, and the issue warned that a carve-out honouring one spelling
- * is bypassed via the other. It is not two patterns: `/private/var/folders/`
- * CONTAINS `/var/folders/`, so the same lookahead suppresses both. That is
- * verified here rather than reasoned about, in both directions.
+ * ⚠⚠ THE COMPANION GUARD IS PARTIAL. An earlier revision of this header said it
+ * "closes" the bypass. It does not — adversarial review of PR #113 defeated it
+ * five ways (a space in the path, a `..` ending in a quote, `cd` then a relative
+ * path, traversal through a variable), each measured DENY before the narrowing
+ * and ALLOW after. Those five are pinned below under KNOWN GAPS, as `false`,
+ * deliberately: they are a documented trade, not a passing grade. The guard
+ * catches the contiguous form — what a build tool emits by accident — and is not
+ * a security boundary. It cannot be widened into one: deciding where a path
+ * resolves needs a shell parse.
+ *
+ * ⚠ ONE PATTERN COVERS BOTH SPELLINGS **ON THE BASH PATH ONLY**. Those patterns
+ * are unanchored, and `/private/var/folders/` CONTAINS `/var/folders/`, so a
+ * single lookahead suppresses both. The WRITE path in path-utils.ts is anchored
+ * (`^`) and therefore needs its own entry per spelling — the same requirement
+ * with opposite mechanics. Both are verified here, in both directions.
  *
  * @module tests/pretool/security-blocker-macos-temp
  */
 
 import { describe, expect, it } from 'vitest';
-import { matchesBashSensitivePattern } from '../../src/pretool/security-blocker.js';
+import { isProtectedPath } from '../../src/lib/path-utils.js';
+import {
+  BASH_SYSTEM_DIR_PATTERNS,
+  matchesBashSensitivePattern,
+} from '../../src/pretool/security-blocker.js';
+
+/**
+ * Pulled from the SHIPPED array rather than re-declared, so a test cannot pass
+ * against a copy of a rule the source no longer contains. Failing to find one
+ * is itself the failure.
+ */
+const NARROWED = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('(?!folders'));
+const TRAVERSAL_GUARD = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('\\.\\.'));
+if (!NARROWED || !TRAVERSAL_GUARD) {
+  throw new Error('#99 patterns missing from BASH_SYSTEM_DIR_PATTERNS — the fix was reverted');
+}
 
 // Assembled from fragments so this test file's own text carries no protected
 // literal — security-blocker matches COMMAND TEXT, and a literal here has
@@ -124,34 +146,113 @@ describe('#99 macOS per-user temp tree', () => {
       expect(denied(`cat ${TMP}${S}private.key`)).toBe(true);
     });
 
+    it('the UNPROTECTED shapes are pinned absolutely, not only by parity', () => {
+      // Review finding: a pure parity assertion passes if BOTH sides flip
+      // together, so the three "unprotected in both" labels were unchecked
+      // claims. Pinned outright — if any becomes denied, the label is a lie and
+      // this fails rather than the row silently still passing.
+      expect(denied(`cat ${TMP}${S}id_rsa`)).toBe(false);
+      expect(denied(`cat ${TMP}${S}credentials.json`)).toBe(false);
+      expect(denied(`cat ${TMP}${S}server.pem`)).toBe(false);
+    });
+
+    it('SCOPE, stated precisely: this exemption is NOT uid-bound, the scratchpad one is', () => {
+      // Review finding: the six-row parity test varies only the FILENAME with a
+      // fixed prefix, so it structurally cannot detect a difference in tree
+      // scope — and there is one. Recorded here so the claim is bounded by a
+      // test rather than by a docstring sentence.
+      expect(denied(`cat ${PRIV}${S}tmp${S}notclaude${S}f`)).toBe(true); // scratchpad: uid-bound
+      expect(denied(`cat ${PRIV}${S}tmp${S}claude-501${S}f`)).toBe(false);
+      expect(denied(`cat ${VAR}folders${S}ZZ${S}anyuser${S}T${S}f`)).toBe(false); // ours: whole tree
+    });
+  });
+
+  describe('write path (#113 review) — Write/Edit must agree with Bash', () => {
+    // The original fix touched only the Bash matcher, so Write/Edit to a temp
+    // file stayed denied while `bash -c` to the same file was allowed — the
+    // issue's own motivation half solved. Both spellings need their own entry
+    // there because those patterns are ANCHORED, unlike the Bash ones.
+    const prot = (p: string) => isProtectedPath(p).isProtected;
+
+    it('temp file is writable, short spelling', () => {
+      expect(prot(`${VAR}folders${S}9x${S}t2k_5s${S}T${S}out.txt`)).toBe(false);
+    });
+    it('temp file is writable, private spelling', () => {
+      expect(prot(`${PRIV}${VAR}folders${S}9x${S}t2k_5s${S}T${S}out.txt`)).toBe(false);
+    });
+    it('genuine system paths still protected, both spellings', () => {
+      expect(prot(`${VAR}log${S}system.log`)).toBe(true);
+      expect(prot(`${PRIV}${VAR}log${S}system.log`)).toBe(true);
+      expect(prot(`${VAR}root${S}x`)).toBe(true);
+    });
+    it('traversal needs NO guard here — the path is resolved before matching', () => {
+      // The asymmetry with the Bash path, pinned: normalizePath/resolveRealPath
+      // run first, so `..` is gone before any pattern is applied.
+      expect(prot(`${VAR}folders${S}9x${S}T${S}..${S}..${S}..${S}log${S}system.log`)).toBe(true);
+    });
+
     it('the real home ssh directory is untouched by this change', () => {
       expect(denied(`cat ~${S}.ssh${S}id_rsa`)).toBe(true);
     });
   });
 
-  it('whichRuleFires: the companion guard denies traversal, NOT the lookahead', () => {
-    // Without this, a traversal row could pass for the wrong reason and the
-    // guard could be deleted with every test still green.
-    const NARROWED = /\/var\/(?!folders\/)/;
-    const TRAVERSAL = /\/var\/folders\/\S*\.\.(\/|\s|$)/;
+  it('whichRuleFires: the PARTIAL guard denies contiguous traversal, not the lookahead', () => {
+    // ⚠ REWRITTEN after review. The first version declared local copies of both
+    // regexes and asserted about those, so it proved regex semantics rather than
+    // anything about the shipped code. It is now coupled through the pattern
+    // SOURCE the live matcher reports, so replacing the guard with any other
+    // rule fails here.
     const escapeCmd = `cat ${TMP}${S}..${S}..${S}..${S}..${S}log${S}system.log`;
+    const hit = matchesBashSensitivePattern(escapeCmd);
 
-    expect(NARROWED.test(escapeCmd)).toBe(false); // the lookahead does NOT catch it
-    expect(TRAVERSAL.test(escapeCmd)).toBe(true); // the companion guard does
-    expect(denied(escapeCmd)).toBe(true);
+    expect(hit.matched).toBe(true);
+    expect(hit.pattern).toBe(TRAVERSAL_GUARD.source);
+    // and it is genuinely NOT the narrowing that catches it
+    expect(NARROWED.source).not.toBe(hit.pattern);
+    expect(new RegExp(NARROWED.source).test(escapeCmd)).toBe(false);
   });
 
-  it('MUST-FAIL CONTROL: the pre-fix pattern denied the temp path', () => {
-    // Pins that the fix changed something real. If this ever passes with the
-    // narrowed pattern, the test is measuring nothing.
-    const PRE_FIX = /\/var\//;
-    const NARROWED = /\/var\/(?!folders\/)/;
-    const tempPath = `sh ${TMP}${S}install.sh`;
+  it('MUST-FAIL CONTROL: derived from the EXPORTED array, not a local copy', () => {
+    // ⚠ REWRITTEN after review. The first version compared two regex literals
+    // declared three lines above it — reverting the entire source fix left it
+    // green. It pinned nothing while being named as the thing that pinned
+    // everything. Both regexes now come from BASH_SYSTEM_DIR_PATTERNS itself.
+    const sources = BASH_SYSTEM_DIR_PATTERNS.map((r) => r.source);
 
-    expect(PRE_FIX.test(tempPath)).toBe(true); // old: denied
-    expect(NARROWED.test(tempPath)).toBe(false); // new: allowed
-    // and both still agree on a genuine system path
-    expect(PRE_FIX.test(`${VAR}log${S}x`)).toBe(true);
-    expect(NARROWED.test(`${VAR}log${S}x`)).toBe(true);
+    // The bare pre-fix pattern must be GONE from the shipped array.
+    expect(sources).not.toContain('\\/var\\/');
+    // The narrowed one and the guard must both be present.
+    expect(sources).toContain(NARROWED.source);
+    expect(sources).toContain(TRAVERSAL_GUARD.source);
+    // And the live matcher must reflect it.
+    expect(denied(`sh ${TMP}${S}install.sh`)).toBe(false);
+    expect(denied(`rm ${VAR}log${S}system.log`)).toBe(true);
+  });
+
+  describe('KNOWN GAPS — the guard is partial, and these are the measured limits', () => {
+    // Every row below was DENY before the #99 narrowing and is ALLOW after.
+    // They are pinned as `false` deliberately: this is a documented trade, not a
+    // passing grade. If a future change makes one of them deny again, this test
+    // fails and the comment in security-blocker.ts must be updated to match.
+    //
+    // Found by adversarial review (PR #113). The original claim was that the
+    // companion guard "closes" the traversal bypass. It does not — `\S*` cannot
+    // cross whitespace, and the `..` must be followed by `/`, whitespace or end.
+    const gaps: Array<[string, string]> = [
+      ['space inside the path', `cat "${TMP}${S}my dir${S}..${S}..${S}..${S}log${S}system.log"`],
+      ['quoted .. segments', `cat ${TMP}${S}'..'${S}'..'${S}'..'${S}log${S}system.log`],
+      ['.. followed by a quote', `cat "${TMP}${S}.."`],
+      ['cd then relative traversal', `cd ${TMP} && cat ..${S}..${S}..${S}log${S}system.log`],
+      ['traversal via a variable', `d=${TMP}; cat $d${S}..${S}..${S}..${S}log${S}system.log`],
+    ];
+    for (const [label, cmd] of gaps) {
+      it(`NOT blocked: ${label}`, () => expect(denied(cmd)).toBe(false));
+    }
+
+    it('what still bounds the exposure: secret patterns run first, independently', () => {
+      // These are why the gaps above are a bounded trade rather than an opening.
+      expect(denied(`cat "${TMP}${S}my dir${S}..${S}..${S}.ssh${S}id_rsa"`)).toBe(true);
+      expect(denied(`cat "${TMP}${S}my dir${S}..${S}..${S}.env"`)).toBe(true);
+    });
   });
 });

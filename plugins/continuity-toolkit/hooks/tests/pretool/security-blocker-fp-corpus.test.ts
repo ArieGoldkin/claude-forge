@@ -390,5 +390,13 @@ describe('#65 FP corpus measurement', () => {
     expect(fp).toBe(0);
     // Guard against the corpus silently shrinking to nothing.
     expect(CORPUS.length).toBe(31);
+    // Pin the CARDINALITY of the `unprotected` axis, not just its semantics.
+    // Review finding (#113): the flag is a laundering vector one edit wide — a
+    // future author facing a real false negative could silence it by marking
+    // that entry `unprotected`, the same move as relabelling `truth`, just on a
+    // newer axis. It cannot launder a DENIED entry (that becomes a false
+    // positive and fails above), and with this line any spread of the flag is a
+    // deliberate, visible edit rather than a quiet one.
+    expect(CORPUS.filter((e) => e.unprotected).length).toBe(1);
   });
 });

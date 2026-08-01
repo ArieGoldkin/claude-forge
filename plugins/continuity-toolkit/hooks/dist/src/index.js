@@ -1439,14 +1439,31 @@ var CREDENTIAL_PATTERNS = [
 var SYSTEM_DIR_PATTERNS = [
   /^\/etc\//,
   /^\/usr\//,
-  /^\/var\//,
+  // #99: macOS puts each user's TMPDIR under /var/folders/. The Bash path
+  // exempts it; without the same carve-out here, Write/Edit to a temp file was
+  // still denied while `bash -c 'echo … > <same file>'` was allowed — the
+  // issue's own motivation ("writes there and then runs the result") only half
+  // solved. Found by adversarial review of PR #113, not by the original fix.
+  //
+  // ⚠ BOTH SPELLINGS NEED THEIR OWN ENTRY HERE, unlike the Bash path. These
+  // patterns are ANCHORED (`^`), so `/private/var/folders/…` does not match
+  // `^\/var\//` and is not covered by narrowing that one. The Bash patterns are
+  // unanchored substring matches, where `/private/var/folders/` contains
+  // `/var/folders/` and a single lookahead therefore suffices. Same requirement,
+  // opposite mechanics — verified in both files.
+  /^\/var\/(?!folders\/)/,
   /^\/sys\//,
   /^\/proc\//,
   /^\/boot\//,
   /^\/root\//,
   // macOS specific — CC v2.1.113 expanded dangerous-removal targets
   /^\/private\/etc\//,
-  /^\/private\/var\//,
+  // No traversal companion is needed on this path, and that is a real asymmetry
+  // with security-blocker: isProtectedPath() runs normalizePath() AND
+  // resolveRealPath() first, so `…/folders/x/../../log/y` is already resolved to
+  // `/var/log/y` before matching and the narrowed pattern catches it. The Bash
+  // patterns match RAW command text, which is why they need a (partial) guard.
+  /^\/private\/var\/(?!folders\/)/,
   // Carve-out mirrors security-blocker BASH_SENSITIVE_PATTERNS: CC's
   // harness-managed scratchpad (/private/tmp/claude-<uid>/…) must stay
   // writable or forked skills/subagents die on their first scratchpad write.
@@ -3064,11 +3081,27 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // substring, so the lookahead suppresses the private spelling too. Verified,
   // not assumed — see the both-spellings cases in security-blocker-macos-temp.
   /\/var\/(?!folders\/)/,
-  // Companion traversal guard, mirroring the scratchpad carve-out above.
-  // Patterns match RAW text with no `..` normalization, so without this a path
-  // spelled from inside the exempt prefix walks straight back out:
-  // `/var/folders/x/../../../log/system.log` contains exactly one `/var/`, and
-  // it is followed by `folders/`, so the lookahead above lets it through.
+  // Partial traversal guard, mirroring the scratchpad carve-out above. It
+  // catches the CONTIGUOUS form — `/var/folders/x/../../../log/system.log` —
+  // which is what a build tool or installer actually emits by accident.
+  //
+  // ⚠ IT IS PARTIAL, AND THE PRECISE LIMITS ARE MEASURED, NOT GUESSED. An
+  // earlier revision of this comment claimed it "closes" the traversal bypass.
+  // It does not. `\S*` cannot cross whitespace and the `..` must be followed by
+  // `/`, whitespace, or end, so ALL of these defeat it — each verified DENY
+  // before the #99 narrowing and ALLOW after, and each pinned as a known gap in
+  // security-blocker-macos-temp.test.ts:
+  //   - a space or tab inside the path         `"…/my dir/../../../log/x"`
+  //   - a `..` segment ending in a quote        `…/'..'/'..'/…`  ·  `"…/.."`
+  //   - `cd <exempt> && cat ../../../log/x`     (traversal in a later segment)
+  //   - traversal built through a variable      `d=<exempt>; cat $d/../…`
+  //
+  // This cannot be fixed by widening the regex: deciding "where does this path
+  // resolve?" needs a shell parse, the same wall the abandoned mutation gate hit
+  // (see the docstring above). The guard is kept because it is free and catches
+  // the accidental case; it is NOT a security boundary. What actually bounds the
+  // exposure is that BASH_SECRET_PATTERNS run first and independently, and the
+  // dangerous-bash registry runs before both.
   /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
   /\/proc\//,

@@ -12,12 +12,25 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
   build tool, or test harness that wrote to `TMPDIR` and then ran the result was denied — ordinary
   work, refused on path text alone. Narrowed to `/\/var\/(?!folders\/)/`; `/var/log`, `/var/root`
   and `/var/db` stay protected.
-- **Added a companion traversal guard — the narrowing alone was exploitable.** The issue proposed
-  only the lookahead. That opens a bypass: `/var/folders/x/../../../log/system.log` contains
-  exactly one `/var/`, followed by `folders/`, so the lookahead suppresses the only match and the
-  path — which resolves into `/var/log` — passes. Patterns match raw text with no `..`
-  normalization. `/\/var\/folders\/\S*\.\.(\/|\s|$)/` closes it, mirroring the guard the scratchpad
-  carve-out has shipped for the same reason.
+- **Fixed the same false positive on the WRITE path.** `path-utils.ts` carried its own copy of the
+  system-dir list, untouched by the first pass, so `Write`/`Edit` to a temp file stayed denied while
+  `bash -c` writing the same file was allowed — the issue's own motivation ("writes there and then
+  runs the result") only half solved. ⚠ **Both spellings need their own entry there**, unlike the
+  Bash path: those patterns are **anchored** (`^`), so narrowing `/^\/var\//` does not cover
+  `/private/var/…`. The Bash patterns are unanchored substring matches, where one lookahead suffices
+  because `/private/var/folders/` *contains* `/var/folders/`. Same requirement, opposite mechanics.
+  No traversal guard is needed on the write path — `isProtectedPath()` normalizes and resolves the
+  path before matching, so `..` is already gone.
+- **Added a PARTIAL traversal guard, and it is documented as partial.** The narrowing alone leaves a
+  bypass: a path spelled from inside the exempt prefix contains exactly one match candidate, the
+  lookahead suppresses it, and the resolved path lands back in the protected tree. The guard catches
+  the **contiguous** form, which is what a build tool actually emits by accident.
+  ⚠ **It does not close the bypass, and five defeating shapes are pinned as known gaps** — a space
+  or tab in the path, a `..` ending in a quote, `cd <exempt> && cat ../…`, and traversal via a
+  variable. Each was verified DENY before this change and ALLOW after. This cannot be fixed by
+  widening the regex: deciding where a path resolves needs a shell parse — the same wall the
+  abandoned mutation gate hit. What bounds the exposure is that the secret patterns and the
+  dangerous-bash registry run first and independently.
 - **Both spellings are covered by one pattern, verified rather than assumed.** `/var` is a symlink
   to `/private/var`, and the issue warned a carve-out honouring one spelling is bypassed via the
   other. It needs no second pattern: `/private/var/folders/` *contains* `/var/folders/`, so the
@@ -37,10 +50,26 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
 
 ### Testing
 
-- **New `tests/pretool/security-blocker-macos-temp.test.ts`** (28 cases): both spellings allowed,
-  genuine `/var` paths still denied, four traversal-escape cases, sibling system dirs unaffected,
-  a `whichRuleFires` test pinning that the **companion guard** — not the lookahead — denies each
-  escape, and a must-fail control proving the pre-fix pattern denied what the new one allows.
+- **New `tests/pretool/security-blocker-macos-temp.test.ts`** (40 cases): both spellings allowed,
+  genuine paths still denied, traversal escapes, sibling system dirs unaffected, the five **known
+  gaps** pinned as documented trades, write-path coverage, and a scope test recording that this
+  exemption is **not uid-bound** while the scratchpad one is.
+- **Corrected a test that encoded this very bug as correct behaviour.**
+  `security-blocker.test.ts`'s symlink case asserted `deny` for an ordinary file in a macOS temp
+  directory, commented *"This is expected and correct security behavior"* — it was the #99 false
+  positive, written down as an expectation, in a test whose own title says *"should allow"*. The
+  platform branch is removed: after the carve-out nothing macOS-specific remains, and a branch only
+  one OS can exercise hides regressions on the other.
+- **Both rule-attribution tests were rewritten after review — the originals pinned nothing.** They
+  declared local copies of the regexes and asserted about those, so reverting the entire source fix
+  left them green; the one named `MUST-FAIL CONTROL` was fully tautological. They now derive from
+  the exported `BASH_SYSTEM_DIR_PATTERNS` and assert through the `pattern` the live matcher
+  reports, so replacing the guard with any other rule fails. Verified by two mutation controls:
+  deleting the guard and reverting the narrowing each fail the suite, and the source restores
+  byte-identical.
+- **Parity rows are now pinned absolutely, not only against each other.** A pure parity assertion
+  passes if both sides flip together, so the three "unprotected in both" labels were unchecked
+  claims.
 - **`security-blocker-fp-corpus` now separates two axes it had conflated.** `truth` answers "does
   the command touch its literal?"; it does not answer "should this be denied?", which also depends
   on whether the resource is protected. M1 touches a path that is now deliberately unprotected, so
