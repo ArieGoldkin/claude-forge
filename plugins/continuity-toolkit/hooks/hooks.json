@@ -52,7 +52,6 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "if": "Bash(rm *) || Bash(sudo *) || Bash(chmod *) || Bash(chown *) || Bash(kill *) || Bash(pkill *) || Bash(mkfs *) || Bash(dd *) || Bash(> /dev/*) || Bash(curl * | sh) || Bash(wget * | sh) || Bash(* && rm *) || Bash(* && sudo *) || Bash(* && dd *) || Bash(* && mkfs*) || Bash(* | xargs rm *) || Bash(*=* rm *) || Bash(*=* sudo *) || Bash(*=* dd *) || Bash(*=* chmod *)",
         "hooks": [
           {
             "type": "command",
@@ -63,7 +62,6 @@
       },
       {
         "matcher": "Bash",
-        "if": "Bash(git commit*) || Bash(git push*) || Bash(terraform apply*) || Bash(terraform destroy*) || Bash(rm -rf *) || Bash(rm -fr *)",
         "hooks": [
           {
             "type": "command",
@@ -74,7 +72,6 @@
       },
       {
         "matcher": "Write|Edit|MultiEdit",
-        "if": "Write(.env*) || Write(*secret*) || Write(*credential*) || Write(*password*) || Edit(.env*) || Edit(*secret*)",
         "hooks": [
           {
             "type": "command",
@@ -96,7 +93,6 @@
     ],
     "PermissionRequest": [
       {
-        "if": "Bash(git *) || Bash(ls *) || Bash(cat *) || Bash(echo *) || Bash(pwd) || Bash(which *) || Bash(node *) || Bash(npm *) || Bash(npx *)",
         "hooks": [
           {
             "type": "command",
@@ -131,7 +127,6 @@
       },
       {
         "matcher": "Write|Edit|MultiEdit",
-        "if": "Write(*.ts) || Write(*.tsx) || Write(*.js) || Write(*.jsx) || Write(*.mjs) || Write(*.cjs) || Write(*.py) || Write(*.pyi) || Edit(*.ts) || Edit(*.tsx) || Edit(*.js) || Edit(*.jsx) || Edit(*.mjs) || Edit(*.cjs) || Edit(*.py) || Edit(*.pyi) || MultiEdit(*.ts) || MultiEdit(*.tsx) || MultiEdit(*.js) || MultiEdit(*.jsx) || MultiEdit(*.mjs) || MultiEdit(*.cjs) || MultiEdit(*.py) || MultiEdit(*.pyi)",
         "hooks": [
           {
             "type": "command",
@@ -169,7 +164,6 @@
       },
       {
         "matcher": "Bash",
-        "if": "Bash(git *) || Bash(gh *) || Bash(glab *)",
         "hooks": [
           {
             "type": "command",

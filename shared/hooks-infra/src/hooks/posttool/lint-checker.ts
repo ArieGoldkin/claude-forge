@@ -133,9 +133,15 @@ const PYTHON_EXTENSIONS = new Set(['.py', '.pyi']);
 /**
  * JS/TS file extensions -- linted by biome.
  *
- * Must stay in sync with the `if` condition wired in each plugin's hooks.json.
- * They disagreed once already: the matcher fired on .ts/.tsx/.js while this
- * hook only handled Python, so every TypeScript edit was silently unlinted.
+ * This set is now the ONLY filter — do not add a matching `if` to hooks.json.
+ * Issue #98 removed all 6 group-level `if` conditions (4 measured inert on CC
+ * v2.1.220, incl. both matcher kinds on both tool events; 2 inferred), and
+ * `continuity-toolkit/hooks/tests/hooks-manifest.test.ts` fails if one returns.
+ * Widen or narrow linting by editing this set alone.
+ *
+ * Historical note, kept because it explains why the sync instruction existed:
+ * the hooks.json matcher and this set disagreed once, firing on .ts/.tsx/.js
+ * while the hook handled only Python, so every TypeScript edit went unlinted.
  */
 const JS_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 

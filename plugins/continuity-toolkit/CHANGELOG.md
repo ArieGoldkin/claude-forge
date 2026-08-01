@@ -2,6 +2,62 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.1] - 2026-08-01 — remove 6 `if` conditions that never gated (#98)
+
+### Removed
+
+- **All 6 group-level `if` conditions in `hooks.json`.** **4 of the 6 were measured directly** on CC
+  **v2.1.220** and none confined its hook — `PreToolUse[0]` (2026-07-31, during #65),
+  `PreToolUse[1]`, `PreToolUse[2]`, `PostToolUse[4]`. The remaining **2 are inferred**, not
+  measured: `PostToolUse[1]` admits no constructible discriminator (its internal extension set is
+  identical to its `if` list) and `PermissionRequest[0]` fires only on a permission dialog. Each
+  hook's own internal guard is, and always was, the real filter. **No behavioural change on
+  v2.1.220**, where the conditions were measured inert; this makes the actual behaviour explicit
+  instead of accidental.
+
+  Measured with controlled pairs carrying a must-fire and a must-not-fire control on each side:
+
+  | Group | Hook | Probe that should have been excluded | Result |
+  |---|---|---|---|
+  | `PreToolUse[1]` | `preflight-context-injector` | `echo "rm -r"` — matches no glob under prefix *or* substring semantics | **fired** |
+  | `PreToolUse[2]` | `write-combined` | `Write` to a `Dockerfile` | **fired** |
+  | `PostToolUse[4]` | `review-logger` | `echo "glab mr note 42"` | **fired** |
+
+- **Cause — best-supported explanation, from the official hooks documentation plus measurement.**
+  They were wrong twice over. (The docs establish where `if` belongs; they do not describe what CC
+  does when it appears at group level, so "never read there" is an inference from four
+  measurements, not a documented fact.)
+  1. **Wrong nesting level.** `if` is a **hook-handler** field — a sibling of `type`/`command`
+     inside the `hooks` array — not a matcher-group field. All 6 sat one level up, where the key is
+     never read.
+  2. **Invalid value syntax.** *"The `if` field holds exactly one permission rule. There is no
+     `&&`, `||`, or list syntax for combining rules."* Every value we shipped was a `||`-joined
+     list, up to 20 alternatives. That combinator syntax exists in no CC subsystem.
+
+- **Why this is a removal and not a repair — and why "fixing the nesting" must never happen.**
+  `PreToolUse[0]` gates `security-blocker`, and all 20 of its globs are destructive verbs, so a
+  *working* condition there would exclude every secret-file read (`cat <envfile>`,
+  `curl -d @<envfile>`, `cat ~/.ssh/id_rsa`). Those are denied today **only** because the condition
+  does not confine the hook. `PreToolUse[2]` is the same trap for the write path.
+
+  ⚠ Now that the schema is known, the realistic route to that regression is **a maintainer
+  correcting the nesting in good faith** — which is what the CC docs prescribe in general — not a
+  future Claude Code change. Pinned by `tests/hooks-manifest.test.ts`, whose header names the
+  tempting wrong fix. CC's own docs agree on the principle: *"the `if` filter is best-effort, use
+  the permission system rather than a hook to enforce a hard allow or deny."*
+
+### Fixed
+
+- **Root `CLAUDE.md`'s v2.1.176 "floor note" retracted** — it asserted these conditions "gate
+  correctly" at CC ≥ v2.1.176 and that this was the effective minimum version for our
+  security/permission hooks. Both halves were wrong. Its source (the 2026-06-26 gap analysis, T1.1)
+  verified the conditions were *present* and treated that as evidence they *work*; that entry is
+  corrected in place.
+
+Full measurements, the six-key landmine table, and the one sub-question that remains **NOT
+ESTABLISHED** (what CC does with a malformed `if` at the *correct* nesting level — undocumented):
+`docs/reviews/2026-08-01_98-hook-if-condition-cause.md`.
+
 ## [2.17.0] - 2026-08-01 — record plugin-tree state so #82 becomes diagnosable
 
 ### Added
