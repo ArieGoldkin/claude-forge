@@ -5,12 +5,20 @@
  *
  * Three loops in Steps 2, 3 and 7 iterated `$INSTALLED_PLUGINS` while checking paths built from
  * `$PLUGIN_ROOT` and `$PLUGIN_SHORT_NAME`. All three variables were unassigned, present since the
- * initial commit (f0d2c5f). The loops iterated an empty list and printed nothing.
+ * initial commit (f0d2c5f).
  *
- * WHY THIS NEEDED A TEST RATHER THAN A COMMENT: a loop over an empty list exits 0 and emits no
- * output, which is indistinguishable from "checked, nothing to report". `/doctor` is a diagnostic,
- * so its dangerous failure direction is the false all-clear — the defect is invisible in exactly
- * the way a passing run is.
+ * ⚠ CORRECTED 2026-08-01 (ctk 2.17.4). This header first said "the loops iterated an empty list and
+ * printed nothing … a loop over an empty list exits 0". THAT DESCRIBED LITERAL EXECUTION, WHICH
+ * DOES NOT HAPPEN. A command body reaches the model as `role=user` prompt text; CC never runs the
+ * fenced bash. Measured over 26 unwitnessed sessions: every one composed its own command instead of
+ * running the block. See docs/reviews/2026-08-01_command-md-execution-mode.md.
+ *
+ * WHY THIS STILL NEEDS A TEST RATHER THAN A COMMENT: the blocks are a SPEC, and an unbound variable
+ * makes the spec ambiguous — a reader must invent the value before acting. That is not harmless,
+ * because literal text from a block demonstrably propagates into the commands a model composes
+ * (3 of the 26 sessions embedded a block's literal line, one after editing it). A wrong literal
+ * ships into real commands. `/doctor` is a diagnostic, so its dangerous failure direction is the
+ * false all-clear, and an ambiguous instruction is invisible in exactly the way a correct one is.
  *
  * ⚠ THE MINIMAL-LOOKING REPAIR IS THE WRONG ONE. `$PLUGIN_ROOT` and `$PLUGIN_SHORT_NAME` never
  * varied with the loop variable `$PLUGIN`, which appeared only inside the `echo`. Assigning

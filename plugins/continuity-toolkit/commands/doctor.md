@@ -108,9 +108,20 @@ not derivable from its name. Build one inventory that carries both.
 
 > **Why this exists (#109).** These three steps used to loop over `$INSTALLED_PLUGINS` while
 > checking a path built from `$PLUGIN_ROOT` / `$PLUGIN_SHORT_NAME`. All three variables were
-> unassigned, present since the initial commit. The loops therefore iterated an empty list and
-> printed nothing — and **a loop over an empty list exits 0, which is indistinguishable from
-> "checked, nothing to report."** ⚠ Note what the minimal-looking repair would have done: because
+> unassigned, present since the initial commit.
+>
+> **⚠ CORRECTED 2026-08-01 (ctk 2.17.4).** This note first said the loops "iterated an empty list
+> and printed nothing — a loop over an empty list exits 0, which is indistinguishable from
+> 'checked, nothing to report.'" **That described literal execution, which does not happen.** A
+> command body is delivered to the model as `role=user` **prompt text**; Claude Code never runs the
+> fenced bash. Measured across 26 unwitnessed sessions: every one composed its *own* command rather
+> than running the block, and one even added a flag the source lacked. The real defect was that
+> these steps were an **ambiguous spec** — a reader had to invent both the plugin list and the
+> install path before it could act on them — and literal text from a block *does* propagate into the
+> commands a model composes (3 of 26 sessions), so a wrong literal is not inert. Evidence:
+> `docs/reviews/2026-08-01_command-md-execution-mode.md`.
+>
+> ⚠ Note what the minimal-looking repair would have done: because
 > the path variables never varied with the loop variable, assigning `INSTALLED_PLUGINS` alone
 > would have checked **one** path N times and labelled the single result with N different plugin
 > names — a confident wrong answer in place of a silent one. The name and the path must travel
