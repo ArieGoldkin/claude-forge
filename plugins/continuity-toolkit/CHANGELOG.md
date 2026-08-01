@@ -2,6 +2,54 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.16.0] - 2026-08-01 — retrospective detector for silent plugin unloads (#82)
+
+### Added
+
+- **`/doctor` Step 1c — look for PAST hook outages.** Step 1b asks *"is a hook firing in **this**
+  session?"* and cannot see an outage that already ended, which is why #82 was believed to be a
+  single event: nobody could look backwards. Step 1c joins hooked tool calls from CC's transcripts
+  against ctk's own log lines, per hour, and reports hours where tools ran and hooks did not.
+
+  Backed by `hooks/bin/detect-hook-outages.ts` (compiled to `dist/bin/`, runnable with plain
+  `node`) over `lib/hook-outage-detector.ts`, which is unit-tested in all five plugins.
+
+  **Applied to the machine it was built on, it found 7 outage hours between 2026-07-06 and
+  2026-07-29 — not the single occurrence #82 records.**
+
+### Why it is not a fixed threshold
+
+`bash-combined` writes a permission line on auto-approve or deny, but **not** when a command
+defers to a user prompt, and `hooks.log` is WARN-level so `logInfo` is suppressed. Measured
+consequence: only **~0.5 log lines per hooked tool call**. Silence is therefore probabilistic —
+a quiet hour of 5 tool calls occurs by chance about 5% of the time, so over a few hundred hours a
+fixed `minTools=5` manufactures roughly a dozen phantom outages. It did: **18 reported, 7 real.**
+
+The detector measures the logging rate from the data and applies a family-wise significance test,
+reporting `pValue` and `pValue × hoursAnalysed` so any finding is auditable. Scanning more hours
+raises the bar rather than lowering it. Both figures are printed, along with how many quiet hours
+were rejected as chance.
+
+### Four failure shapes pinned by tests
+
+Each is a defect that actually shipped in an intermediate version and returned a confident wrong
+answer, not a hypothetical:
+
+1. **Per-session joins hide outages.** Sessions resume and SHARE a transcript file, so keying a
+   file to its first `sessionId` averages a quiet outage away. Reported 0 suspects on data
+   containing a real 9h16m outage.
+2. **Not every tool is hooked.** An hour of `Grep`/`Task`/`WebFetch` legitimately logs nothing;
+   counting all tools reported 4 phantom outages out of 6.
+3. **The trailing hour is a snapshot artifact** — the log is mid-write when read, so without an
+   exclusive upper bound "now" is an outage on every run.
+4. **Silence is probabilistic** (above).
+
+### Fixed
+
+- **`/doctor` Step 6 checked the legacy log directory** (`~/.claude/logs/<short-name>/`), sizing up
+  a file no live hook has touched. It now resolves the real path first. Same defect class as
+  2.15.1, in the other place it appeared.
+
 ## [2.15.1] - 2026-07-31 — document the real hook-log location
 
 ### Fixed
