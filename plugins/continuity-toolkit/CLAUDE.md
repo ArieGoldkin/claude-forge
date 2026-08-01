@@ -203,13 +203,21 @@ cd hooks && npm test         # Run tests
 ### Log locations — read the plugin-data path, not the legacy one
 
 `logging.ts` prefers **`CLAUDE_PLUGIN_DATA`** (set by CC for live hooks, and persistent across
-plugin updates), falling back to `~/.claude/logs/<plugin-name>/` only when that variable is
-**unset**. The two paths therefore hold different populations:
+plugin updates). When that is unset it falls back to **`$CLAUDE_CONFIG_DIR/logs/<plugin-name>/`**,
+and only then to `~/.claude/logs/<plugin-name>/`. The paths hold different populations:
 
 | Path | Written by | Use for |
 |---|---|---|
 | `$CLAUDE_PLUGIN_DATA/logs/` — in practice `~/.claude/plugins/data/ctk-claude-forge/logs/` | **live hooks** | anything real |
-| `~/.claude/logs/continuity/` | **the test suite** (no `CLAUDE_PLUGIN_DATA` in env) and pre-`CLAUDE_PLUGIN_DATA` installs | history only |
+| `$CLAUDE_CONFIG_DIR/logs/<plugin-name>/` | the **test suite** (every `vitest.config.ts` sets this), and any user who relocates `.claude` | fixtures — never evidence |
+| `~/.claude/logs/continuity/` | pre-`CLAUDE_PLUGIN_DATA` installs, and test runs from before #105 | history only |
+
+> **The `CLAUDE_CONFIG_DIR` step was added in #105** (ctk 2.17.2). Before it, the fallback keyed off
+> `HOME` alone, so the per-plugin isolation in every `vitest.config.ts` could not cover logging and
+> test runs wrote into the developer's real home — 28 MB across 6 directories, which `/etk:review-stats`
+> then read back as real data (#106). It also means `logging.ts` now agrees with
+> `bin/detect-hook-outages.ts:283`, which already resolved `CLAUDE_CONFIG_DIR || ~/.claude`; the two
+> previously disagreed whenever that variable was set.
 
 - **Hook log**: `$CLAUDE_PLUGIN_DATA/logs/hooks.log`
 - **Permission audit**: `$CLAUDE_PLUGIN_DATA/logs/permission-feedback.log`
