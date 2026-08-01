@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as fs7 from 'fs';
 import { readSync, writeFileSync, renameSync, readFileSync } from 'fs';
-import * as path2 from 'path';
+import * as path4 from 'path';
 import { join } from 'path';
 import * as os from 'os';
 import { tmpdir } from 'os';
@@ -409,7 +409,7 @@ function getPluginName() {
 var PLUGIN_NAME = getPluginName();
 function computeLogDir() {
   const pluginDataDir = process.env["CLAUDE_PLUGIN_DATA"];
-  return pluginDataDir ? path2.join(pluginDataDir, "logs") : path2.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
+  return pluginDataDir ? path4.join(pluginDataDir, "logs") : path4.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
 }
 var cachedLogDir = null;
 function resolveLogDir() {
@@ -419,10 +419,10 @@ function resolveLogDir() {
   return cachedLogDir;
 }
 function resolveHookLogFile() {
-  return path2.join(resolveLogDir(), "hooks.log");
+  return path4.join(resolveLogDir(), "hooks.log");
 }
 function resolvePermissionLogFile() {
-  return path2.join(resolveLogDir(), "permission-feedback.log");
+  return path4.join(resolveLogDir(), "permission-feedback.log");
 }
 var HOOK_LOG_MAX_SIZE = 204800;
 var PERMISSION_LOG_MAX_SIZE = 102400;
@@ -582,7 +582,7 @@ function formatTimestamp() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function createDefaultSharedContext(projectDir, projectName) {
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   const timestamp = formatTimestamp();
   const defaultContext = {
     version: "1.0.0",
@@ -691,7 +691,7 @@ _None_
 }
 function createContinuityDirectories(projectDir) {
   let createdAny = false;
-  const claudeDir = path2.join(projectDir, ".claude");
+  const claudeDir = path4.join(projectDir, ".claude");
   if (!fs7.existsSync(claudeDir)) {
     if (!ensureDirectory(claudeDir)) {
       throw new Error("Failed to create .claude directory");
@@ -707,7 +707,7 @@ function createContinuityDirectories(projectDir) {
     CONTINUITY_DIRS.context
   ];
   for (const dir of directories) {
-    const dirPath = path2.join(projectDir, dir);
+    const dirPath = path4.join(projectDir, dir);
     if (!fs7.existsSync(dirPath)) {
       if (!ensureDirectory(dirPath)) {
         throw new Error(`Failed to create directory: ${dir}`);
@@ -725,7 +725,7 @@ function createGitkeepFiles(projectDir) {
     CONTINUITY_DIRS.learnings
   ];
   for (const dir of gitkeepDirs) {
-    const gitkeepPath = path2.join(projectDir, dir, ".gitkeep");
+    const gitkeepPath = path4.join(projectDir, dir, ".gitkeep");
     if (!fs7.existsSync(gitkeepPath)) {
       try {
         fs7.writeFileSync(gitkeepPath, "");
@@ -735,8 +735,8 @@ function createGitkeepFiles(projectDir) {
   }
 }
 function createLedgerIfNeeded(projectDir, projectName) {
-  const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
-  const defaultLedger = path2.join(ledgersDir, `CONTINUITY_${projectName}.md`);
+  const ledgersDir = path4.join(projectDir, CONTINUITY_DIRS.ledgers);
+  const defaultLedger = path4.join(ledgersDir, `CONTINUITY_${projectName}.md`);
   if (fs7.existsSync(defaultLedger)) {
     return false;
   }
@@ -749,14 +749,14 @@ function createLedgerIfNeeded(projectDir, projectName) {
   return false;
 }
 function ensureContinuityStructure(projectDir) {
-  const projectName = path2.basename(projectDir);
+  const projectName = path4.basename(projectDir);
   let createdAny = false;
   try {
     if (createContinuityDirectories(projectDir)) {
       createdAny = true;
     }
     createGitkeepFiles(projectDir);
-    const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+    const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
     if (!fs7.existsSync(contextFile)) {
       createDefaultSharedContext(projectDir, projectName);
       createdAny = true;
@@ -770,7 +770,7 @@ function ensureContinuityStructure(projectDir) {
   }
 }
 function getCurrentLedgerPath(projectDir) {
-  const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
+  const ledgersDir = path4.join(projectDir, CONTINUITY_DIRS.ledgers);
   if (!fs7.existsSync(ledgersDir)) {
     return null;
   }
@@ -778,7 +778,7 @@ function getCurrentLedgerPath(projectDir) {
     const files = fs7.readdirSync(ledgersDir);
     const ledgerFile = files.find((f) => f.endsWith(".md") && f !== ".gitkeep");
     if (ledgerFile) {
-      return path2.join(ledgersDir, ledgerFile);
+      return path4.join(ledgersDir, ledgerFile);
     }
   } catch {
   }
@@ -1060,7 +1060,7 @@ function stampHookLiveness(sessionId, hookName) {
 }
 var LOCK_RETRY_DELAY_MS = 100;
 function sleep(ms) {
-  return new Promise((resolve7) => setTimeout(resolve7, ms));
+  return new Promise((resolve8) => setTimeout(resolve8, ms));
 }
 function isPidAlive(pid) {
   try {
@@ -1095,7 +1095,7 @@ function clearStaleLockIfNeeded(lockPath, maxAge) {
   }
   let pid = null;
   try {
-    const pidStr = fs7.readFileSync(path2.join(lockPath, "pid"), "utf-8").trim();
+    const pidStr = fs7.readFileSync(path4.join(lockPath, "pid"), "utf-8").trim();
     const parsed = Number.parseInt(pidStr, 10);
     if (!Number.isNaN(parsed) && parsed > 0) {
       pid = parsed;
@@ -1119,7 +1119,7 @@ async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
       continue;
     }
     try {
-      fs7.writeFileSync(path2.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
+      fs7.writeFileSync(path4.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
       return true;
     } catch (err) {
       if (err.code !== "ENOENT") {
@@ -1153,8 +1153,11 @@ function capturePluginState(pluginsRoot, opts = {}) {
   const dirs = {};
   const files = {};
   let truncated = false;
+  let dirCount = 0;
+  const excluded = opts.snapshotDir ? path4.resolve(opts.snapshotDir) : null;
   const walk = (abs, rel, depth) => {
     if (truncated) return;
+    if (excluded && path4.resolve(abs) === excluded) return;
     let entries;
     try {
       entries = fs7.readdirSync(abs, { withFileTypes: true });
@@ -1166,19 +1169,20 @@ function capturePluginState(pluginsRoot, opts = {}) {
     } catch {
       return;
     }
-    if (Object.keys(dirs).length >= maxEntries) {
+    dirCount++;
+    if (dirCount >= maxEntries) {
       truncated = true;
       return;
     }
     if (depth >= maxDepth) return;
     for (const e of entries) {
       if (e.isDirectory())
-        walk(path2.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+        walk(path4.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(pluginsRoot, "", 0);
   for (const name of STATE_FILES) {
-    const p = path2.join(pluginsRoot, name);
+    const p = path4.join(pluginsRoot, name);
     try {
       const st = fs7.statSync(p);
       const entry = { size: st.size, m: Math.round(st.mtimeMs) };
@@ -1207,12 +1211,33 @@ function pruneSnapshots(dir, keep) {
   let removed = 0;
   for (const n of doomed) {
     try {
-      fs7.unlinkSync(path2.join(dir, n));
+      fs7.unlinkSync(path4.join(dir, n));
       removed++;
     } catch {
     }
   }
   return removed;
+}
+function resolvePluginStateDir(configDir, env = process.env) {
+  const explicit = env["CLAUDE_PLUGIN_DATA"];
+  if (explicit) return { dir: path4.join(explicit, "plugin-state"), legacy: false };
+  const dataRoot = path4.join(configDir, "plugins", "data");
+  let candidates = [];
+  try {
+    candidates = fs7.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path4.join(dataRoot, n));
+  } catch {
+    candidates = [];
+  }
+  const populated = candidates.find((c) => {
+    try {
+      return fs7.readdirSync(path4.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
+    } catch {
+      return false;
+    }
+  });
+  const chosen = populated ?? candidates[candidates.length - 1];
+  if (chosen) return { dir: path4.join(chosen, "plugin-state"), legacy: false };
+  return { dir: path4.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
 }
 function snapshotFilename(capturedAt, sessionId) {
   const stamp = capturedAt.replace(/[:.]/g, "-");
@@ -1220,9 +1245,9 @@ function snapshotFilename(capturedAt, sessionId) {
 }
 function writePluginStateSnapshot(pluginsRoot, outDir, opts = {}) {
   try {
-    const snap = capturePluginState(pluginsRoot, opts);
     fs7.mkdirSync(outDir, { recursive: true });
-    const file = path2.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
+    const snap = capturePluginState(pluginsRoot, { ...opts, snapshotDir: outDir });
+    const file = path4.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
     fs7.writeFileSync(file, JSON.stringify(snap), "utf8");
     pruneSnapshots(outDir, opts.keep ?? 20);
     return file;
@@ -1290,7 +1315,7 @@ var SYSTEM_DIR_PATTERNS = [
   ...SYSTEM_DIR_PATTERNS
 ];
 function resolveRealPath(inputPath) {
-  const absolutePath = path2.isAbsolute(inputPath) ? inputPath : path2.resolve(getProjectDir2(), inputPath);
+  const absolutePath = path4.isAbsolute(inputPath) ? inputPath : path4.resolve(getProjectDir2(), inputPath);
   try {
     return fs7.realpathSync(absolutePath);
   } catch {
@@ -1300,22 +1325,22 @@ function resolveRealPath(inputPath) {
 function resolveClosestAncestor(absolutePath) {
   const components = [];
   let currentPath = absolutePath;
-  while (currentPath !== path2.dirname(currentPath)) {
+  while (currentPath !== path4.dirname(currentPath)) {
     try {
       const resolved = fs7.realpathSync(currentPath);
-      return components.length > 0 ? path2.join(resolved, ...components.reverse()) : resolved;
+      return components.length > 0 ? path4.join(resolved, ...components.reverse()) : resolved;
     } catch {
-      components.push(path2.basename(currentPath));
-      currentPath = path2.dirname(currentPath);
+      components.push(path4.basename(currentPath));
+      currentPath = path4.dirname(currentPath);
     }
   }
-  return path2.resolve(absolutePath);
+  return path4.resolve(absolutePath);
 }
 function normalizePath(inputPath) {
   if (!inputPath) {
     return ".";
   }
-  let normalized = path2.normalize(inputPath);
+  let normalized = path4.normalize(inputPath);
   if (normalized.startsWith("./")) {
     normalized = normalized.slice(2);
   }
@@ -1331,7 +1356,7 @@ function isWithinProject(inputPath, projectDir) {
   const projectRoot = getProjectDir2();
   const resolvedPath = resolveRealPath(inputPath);
   const resolvedProjectRoot = resolveRealPath(projectRoot);
-  const projectRootWithSep = resolvedProjectRoot.endsWith(path2.sep) ? resolvedProjectRoot : resolvedProjectRoot + path2.sep;
+  const projectRootWithSep = resolvedProjectRoot.endsWith(path4.sep) ? resolvedProjectRoot : resolvedProjectRoot + path4.sep;
   return resolvedPath === resolvedProjectRoot || resolvedPath.startsWith(projectRootWithSep);
 }
 var PATTERN_CHECKS = [
@@ -1402,7 +1427,7 @@ function getCacheRoot() {
   if (override && override.length > 0) {
     return override;
   }
-  return path2.join(os.homedir(), ".claude", "cache", "token-compress");
+  return path4.join(os.homedir(), ".claude", "cache", "token-compress");
 }
 function sanitizeSessionId(sessionId) {
   return sessionId.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -1411,10 +1436,10 @@ function currentSessionIdFromEnv() {
   return process.env["CLAUDE_CODE_SESSION_ID"] || process.env["CLAUDE_SESSION_ID"];
 }
 function getSessionDir(sessionId) {
-  return path2.join(getCacheRoot(), sanitizeSessionId(sessionId));
+  return path4.join(getCacheRoot(), sanitizeSessionId(sessionId));
 }
 function getReadsPath(sessionId) {
-  return path2.join(getSessionDir(sessionId), "reads.jsonl");
+  return path4.join(getSessionDir(sessionId), "reads.jsonl");
 }
 function ensureSessionDir(sessionId) {
   const dir = getSessionDir(sessionId);
@@ -1543,7 +1568,7 @@ function dirSizeBytes(dir) {
     return 0;
   }
   for (const entry of entries) {
-    const full = path2.join(dir, entry.name);
+    const full = path4.join(dir, entry.name);
     try {
       if (entry.isDirectory()) {
         total += dirSizeBytes(full);
@@ -1574,7 +1599,7 @@ async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (currentSanitized !== null && entry.name === currentSanitized) continue;
-    const sessionDir = path2.join(root, entry.name);
+    const sessionDir = path4.join(root, entry.name);
     let mtimeMs;
     try {
       mtimeMs = fs7.statSync(sessionDir).mtimeMs;
@@ -1748,11 +1773,10 @@ var SNAPSHOT_KEEP = 20;
 function captureStartupPluginState(sessionId) {
   try {
     const home = process.env["HOME"] || os.homedir();
-    const configDir = process.env["CLAUDE_CONFIG_DIR"] || path2.join(home, ".claude");
-    const pluginsRoot = path2.join(configDir, "plugins");
+    const configDir = process.env["CLAUDE_CONFIG_DIR"] || path4.join(home, ".claude");
+    const pluginsRoot = path4.join(configDir, "plugins");
     if (!fs7.existsSync(pluginsRoot)) return;
-    const dataDir = process.env["CLAUDE_PLUGIN_DATA"];
-    const outDir = dataDir ? path2.join(dataDir, "plugin-state") : path2.join(configDir, "logs", "continuity", "plugin-state");
+    const outDir = resolvePluginStateDir(configDir).dir;
     const written = writePluginStateSnapshot(pluginsRoot, outDir, {
       sessionId,
       keep: SNAPSHOT_KEEP
@@ -1848,7 +1872,7 @@ function writeEnvFile(projectDir) {
   }
 }
 function checkContinuitySetup(projectDir) {
-  const ledgerDir = path2.join(projectDir, ".claude", "continuity", "ledgers");
+  const ledgerDir = path4.join(projectDir, ".claude", "continuity", "ledgers");
   if (!fs7.existsSync(ledgerDir)) {
     return "TIP: Run `/setup-continuity` to enable session state tracking.\n\n";
   }
@@ -1863,7 +1887,7 @@ function checkContinuitySetup(projectDir) {
   return "";
 }
 function getCurrentBranch(projectDir) {
-  const headPath = path2.join(projectDir, ".git", "HEAD");
+  const headPath = path4.join(projectDir, ".git", "HEAD");
   if (!fs7.existsSync(headPath)) {
     return null;
   }
@@ -1906,7 +1930,7 @@ function outputLedgerSummary(projectDir) {
   }
 }
 function outputHandoffSummary(projectDir) {
-  const handoffPath = path2.join(
+  const handoffPath = path4.join(
     projectDir,
     ".claude",
     "continuity",
@@ -1937,7 +1961,7 @@ function buildSessionWindowTitle(projectDir, branch) {
   if (process.env["CONTINUITY_TERMINAL_TITLE"] !== "1") {
     return "";
   }
-  const projectName = path2.basename(path2.resolve(projectDir));
+  const projectName = path4.basename(path4.resolve(projectDir));
   return buildWindowTitleSequence(branch ? [projectName, branch] : [projectName]);
 }
 async function sessionLoader(input) {
@@ -1954,7 +1978,7 @@ async function sessionLoader(input) {
   } else if (initResult === "error") {
     logError(HOOK_NAME2, "Failed to initialize continuity structure");
   }
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   const lockDir = `${contextFile}.lock`;
   const staleInfo = checkStaleSession(contextFile);
   if (staleInfo) {
@@ -1997,7 +2021,7 @@ async function sessionEnd(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const source = input.source || "unknown";
   logDebug(HOOK_NAME3, `Session ending, source: ${source}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME3, "No context file found, nothing to update");
     return outputSilentSuccess();
@@ -2115,7 +2139,7 @@ async function preCompactSaver(_input) {
     logWarn(HOOK_NAME5, `Ledger not writable at ${ledgerPath}`);
     return outputWarning("Ledger not writable - state not preserved before compaction");
   }
-  const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
+  const contextPath = path4.join(projectDir, ".claude", "context", "shared-context.json");
   try {
     if (fs7.existsSync(contextPath)) {
       const ctx = JSON.parse(fs7.readFileSync(contextPath, "utf8"));
@@ -2154,11 +2178,11 @@ async function preCompactSaver(_input) {
 }
 function writeHandoffJson(projectDir, timestamp) {
   try {
-    const handoffsDir = path2.join(projectDir, ".claude", "continuity", "handoffs");
+    const handoffsDir = path4.join(projectDir, ".claude", "continuity", "handoffs");
     if (!fs7.existsSync(handoffsDir)) {
       fs7.mkdirSync(handoffsDir, { recursive: true });
     }
-    const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
+    const contextPath = path4.join(projectDir, ".claude", "context", "shared-context.json");
     let dirtyFiles = [];
     let sessionId = process.env["CLAUDE_CODE_SESSION_ID"] ?? null;
     if (fs7.existsSync(contextPath)) {
@@ -2182,7 +2206,7 @@ function writeHandoffJson(projectDir, timestamp) {
       compaction_trigger: "pre-compact",
       timestamp
     });
-    const outPath = path2.join(handoffsDir, "handoff-latest.json");
+    const outPath = path4.join(handoffsDir, "handoff-latest.json");
     const tmpPath = `${outPath}.tmp`;
     fs7.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
 `);
@@ -3619,7 +3643,7 @@ async function autoApproveProjectWrites(input) {
 var HOOK_NAME9 = "permission-profiles";
 var profileCache = /* @__PURE__ */ new Map();
 function getProfilePath(projectDir, profileName = "default") {
-  return path2.join(projectDir, ".claude", "permissions", `${profileName}.json`);
+  return path4.join(projectDir, ".claude", "permissions", `${profileName}.json`);
 }
 async function loadPermissionProfile(projectDir, profileName = "default") {
   const cwd = projectDir;
@@ -3669,7 +3693,7 @@ function matchesPathPattern(filePath, patterns, projectDir) {
   if (!filePath || !patterns || patterns.length === 0) {
     return false;
   }
-  const normalizedPath = path2.resolve(filePath);
+  const normalizedPath = path4.resolve(filePath);
   for (const pattern of patterns) {
     const regex = patternToRegex(pattern, projectDir);
     if (regex.test(normalizedPath)) {
@@ -3846,7 +3870,7 @@ var ALWAYS_VALID_BRANCHES = /* @__PURE__ */ new Set([
 ]);
 var branchPatternsCache = /* @__PURE__ */ new Map();
 function getBranchPatternsPath(projectDir) {
-  return path2.join(projectDir, ".claude", "rules", "branch-patterns.json");
+  return path4.join(projectDir, ".claude", "rules", "branch-patterns.json");
 }
 var MAX_BRANCH_PATTERN_LENGTH = 256;
 function patternStringToRegex(pattern) {
@@ -4444,10 +4468,10 @@ async function acquireLock2(lockPath, maxAttempts = 50) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       fs7.mkdirSync(lockPath);
-      fs7.writeFileSync(path2.join(lockPath, "pid"), process.pid.toString());
+      fs7.writeFileSync(path4.join(lockPath, "pid"), process.pid.toString());
       return true;
     } catch {
-      await new Promise((resolve7) => setTimeout(resolve7, 100));
+      await new Promise((resolve8) => setTimeout(resolve8, 100));
     }
   }
   return false;
@@ -4459,7 +4483,7 @@ function releaseLock2(lockPath) {
   }
 }
 function getContextFilePath(projectDir) {
-  return path2.join(projectDir, ".claude", "context", "shared-context.json");
+  return path4.join(projectDir, ".claude", "context", "shared-context.json");
 }
 function readContextFile(contextFile) {
   try {
@@ -4673,7 +4697,7 @@ async function contextMonitor(input) {
 var HOOK_NAME20 = "error-rules";
 var rulesCache = /* @__PURE__ */ new Map();
 function getErrorRulesPath(projectDir) {
-  return path2.join(projectDir, ".claude", "rules", "error_rules.json");
+  return path4.join(projectDir, ".claude", "rules", "error_rules.json");
 }
 async function loadErrorRules(projectDir) {
   const cwd = projectDir;
@@ -4838,14 +4862,14 @@ function findLinter(projectDir) {
   if (cachedLinterPath !== null) {
     return cachedLinterPath ?? void 0;
   }
-  const venvRuff = path2.join(projectDir, ".venv", "bin", "ruff");
+  const venvRuff = path4.join(projectDir, ".venv", "bin", "ruff");
   if (fs7.existsSync(venvRuff)) {
     cachedLinterPath = venvRuff;
     logDebug(HOOK_NAME23, `Found ruff in venv: ${venvRuff}`);
     return venvRuff;
   }
   const homeDir = process.env["HOME"] || "/tmp";
-  const miseRuff = path2.join(homeDir, ".local", "share", "mise", "shims", "ruff");
+  const miseRuff = path4.join(homeDir, ".local", "share", "mise", "shims", "ruff");
   if (fs7.existsSync(miseRuff)) {
     cachedLinterPath = miseRuff;
     logDebug(HOOK_NAME23, `Found ruff in mise shims: ${miseRuff}`);
@@ -4919,7 +4943,7 @@ function findBiome(projectDir) {
   if (cachedBiomePath !== null) {
     return cachedBiomePath ?? void 0;
   }
-  const localBiome = path2.join(projectDir, "node_modules", ".bin", "biome");
+  const localBiome = path4.join(projectDir, "node_modules", ".bin", "biome");
   if (fs7.existsSync(localBiome)) {
     cachedBiomePath = localBiome;
     logDebug(HOOK_NAME23, `Found biome in node_modules: ${localBiome}`);
@@ -5042,7 +5066,7 @@ function classifyViolations(violations) {
   return { security, general, totalCount: violations.length };
 }
 function formatViolationLine(v) {
-  const loc = `${path2.basename(v.filename)}:${v.location.row}:${v.location.column}`;
+  const loc = `${path4.basename(v.filename)}:${v.location.row}:${v.location.column}`;
   let fixHint = "no auto-fix";
   if (v.fix) {
     fixHint = v.fix.applicability === "safe" ? "safe fix" : "unsafe fix";
@@ -5076,11 +5100,11 @@ ${lines.join("\n")}`;
   return section;
 }
 function formatterFor(file) {
-  return JS_EXTENSIONS.has(path2.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
+  return JS_EXTENSIONS.has(path4.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
 }
 function formatFormatSection(files) {
   const fileLines = files.map(
-    (f) => `  ${path2.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
+    (f) => `  ${path4.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
   );
   return `Format issues (${plural(files.length, "file")}):
 ${fileLines.join("\n")}`;
@@ -5144,7 +5168,7 @@ function collectLintableFiles(input, toolName) {
   const python = [];
   const js = [];
   for (const fp of filePaths) {
-    const ext = path2.extname(fp).toLowerCase();
+    const ext = path4.extname(fp).toLowerCase();
     if (PYTHON_EXTENSIONS.has(ext)) {
       python.push(fp);
     } else if (JS_EXTENSIONS.has(ext)) {
@@ -5246,7 +5270,7 @@ async function teammateIdleSaver(input) {
   const teammateName = input.teammate_name || "unknown";
   const teamName = input.team_name || "unknown";
   logDebug(HOOK_NAME25, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME25, "No context file found, nothing to update");
     return outputSilentSuccess();
@@ -5294,8 +5318,8 @@ async function taskCompletedLogger(input) {
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
   logDebug(HOOK_NAME26, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
-  const metricsDir = path2.join(projectDir, METRICS_DIR);
-  const metricsFile = path2.join(metricsDir, METRICS_FILE);
+  const metricsDir = path4.join(projectDir, METRICS_DIR);
+  const metricsFile = path4.join(metricsDir, METRICS_FILE);
   try {
     if (!fs7.existsSync(metricsDir)) {
       fs7.mkdirSync(metricsDir, { recursive: true });
@@ -5326,8 +5350,8 @@ async function taskCreatedLogger(input) {
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
   logDebug(HOOK_NAME27, `Task created: task_id=${taskId}, session_id=${sessionId}`);
-  const metricsDir = path2.join(projectDir, METRICS_DIR2);
-  const metricsFile = path2.join(metricsDir, METRICS_FILE2);
+  const metricsDir = path4.join(projectDir, METRICS_DIR2);
+  const metricsFile = path4.join(metricsDir, METRICS_FILE2);
   try {
     if (!fs7.existsSync(metricsDir)) {
       fs7.mkdirSync(metricsDir, { recursive: true });
@@ -5356,7 +5380,7 @@ async function worktreeRemove(input) {
   const worktreePath = input.worktree_path || "unknown";
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   logDebug(HOOK_NAME28, `Worktree removed: path=${worktreePath}`);
-  const contextFile = path2.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME28, "No main context file found, nothing to update");
     return outputSilentSuccess();
@@ -5401,7 +5425,7 @@ async function stopStateSaver(input) {
   const lastMessage = input.last_assistant_message || "";
   const source = input.source || "unknown";
   logDebug(HOOK_NAME29, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME29, "No context file found, nothing to update");
     return outputSilentSuccess();
@@ -5448,7 +5472,7 @@ async function stopFailureHandler(input) {
   const sessionId = input.session_id || "unknown";
   const errorType = input.source || "unknown";
   logWarn(HOOK_NAME30, `API failure: type=${errorType}, session=${sessionId}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   if (!fs7.existsSync(contextFile)) {
     logInfo(HOOK_NAME30, "No context file found, logging failure without context update");
     return outputSilentSuccess();
@@ -5493,7 +5517,7 @@ var MAX_LOG_SIZE = 200 * 1024;
 var REVIEW_COMMAND_PATTERN = /glab\s+mr\s+(note|approve)\s+(\d+)/;
 var DISCUSSION_COMMAND_PATTERN = /glab\s+api\b[\s\S]*?merge_requests\/(\d+)\/discussions/;
 function getReviewLogPath() {
-  return path2.join(getLogDir(), "review-history.jsonl");
+  return path4.join(getLogDir(), "review-history.jsonl");
 }
 function rotateIfNeeded(logPath) {
   try {
@@ -5506,7 +5530,7 @@ function rotateIfNeeded(logPath) {
   }
 }
 function appendReviewEntry(logPath, entry) {
-  const dir = path2.dirname(logPath);
+  const dir = path4.dirname(logPath);
   if (!fs7.existsSync(dir)) {
     fs7.mkdirSync(dir, { recursive: true });
   }
@@ -5551,7 +5575,7 @@ var HOOK_NAME32 = "denial-logger";
 async function denialLogger(input) {
   try {
     const projectDir = getProjectDir();
-    const feedbackDir = path2.join(projectDir, ".claude", "feedback");
+    const feedbackDir = path4.join(projectDir, ".claude", "feedback");
     fs7.mkdirSync(feedbackDir, { recursive: true });
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -5560,7 +5584,7 @@ async function denialLogger(input) {
       command_or_path: input.tool_input?.command || input.tool_input?.file_path || "",
       agent_id: input.agent_id
     };
-    const logFile = path2.join(feedbackDir, "denials.jsonl");
+    const logFile = path4.join(feedbackDir, "denials.jsonl");
     fs7.appendFileSync(logFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME32, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
@@ -6045,7 +6069,7 @@ var CREDENTIAL_PATTERNS2 = [
   /-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----/
 ];
 function getMeasurementsPath(sessionId) {
-  return path2.join(getSessionDir(sessionId), MEASUREMENTS_FILE);
+  return path4.join(getSessionDir(sessionId), MEASUREMENTS_FILE);
 }
 function extractCommandPrefix(command) {
   if (!command) return "<empty>";
@@ -6084,7 +6108,7 @@ function appendMeasurement(sessionId, record) {
   }
 }
 function recordReadEvent(sessionId, filePath, outcome, originalBytes, returnedBytes) {
-  const basename6 = path2.basename(filePath || "<unknown>");
+  const basename6 = path4.basename(filePath || "<unknown>");
   const event = {
     schemaVersion: 1,
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -6130,7 +6154,7 @@ async function readCacheHook(input) {
   if (!filePath || !sessionId || sessionId === "unknown") {
     return outputSilentSuccess();
   }
-  const absPath = path2.resolve(filePath);
+  const absPath = path4.resolve(filePath);
   if (!fs7.existsSync(absPath)) {
     return outputSilentSuccess();
   }
@@ -6217,7 +6241,7 @@ async function readCacheWriterHook(input) {
     if (!filePath || !sessionId || sessionId === "unknown") {
       return outputSilentSuccess();
     }
-    const absPath = path2.resolve(filePath);
+    const absPath = path4.resolve(filePath);
     let wasMiss = false;
     try {
       const prior = await readEntry(sessionId, absPath);
@@ -6254,7 +6278,7 @@ async function readCacheInvalidatorHook(input) {
     if (!filePath || !sessionId || sessionId === "unknown") {
       return outputSilentSuccess();
     }
-    const absPath = path2.resolve(filePath);
+    const absPath = path4.resolve(filePath);
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
       logDebug(HOOK_NAME42, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
@@ -6504,7 +6528,7 @@ function isHookDisabled(hookName) {
   }
   const projectDir = process.env["CLAUDE_PROJECT_DIR"];
   if (!projectDir) return false;
-  const overridesPath = path2.join(projectDir, ".claude", "hook-overrides.json");
+  const overridesPath = path4.join(projectDir, ".claude", "hook-overrides.json");
   try {
     const content = fs7.readFileSync(overridesPath, "utf-8");
     const parsed = JSON.parse(content);

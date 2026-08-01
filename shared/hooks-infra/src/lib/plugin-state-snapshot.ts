@@ -81,16 +81,31 @@ export interface PluginStateSnapshot {
  */
 export function capturePluginState(
   pluginsRoot: string,
-  opts: { sessionId?: string; capturedAt?: string; maxDepth?: number; maxEntries?: number } = {}
+  opts: {
+    sessionId?: string;
+    capturedAt?: string;
+    maxDepth?: number;
+    maxEntries?: number;
+    /** Absolute path to exclude — normally the snapshot output dir itself. */
+    snapshotDir?: string;
+  } = {}
 ): PluginStateSnapshot {
   const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
   const maxEntries = opts.maxEntries ?? MAX_ENTRIES;
   const dirs: Record<string, DirEntry> = {};
   const files: Record<string, FileEntry> = {};
   let truncated = false;
+  let dirCount = 0; // tracked directly: Object.keys().length inside the walk is O(n^2)
+
+  // The snapshot directory normally lives INSIDE the tree being snapshotted
+  // (~/.claude/plugins/data/<ctk-mkt>/plugin-state). Capture runs before the
+  // write, so without this exclusion the write itself makes the tree differ and
+  // `identical: true` — the verdict /doctor documents as exit 0 — is unreachable.
+  const excluded = opts.snapshotDir ? path.resolve(opts.snapshotDir) : null;
 
   const walk = (abs: string, rel: string, depth: number): void => {
     if (truncated) return;
+    if (excluded && path.resolve(abs) === excluded) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(abs, { withFileTypes: true });
@@ -102,7 +117,8 @@ export function capturePluginState(
     } catch {
       return;
     }
-    if (Object.keys(dirs).length >= maxEntries) {
+    dirCount++;
+    if (dirCount >= maxEntries) {
       truncated = true;
       return;
     }
@@ -217,6 +233,52 @@ export function pruneSnapshots(dir: string, keep: number): number {
   return removed;
 }
 
+/**
+ * Resolve the snapshot directory. **Both the writer and the reader must call
+ * this** — they previously derived it independently and disagreed.
+ *
+ * The writer used `<config>/logs/continuity/plugin-state` for the legacy case
+ * while the reader looked in `<config>/logs/plugin-state`, so the legacy branch
+ * described a read that never happened. And picking `candidates[0]` off an
+ * unsorted `readdir` reintroduced the coin-flip that `resolveLogDir`'s own
+ * comment records as a bug: a machine predating the claude-dev-kit -> claude-forge
+ * rebrand has more than one `ctk-*` data directory.
+ *
+ * Preference order: an explicit `CLAUDE_PLUGIN_DATA`; then the discovered data
+ * directory that ALREADY holds snapshots (so an existing history is never
+ * orphaned by a rebrand); then the lexicographically last candidate; then legacy.
+ */
+export function resolvePluginStateDir(
+  configDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): { dir: string; legacy: boolean } {
+  const explicit = env['CLAUDE_PLUGIN_DATA'];
+  if (explicit) return { dir: path.join(explicit, 'plugin-state'), legacy: false };
+
+  const dataRoot = path.join(configDir, 'plugins', 'data');
+  let candidates: string[] = [];
+  try {
+    candidates = fs
+      .readdirSync(dataRoot)
+      .sort()
+      .filter((n) => n.startsWith('ctk-') || n.startsWith('continuity'))
+      .map((n) => path.join(dataRoot, n));
+  } catch {
+    candidates = [];
+  }
+  const populated = candidates.find((c) => {
+    try {
+      return fs.readdirSync(path.join(c, 'plugin-state')).some((f) => f.endsWith('.json'));
+    } catch {
+      return false;
+    }
+  });
+  const chosen = populated ?? candidates[candidates.length - 1];
+  if (chosen) return { dir: path.join(chosen, 'plugin-state'), legacy: false };
+
+  return { dir: path.join(configDir, 'logs', 'continuity', 'plugin-state'), legacy: true };
+}
+
 /** Snapshot filename: ISO timestamp first so lexicographic === chronological. */
 export function snapshotFilename(capturedAt: string, sessionId: string): string {
   const stamp = capturedAt.replace(/[:.]/g, '-');
@@ -234,8 +296,13 @@ export function writePluginStateSnapshot(
   opts: { sessionId?: string; capturedAt?: string; keep?: number } = {}
 ): string | null {
   try {
-    const snap = capturePluginState(pluginsRoot, opts);
+    // mkdir BEFORE capture. Excluding the snapshot directory is not enough on
+    // its own: CREATING it changes its parent's mtime and entry count, so a
+    // first run would still diff against itself. Creating it first means the
+    // capture already sees the final tree shape, and the file write that follows
+    // only touches the excluded directory.
     fs.mkdirSync(outDir, { recursive: true });
+    const snap = capturePluginState(pluginsRoot, { ...opts, snapshotDir: outDir });
     const file = path.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
     fs.writeFileSync(file, JSON.stringify(snap), 'utf8');
     pruneSnapshots(outDir, opts.keep ?? 20);

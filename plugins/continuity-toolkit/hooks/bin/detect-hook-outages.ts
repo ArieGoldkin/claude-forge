@@ -12,6 +12,8 @@
  *
  * Usage:  node dist/bin/detect-hook-outages.js [--json] [--min-tools N]
  *         node dist/bin/detect-hook-outages.js --state-diff
+ *           (--state-diff exits 0 identical / 1 changed / 2 inconclusive;
+ *            --json applies to the outage scan only)
  * Exit:   0 no outages · 1 outages found · 2 inconclusive (no coverage, nothing
  *         analysed, or a bad argument). Exit 0 is an ALL-CLEAR and is only ever
  *         emitted when hours were actually examined.
@@ -32,6 +34,7 @@ import {
   type PluginStateSnapshot,
   capturePluginState,
   diffSnapshots,
+  resolvePluginStateDir,
 } from '../src/lib/plugin-state-snapshot.js';
 
 interface LogDir {
@@ -202,18 +205,12 @@ function report({
  * could not see.
  */
 function stateDiff(configDir: string): number {
-  // Resolve via the SAME hardened discovery the log reader uses, not the env var
-  // alone. `CLAUDE_PLUGIN_DATA` is set for hooks but not for a shell, so keying
-  // off it here silently fell back to the legacy directory — where the TEST SUITE
-  // writes. Measured: this read 20 snapshots stamped `test-session-loader-*` and
-  // compared them to live state as though they were evidence. Same defect class
-  // as the legacy log path (#101), recreated one directory over.
-  const resolved = resolveLogDir(configDir);
-  if (!resolved) {
-    console.log('VERDICT: INCONCLUSIVE (no ctk data directory found)');
-    return 2;
-  }
-  const snapDir = path.join(path.dirname(resolved.dirs[0] as string), 'plugin-state');
+  // One resolver, shared with the writer in session-loader. Deriving this
+  // independently on each side produced a legacy branch whose reader looked in a
+  // directory the writer never used, and a `candidates[0]` pick off an unsorted
+  // readdir — the coin flip resolveLogDir's own comment records as a bug.
+  const resolved = resolvePluginStateDir(configDir);
+  const snapDir = resolved.dir;
   if (resolved.legacy) {
     console.log('⚠ Falling back to the LEGACY data directory — snapshots there are written by');
     console.log('  the test suite, not by live hooks. Treat any result below as unreliable.\n');

@@ -17,6 +17,7 @@ import {
   capturePluginState,
   diffSnapshots,
   pruneSnapshots,
+  resolvePluginStateDir,
   snapshotFilename,
   writePluginStateSnapshot,
 } from '../../src/lib/plugin-state-snapshot.js';
@@ -210,5 +211,79 @@ describe('writePluginStateSnapshot', () => {
     expect(() =>
       writePluginStateSnapshot('/definitely/not/here', path.join(root, 'x'))
     ).not.toThrow();
+  });
+});
+
+describe('the snapshot must not invalidate itself (review #103 finding 1)', () => {
+  it('a tree unchanged except by the snapshot write diffs as identical', () => {
+    // outDir lives INSIDE pluginsRoot, exactly as it does in production
+    // (~/.claude/plugins/data/<ctk-mkt>/plugin-state). Capture runs before the
+    // write, so without an exclusion the write itself makes the tree differ and
+    // `identical: true` — the verdict /doctor documents as exit 0 — is
+    // unreachable. The PR's original control was a self-diff and missed this.
+    makePlugin('ctk', '2.17.0');
+    const out = path.join(root, 'data', 'ctk-claude-forge', 'plugin-state');
+    writePluginStateSnapshot(root, out, {
+      sessionId: 's1',
+      capturedAt: '2026-08-01T00:00:00.000Z',
+    });
+    const before = JSON.parse(
+      fs.readFileSync(path.join(out, fs.readdirSync(out)[0] as string), 'utf8')
+    );
+    const after = capturePluginState(root, { snapshotDir: out });
+    expect(diffSnapshots(before, after).identical).toBe(true);
+  });
+});
+
+describe('resolvePluginStateDir — one resolver for writer and reader', () => {
+  it('prefers CLAUDE_PLUGIN_DATA', () => {
+    const r = resolvePluginStateDir('/cfg', { CLAUDE_PLUGIN_DATA: '/data' } as NodeJS.ProcessEnv);
+    expect(r).toEqual({ dir: path.join('/data', 'plugin-state'), legacy: false });
+  });
+
+  it('prefers the data dir that ALREADY holds snapshots over the lexical last', () => {
+    // A machine predating the rebrand has both; picking the wrong one orphans
+    // an existing history, which is the coin flip this replaced.
+    const dataRoot = path.join(root, 'plugins', 'data');
+    fs.mkdirSync(path.join(dataRoot, 'ctk-claude-dev-kit', 'plugin-state'), { recursive: true });
+    fs.mkdirSync(path.join(dataRoot, 'ctk-claude-forge'), { recursive: true });
+    fs.writeFileSync(path.join(dataRoot, 'ctk-claude-dev-kit', 'plugin-state', 'a.json'), '{}');
+    const r = resolvePluginStateDir(root, {} as NodeJS.ProcessEnv);
+    expect(r.dir).toBe(path.join(dataRoot, 'ctk-claude-dev-kit', 'plugin-state'));
+    expect(r.legacy).toBe(false);
+  });
+
+  it('falls back to the lexical last when none hold snapshots', () => {
+    const dataRoot = path.join(root, 'plugins', 'data');
+    fs.mkdirSync(path.join(dataRoot, 'ctk-claude-dev-kit'), { recursive: true });
+    fs.mkdirSync(path.join(dataRoot, 'ctk-claude-forge'), { recursive: true });
+    expect(resolvePluginStateDir(root, {} as NodeJS.ProcessEnv).dir).toBe(
+      path.join(dataRoot, 'ctk-claude-forge', 'plugin-state')
+    );
+  });
+
+  it('legacy fallback matches what the WRITER uses — they must not disagree', () => {
+    const r = resolvePluginStateDir(root, {} as NodeJS.ProcessEnv);
+    expect(r.legacy).toBe(true);
+    expect(r.dir).toBe(path.join(root, 'logs', 'continuity', 'plugin-state'));
+  });
+});
+
+describe('consecutive session starts', () => {
+  it('a second snapshot diffs identical against the first', () => {
+    // The real steady-state case: two session starts with nothing else changing.
+    makePlugin('ctk', '2.17.0');
+    const out = path.join(root, 'data', 'ctk-claude-forge', 'plugin-state');
+    const f1 = writePluginStateSnapshot(root, out, {
+      sessionId: 's1',
+      capturedAt: '2026-08-01T00:00:00.000Z',
+    });
+    const f2 = writePluginStateSnapshot(root, out, {
+      sessionId: 's2',
+      capturedAt: '2026-08-01T01:00:00.000Z',
+    });
+    const a = JSON.parse(fs.readFileSync(f1 as string, 'utf8'));
+    const b = JSON.parse(fs.readFileSync(f2 as string, 'utf8'));
+    expect(diffSnapshots(a, b).identical).toBe(true);
   });
 });

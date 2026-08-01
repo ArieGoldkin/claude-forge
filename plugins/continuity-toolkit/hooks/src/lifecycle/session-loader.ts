@@ -35,7 +35,7 @@ import {
   logWarn,
 } from '../lib/logging.js';
 import { outputSuccess } from '../lib/output.js';
-import { writePluginStateSnapshot } from '../lib/plugin-state-snapshot.js';
+import { resolvePluginStateDir, writePluginStateSnapshot } from '../lib/plugin-state-snapshot.js';
 import { ensureSessionDir, evictOldSessions } from '../lib/read-cache/index.js';
 import { resolveSessionId } from '../lib/session-key.js';
 import { buildWindowTitleSequence } from '../lib/terminal-sequence.js';
@@ -59,10 +59,9 @@ function captureStartupPluginState(sessionId: string): void {
     const configDir = process.env['CLAUDE_CONFIG_DIR'] || path.join(home, '.claude');
     const pluginsRoot = path.join(configDir, 'plugins');
     if (!fs.existsSync(pluginsRoot)) return;
-    const dataDir = process.env['CLAUDE_PLUGIN_DATA'];
-    const outDir = dataDir
-      ? path.join(dataDir, 'plugin-state')
-      : path.join(configDir, 'logs', 'continuity', 'plugin-state');
+    // Shared resolver — the writer and the reader previously derived this
+    // independently and disagreed on the legacy branch.
+    const outDir = resolvePluginStateDir(configDir).dir;
     const written = writePluginStateSnapshot(pluginsRoot, outDir, {
       sessionId,
       keep: SNAPSHOT_KEEP,

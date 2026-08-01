@@ -35,6 +35,24 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
   so **any** hook that touches `~/.claude` is hermetic under test, and `--state-diff` resolves via
   the same hardened discovery the log reader uses, warning loudly on a legacy fallback.
 
+### Fixed after review (PR #103)
+
+- **The snapshot invalidated itself, so exit `0` was unreachable.** `outDir` lives *inside*
+  `pluginsRoot`, and capture ran before the write — so the write made the tree differ from the
+  snapshot it had just taken. `/doctor` Step 1d documents exit `0` as "tree identical to session
+  start", a verdict the tool could never emit. Excluding the snapshot directory is **not** enough
+  on its own: *creating* it changes its parent's mtime and entry count, so the directory is now
+  made **before** capture. The original `identical: true` control was a self-diff and never
+  exercised the write.
+- **Writer and reader derived the snapshot path independently and disagreed.** The writer used
+  `<config>/logs/continuity/plugin-state` for the legacy case while the reader looked in
+  `<config>/logs/plugin-state`, so that branch described a read that never happened; and the reader
+  picked `candidates[0]` off an unsorted `readdir`, reintroducing the coin flip `resolveLogDir`'s
+  own comment records as a bug. Both now call one `resolvePluginStateDir`, which prefers the data
+  directory that **already holds snapshots** so a rebrand cannot orphan an existing history.
+- Directory counting in the walk was `O(n²)` at the entry cap; the CLI header now states
+  `--state-diff`'s exit contract and that `--json` applies to the outage scan only.
+
 ### Known limits, stated rather than implied
 
 - A session that starts **already** broken has no snapshot — nothing of ctk's runs to write one.

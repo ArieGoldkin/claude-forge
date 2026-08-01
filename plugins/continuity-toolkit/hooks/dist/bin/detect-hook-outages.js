@@ -142,8 +142,11 @@ function capturePluginState(pluginsRoot, opts = {}) {
   const dirs = {};
   const files = {};
   let truncated = false;
+  let dirCount = 0;
+  const excluded = opts.snapshotDir ? path2.resolve(opts.snapshotDir) : null;
   const walk = (abs, rel, depth) => {
     if (truncated) return;
+    if (excluded && path2.resolve(abs) === excluded) return;
     let entries;
     try {
       entries = fs2.readdirSync(abs, { withFileTypes: true });
@@ -155,7 +158,8 @@ function capturePluginState(pluginsRoot, opts = {}) {
     } catch {
       return;
     }
-    if (Object.keys(dirs).length >= maxEntries) {
+    dirCount++;
+    if (dirCount >= maxEntries) {
       truncated = true;
       return;
     }
@@ -205,6 +209,27 @@ function diffSnapshots(before, after) {
     filesChanged,
     identical: dirsAdded.length === 0 && dirsRemoved.length === 0 && dirsTouched.length === 0 && filesChanged.length === 0
   };
+}
+function resolvePluginStateDir(configDir, env = process.env) {
+  const explicit = env["CLAUDE_PLUGIN_DATA"];
+  if (explicit) return { dir: path2.join(explicit, "plugin-state"), legacy: false };
+  const dataRoot = path2.join(configDir, "plugins", "data");
+  let candidates = [];
+  try {
+    candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path2.join(dataRoot, n));
+  } catch {
+    candidates = [];
+  }
+  const populated = candidates.find((c) => {
+    try {
+      return fs2.readdirSync(path2.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
+    } catch {
+      return false;
+    }
+  });
+  const chosen = populated ?? candidates[candidates.length - 1];
+  if (chosen) return { dir: path2.join(chosen, "plugin-state"), legacy: false };
+  return { dir: path2.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
 }
 
 // bin/detect-hook-outages.ts
@@ -317,12 +342,8 @@ VERDICT       : ${outages.length} OUTAGE HOUR(S) \u2014 ctk hooks did not run wh
   );
 }
 function stateDiff(configDir) {
-  const resolved = resolveLogDir(configDir);
-  if (!resolved) {
-    console.log("VERDICT: INCONCLUSIVE (no ctk data directory found)");
-    return 2;
-  }
-  const snapDir = path2.join(path2.dirname(resolved.dirs[0]), "plugin-state");
+  const resolved = resolvePluginStateDir(configDir);
+  const snapDir = resolved.dir;
   if (resolved.legacy) {
     console.log("\u26A0 Falling back to the LEGACY data directory \u2014 snapshots there are written by");
     console.log("  the test suite, not by live hooks. Treat any result below as unreliable.\n");
