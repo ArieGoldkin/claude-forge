@@ -2,6 +2,28 @@
 
 All notable changes to the ai-toolkit (`atk`) plugin will be documented in this file.
 
+## [2.0.13] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
+
+### Fixed
+
+- **`getLogDir()`'s fallback now honors `CLAUDE_CONFIG_DIR`** before `$HOME/.claude`. Keying it off
+  `HOME` alone meant the per-plugin `CLAUDE_CONFIG_DIR` isolation in every `vitest.config.ts` could
+  never cover logging — that isolation (added during #82) made snapshot-writing hermetic and left
+  log-writing exactly as leaky as before. Test runs wrote **28 MB across 6 directories** into the
+  developer's real home, and a shipped command (#106) read those fixtures back as real data.
+- **`shared/hooks-infra/vitest.config.ts` gained `CLAUDE_CONFIG_DIR`** — it was the one config of
+  six without it, which is why `~/.claude/logs/plugin/` accumulated 1026 fabricated rows.
+
+`CLAUDE_PLUGIN_DATA` still takes precedence, so **live hook logging is unchanged**: CC sets that
+variable for real dispatch, which is why the fallback runs almost exclusively under test and on
+pre-`CLAUDE_PLUGIN_DATA` CC versions. Where it does run, respecting `CLAUDE_CONFIG_DIR` is the
+correct behaviour — a user who relocates `.claude` expects their logs to move with it.
+
+Pinned by 3 new cases in the symlinked `tests/lib/logging.test.ts`, including a guard asserting the
+resolved directory is **not** under the real `HOME` when `CLAUDE_CONFIG_DIR` isolates it. Mutation
+control: reverting the fallback to `HOME`-only fails the guard (the precedence case still passes,
+which is why the guard is the one that pins it).
+
 ## [2.0.12] - 2026-07-30 — correct declared skill/command counts (16 · 1 · 25)
 
 ### Fixed

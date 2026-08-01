@@ -56,9 +56,26 @@ const PLUGIN_NAME = getPluginName();
  */
 function computeLogDir(): string {
   const pluginDataDir = process.env['CLAUDE_PLUGIN_DATA'];
-  return pluginDataDir
-    ? path.join(pluginDataDir, 'logs')
-    : path.join(process.env['HOME'] || '/tmp', '.claude', 'logs', PLUGIN_NAME);
+  if (pluginDataDir) return path.join(pluginDataDir, 'logs');
+
+  // Honor CLAUDE_CONFIG_DIR -- CC's own "where .claude lives" variable -- before
+  // falling back to $HOME/.claude.
+  //
+  // ISSUE #105: keying this fallback off HOME *alone* meant the per-plugin
+  // CLAUDE_CONFIG_DIR isolation present in every vitest.config.ts could never
+  // cover logging. That isolation was added during #82 and made snapshot-writing
+  // hermetic while leaving log-writing exactly as leaky as before: test runs
+  // wrote 28 MB across 6 directories into the developer's real home, and a
+  // shipped command (#106) then read those fixtures back as real review history.
+  //
+  // Production impact is small by construction: CC sets CLAUDE_PLUGIN_DATA for
+  // live hook dispatch, so this fallback only runs on pre-CLAUDE_PLUGIN_DATA CC
+  // versions and under test. Where it does run, respecting CLAUDE_CONFIG_DIR is
+  // the correct behaviour anyway -- a user who relocates .claude expects their
+  // logs to move with it.
+  const configDir = process.env['CLAUDE_CONFIG_DIR'];
+  const base = configDir || path.join(process.env['HOME'] || '/tmp', '.claude');
+  return path.join(base, 'logs', PLUGIN_NAME);
 }
 
 /**

@@ -123,7 +123,10 @@ function getPluginName() {
 var PLUGIN_NAME = getPluginName();
 function computeLogDir() {
   const pluginDataDir = process.env["CLAUDE_PLUGIN_DATA"];
-  return pluginDataDir ? path.join(pluginDataDir, "logs") : path.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
+  if (pluginDataDir) return path.join(pluginDataDir, "logs");
+  const configDir = process.env["CLAUDE_CONFIG_DIR"];
+  const base = configDir || path.join(process.env["HOME"] || "/tmp", ".claude");
+  return path.join(base, "logs", PLUGIN_NAME);
 }
 var cachedLogDir = null;
 function resolveLogDir() {

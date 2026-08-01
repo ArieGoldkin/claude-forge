@@ -212,6 +212,12 @@ describe('logging module', () => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hooks-infra-logs-'));
     process.env['HOME'] = tmpHome;
     delete process.env['CLAUDE_PLUGIN_DATA'];
+    // Issue #105 made CLAUDE_CONFIG_DIR take precedence over HOME in the
+    // fallback, and every vitest.config.ts now sets it. Clear it here so the
+    // default assertions below exercise the HOME path specifically; the tests
+    // that care about CLAUDE_CONFIG_DIR set it themselves. Isolation is not
+    // weakened — HOME is still the temp dir above.
+    delete process.env['CLAUDE_CONFIG_DIR'];
 
     resetLogDir();
     resetLogLevel();
@@ -346,6 +352,68 @@ describe('logging module', () => {
         expect(logDir.startsWith(testPluginDataDir)).toBe(true);
       } finally {
         delete process.env['CLAUDE_PLUGIN_DATA'];
+        resetLogDir();
+      }
+    });
+
+    // -------------------------------------------------------------------
+    // Issue #105 — the fallback must honor CLAUDE_CONFIG_DIR, not just HOME.
+    //
+    // Keying it off HOME alone meant the per-plugin CLAUDE_CONFIG_DIR isolation
+    // in every vitest.config.ts could not cover logging: test runs wrote 28 MB
+    // across 6 directories into the developer's real ~/.claude/logs/, and a
+    // shipped command (#106) read those fixtures back as real review history.
+    // -------------------------------------------------------------------
+
+    it('should honor CLAUDE_CONFIG_DIR over HOME when CLAUDE_PLUGIN_DATA is unset (#105)', () => {
+      const cfgDir = path.join(tmpHome, 'relocated-config');
+      process.env['CLAUDE_CONFIG_DIR'] = cfgDir;
+      resetLogDir();
+      try {
+        expect(getLogDir()).toBe(path.join(cfgDir, 'logs', IDENTITY.logDirName));
+      } finally {
+        delete process.env['CLAUDE_CONFIG_DIR'];
+        resetLogDir();
+      }
+    });
+
+    it('should keep CLAUDE_PLUGIN_DATA winning over CLAUDE_CONFIG_DIR (#105 preserves precedence)', () => {
+      const dataDir = path.join(tmpHome, 'plugin-data-precedence');
+      process.env['CLAUDE_PLUGIN_DATA'] = dataDir;
+      process.env['CLAUDE_CONFIG_DIR'] = path.join(tmpHome, 'ignored-config');
+      resetLogDir();
+      try {
+        expect(getLogDir()).toBe(path.join(dataDir, 'logs'));
+      } finally {
+        delete process.env['CLAUDE_PLUGIN_DATA'];
+        delete process.env['CLAUDE_CONFIG_DIR'];
+        resetLogDir();
+      }
+    });
+
+    /**
+     * The actual regression guard for #105.
+     *
+     * Must-fail control: revert `computeLogDir` to key off HOME alone and this
+     * assertion fails, because the resolved directory lands back under the real
+     * home. The two tests above would still pass a HOME-only implementation for
+     * the precedence case, so this is the one that pins the fix.
+     */
+    it('must not resolve under the real HOME when CLAUDE_CONFIG_DIR isolates it (#105 guard)', () => {
+      const realHome = originalEnv['HOME'];
+      const cfgDir = path.join(os.tmpdir(), 'ctk-test-config-isolation-guard');
+      process.env['HOME'] = realHome ?? '/nonexistent-home';
+      process.env['CLAUDE_CONFIG_DIR'] = cfgDir;
+      resetLogDir();
+      try {
+        const logDir = getLogDir();
+        expect(logDir.startsWith(cfgDir)).toBe(true);
+        if (realHome) {
+          expect(logDir.startsWith(path.join(realHome, '.claude'))).toBe(false);
+        }
+      } finally {
+        delete process.env['CLAUDE_CONFIG_DIR'];
+        process.env['HOME'] = tmpHome;
         resetLogDir();
       }
     });
