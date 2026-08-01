@@ -2,6 +2,38 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.18.1] - 2026-08-01 — `/review-stats` read the wrong log tree (#106)
+
+### Fixed
+
+- **`/etk:review-stats` searched a directory live hooks never write to.** It ran
+  `find "$HOME/.claude/logs"`, which cannot reach `$HOME/.claude/plugins/data/…` — where
+  `review-logger` actually writes, because `getLogDir()` prefers `CLAUDE_PLUGIN_DATA` and CC sets
+  that for real hook dispatch. **The two trees are disjoint**, so the command did not merely under-
+  report: on a machine whose legacy tree held only test residue it reported **1026 reviews that
+  never happened and zero real ones** — and read as a working feature.
+
+  Now searches `$CLAUDE_PLUGIN_DATA`, `~/.claude/plugins/data`, and the legacy `~/.claude/logs`,
+  skipping roots that do not exist so `find` needs no error suppression (a swallowed failure here
+  would look identical to "no data").
+
+- **`~/.claude/logs/plugin/` is excluded by construction.** Every production `run-hook-wrapper.sh`
+  exports a real `CLAUDE_PLUGIN_NAME` (`continuity`/`devops`/`ai`/`frontend`/`engineering`);
+  `'plugin'` is the fallback used only when that variable is unset — i.e. the test suite. Nothing
+  that reached a user writes there.
+
+  ⚠ **Deliberately not filtered by `session_id`.** Fixtures use many ids (`abc`, `s1`, `test`,
+  `a5f8a1c4`, …), so an id blocklist would have been a guess that silently rots. Residual test rows
+  in the *other* legacy directories are #105's to fix at the source.
+
+- **The command now names its sources**, with a row count per file. The failure mode it replaced was
+  a plausible number from an unnamed directory; printing what was read makes it self-diagnosing.
+  The user-facing `Source:` footer, which documented the wrong path, is corrected.
+
+Verified with a three-cell probe: the 1026 test rows are **not** surfaced (must-not-find); a
+`CLAUDE_PLUGIN_DATA` override **is** found; and the real `~/.claude/plugins/data/<id>/logs/` shape
+**is** found (both must-find). Probe artifacts removed and verified absent.
+
 ## [2.18.0] - 2026-07-31 — `/etk:fix-bug` reports to the tracker it read from
 
 Closes #71, the remainder of #69. Release 2.16.0 (PR #70) shipped the GitHub **read** path and its
