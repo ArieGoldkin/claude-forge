@@ -9,14 +9,46 @@ Read and display statistics from the review history log.
 ## Step 1: Read Log File
 
 ```bash
-# Aggregate review history from all plugin log directories
-REVIEW_LOGS=$(find "$HOME/.claude/logs" -name "review-history.jsonl" 2>/dev/null)
+# Live hooks write to $CLAUDE_PLUGIN_DATA/logs/ -- in practice
+# ~/.claude/plugins/data/<plugin-id>/logs/. The legacy ~/.claude/logs/<name>/
+# tree is written only when CLAUDE_PLUGIN_DATA is UNSET: pre-CLAUDE_PLUGIN_DATA
+# installs, and the test suite.
+#
+# Searching only the legacy tree was issue #106: the two trees are disjoint, so
+# this command reported 1026 test fixtures and zero real reviews, and read as a
+# working feature. Search BOTH.
+#
+# ~/.claude/logs/plugin/ is excluded BY CONSTRUCTION, not by guesswork: every
+# production run-hook-wrapper.sh exports a real CLAUDE_PLUGIN_NAME
+# (continuity|devops|ai|frontend|engineering), and 'plugin' is the fallback used
+# only when that variable is unset -- i.e. the test suite. Nothing that ever
+# reached a user writes there. (Do NOT filter by session_id instead: fixtures
+# use many ids -- abc, s1, test, a5f8a1c4 -- so an id blocklist is a guess.)
+# Residual test rows in the OTHER legacy dirs are issue #105's to fix at source.
+SEARCH_ROOTS=""
+for root in "$CLAUDE_PLUGIN_DATA" "$HOME/.claude/plugins/data" "$HOME/.claude/logs"; do
+  [ -n "$root" ] && [ -d "$root" ] && SEARCH_ROOTS="$SEARCH_ROOTS $root"
+done
+
+# Roots are existence-checked above, so find needs no error suppression here --
+# a failure now is a real failure and should be visible, not swallowed.
+REVIEW_LOGS=$(find $SEARCH_ROOTS -name "review-history.jsonl" \
+  | grep -v "/\.claude/logs/plugin/" | sort -u)
 
 if [ -z "$REVIEW_LOGS" ]; then
-  echo "No review history found in ~/.claude/logs/*/review-history.jsonl"
-  echo "Run /review-mr to generate review data."
+  echo "No review history found."
+  echo "Searched:$SEARCH_ROOTS"
+  echo "Run /review-mr, then /etk:post-mr-comments, to generate review data."
   exit 0
 fi
+
+# Name the sources. The failure mode #106 replaced was a plausible number from
+# an unnamed directory -- printing what was read makes that self-diagnosing.
+echo "Sources read:"
+for f in $REVIEW_LOGS; do
+  printf '  %6s rows  %s\n' "$(wc -l < "$f" | tr -d ' ')" "$f"
+done
+echo
 
 # Merge all log files into a temp file for analysis
 REVIEW_LOG=$(mktemp)
@@ -84,5 +116,5 @@ fi
 | !$mr_number | $count reviews |
 
 ---
-Source: ~/.claude/logs/*/review-history.jsonl
+Sources: listed above (live: `~/.claude/plugins/data/*/logs/`; legacy: `~/.claude/logs/*/`, excluding `logs/plugin/`)
 ```
