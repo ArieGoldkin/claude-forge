@@ -2,6 +2,75 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.0] - 2026-08-01 — record plugin-tree state so #82 becomes diagnosable
+
+### Added
+
+- **`session-loader` writes a plugin-tree snapshot at every session start**, and `/doctor` gains
+  **Step 1d** (`--state-diff`) to compare it against live state.
+
+  Two investigations into #82 ended "trigger unidentified" for the same structural reason: every
+  candidate artifact records only **current state**. `.last_inuse_sweep` is one overwritten
+  timestamp, `installed_plugins.json` carries one `lastUpdated`, and a directory carries one
+  `mtime` — which is last-write-wins, so a directory touched during one outage and touched again a
+  week later shows only the later stamp. **The instruments record a state; the question is about a
+  history.** Correlating seven measured outages against them proved nothing in either direction.
+
+  Because measured outages begin **mid-session**, a session-start snapshot is a healthy "before".
+  `dirsRemoved` is the field that matters: a plugin directory present at session start and gone
+  when the outage is noticed is the strongest available evidence for the sweep hypothesis — and is
+  exactly what #82's version-name comparison could not see, since a rewritten directory leaves the
+  version *set* unchanged.
+
+  Cost measured on a five-plugin install: **196 directories, 8 ms, 17.8 KB**, newest 20 retained.
+  Every entry point is failure-tolerant; a diagnostic must never cost a session start.
+
+### Fixed
+
+- **The test suite was writing snapshots into the developer's real `~/.claude`** — 20 files stamped
+  `test-session-loader-*` — and `--state-diff` then read them back as if they were evidence. Both
+  halves are the repo's own recurring trap: a test suite arming a diagnostic, and a tool silently
+  falling back to the legacy directory that only tests write to (the #101 defect, one directory
+  over). `CLAUDE_CONFIG_DIR` is now isolated to a temp path in every plugin's `vitest.config.ts`,
+  so **any** hook that touches `~/.claude` is hermetic under test, and `--state-diff` resolves via
+  the same hardened discovery the log reader uses, warning loudly on a legacy fallback.
+
+### Fixed after review (PR #103)
+
+- **The snapshot invalidated itself, so exit `0` was unreachable.** `outDir` lives *inside*
+  `pluginsRoot`, and capture ran before the write — so the write made the tree differ from the
+  snapshot it had just taken. `/doctor` Step 1d documents exit `0` as "tree identical to session
+  start", a verdict the tool could never emit. Excluding the snapshot directory is **not** enough
+  on its own: *creating* it changes its parent's mtime and entry count, so the directory is now
+  made **before** capture. The original `identical: true` control was a self-diff and never
+  exercised the write.
+- **Writer and reader derived the snapshot path independently and disagreed.** The writer used
+  `<config>/logs/continuity/plugin-state` for the legacy case while the reader looked in
+  `<config>/logs/plugin-state`, so that branch described a read that never happened; and the reader
+  picked `candidates[0]` off an unsorted `readdir`, reintroducing the coin flip `resolveLogDir`'s
+  own comment records as a bug. Both now call one `resolvePluginStateDir`, which prefers the data
+  directory that **already holds snapshots** so a rebrand cannot orphan an existing history.
+- Directory counting in the walk was `O(n²)` at the entry cap; the CLI header now states
+  `--state-diff`'s exit contract and that `--json` applies to the outage scan only.
+- **Snapshot writes are atomic** (temp file + `rename` within the same directory). A plain write
+  leaves a truncated file if the process dies mid-write, and a truncated snapshot is worse than
+  none — it is unparseable at exactly the moment it is needed. The reader also **falls back through
+  older snapshots** rather than giving up on an unreadable newest one, reporting which files it
+  skipped, and ignores `.tmp` leftovers.
+- **Captured file content is now compared, instead of being dead weight.** `diffSnapshots` looked
+  only at size and mtime, so a same-size edit — a version string swapped for another of equal
+  length, exactly the shape a rebrand produces — compared as unchanged. Content is kept (it is the
+  forensic record of which plugins and marketplaces were registered) and is now load-bearing.
+- Each plugin's test suite gets **its own** temp `CLAUDE_CONFIG_DIR` rather than sharing one, so
+  concurrent local runs cannot interfere.
+
+### Known limits, stated rather than implied
+
+- A session that starts **already** broken has no snapshot — nothing of ctk's runs to write one.
+  Step 1b remains the live check for that case.
+- A snapshot marked `TRUNCATED` cannot be compared safely: its missing entries are
+  indistinguishable from removals. The flag is surfaced rather than silently tolerated.
+
 ## [2.16.0] - 2026-08-01 — retrospective detector for silent plugin unloads (#82)
 
 ### Added

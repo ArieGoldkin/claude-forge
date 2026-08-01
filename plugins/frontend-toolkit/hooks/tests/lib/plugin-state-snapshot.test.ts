@@ -1,0 +1,1 @@
+../../../../../shared/hooks-infra/tests/lib/plugin-state-snapshot.test.ts

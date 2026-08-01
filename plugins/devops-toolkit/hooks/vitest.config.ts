@@ -1,3 +1,5 @@
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -8,6 +10,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     env: {
+      // Hermetic: hooks that touch ~/.claude must not write to the real home
+      // during tests. session-loader's #82 snapshot wrote 20 files into the
+      // developer's plugin-state directory before this existed, and a
+      // diagnostic then read them back as if they were evidence.
+      CLAUDE_CONFIG_DIR: path.join(os.tmpdir(), 'ctk-test-config-devops-toolkit'),
       CLAUDE_PLUGIN_NAME: 'devops',
     },
     include: ['tests/**/*.test.ts'],

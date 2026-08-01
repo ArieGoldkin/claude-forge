@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import * as fs from 'fs';
+import * as fs2 from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -128,30 +128,156 @@ function nextHour(hour) {
   d.setUTCHours(d.getUTCHours() + 1);
   return d.toISOString().slice(0, 13);
 }
+var DEFAULT_MAX_DEPTH = 4;
+var MAX_ENTRIES = 5e3;
+var STATE_FILES = [
+  "installed_plugins.json",
+  "known_marketplaces.json",
+  "plugin-catalog-cache.json",
+  ".last_inuse_sweep"
+];
+function capturePluginState(pluginsRoot, opts = {}) {
+  const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const maxEntries = opts.maxEntries ?? MAX_ENTRIES;
+  const dirs = {};
+  const files = {};
+  let truncated = false;
+  let dirCount = 0;
+  const excluded = opts.snapshotDir ? path.resolve(opts.snapshotDir) : null;
+  const walk = (abs, rel, depth) => {
+    if (truncated) return;
+    if (excluded && path.resolve(abs) === excluded) return;
+    let entries;
+    try {
+      entries = fs2.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    try {
+      dirs[rel || "."] = { m: Math.round(fs2.statSync(abs).mtimeMs), n: entries.length };
+    } catch {
+      return;
+    }
+    dirCount++;
+    if (dirCount >= maxEntries) {
+      truncated = true;
+      return;
+    }
+    if (depth >= maxDepth) return;
+    for (const e of entries) {
+      if (e.isDirectory())
+        walk(path.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+    }
+  };
+  walk(pluginsRoot, "", 0);
+  for (const name of STATE_FILES) {
+    const p = path.join(pluginsRoot, name);
+    try {
+      const st = fs2.statSync(p);
+      const entry = { size: st.size, m: Math.round(st.mtimeMs) };
+      if (st.size <= 64 * 1024) entry.content = fs2.readFileSync(p, "utf8");
+      files[name] = entry;
+    } catch {
+    }
+  }
+  return {
+    version: 1,
+    capturedAt: opts.capturedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+    sessionId: opts.sessionId ?? "unknown",
+    dirs,
+    files,
+    truncated
+  };
+}
+function diffSnapshots(before, after) {
+  const b = before.dirs;
+  const a = after.dirs;
+  const dirsAdded = Object.keys(a).filter((k) => !(k in b)).sort();
+  const dirsRemoved = Object.keys(b).filter((k) => !(k in a)).sort();
+  const dirsTouched = Object.keys(a).filter((k) => k in b && (b[k]?.m !== a[k]?.m || b[k]?.n !== a[k]?.n)).sort();
+  const names = /* @__PURE__ */ new Set([...Object.keys(before.files), ...Object.keys(after.files)]);
+  const filesChanged = [...names].filter((n) => {
+    const x = before.files[n];
+    const y = after.files[n];
+    if (!x || !y) return true;
+    if (x.content !== void 0 && y.content !== void 0) return x.content !== y.content;
+    return x.size !== y.size || x.m !== y.m;
+  }).sort();
+  return {
+    dirsAdded,
+    dirsRemoved,
+    dirsTouched,
+    filesChanged,
+    identical: dirsAdded.length === 0 && dirsRemoved.length === 0 && dirsTouched.length === 0 && filesChanged.length === 0
+  };
+}
+function resolvePluginStateDir(configDir, env = process.env) {
+  const explicit = env["CLAUDE_PLUGIN_DATA"];
+  if (explicit) return { dir: path.join(explicit, "plugin-state"), legacy: false };
+  const dataRoot = path.join(configDir, "plugins", "data");
+  let candidates = [];
+  try {
+    candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n));
+  } catch {
+    candidates = [];
+  }
+  const populated = candidates.find((c) => {
+    try {
+      return fs2.readdirSync(path.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
+    } catch {
+      return false;
+    }
+  });
+  const chosen = populated ?? candidates[candidates.length - 1];
+  if (chosen) return { dir: path.join(chosen, "plugin-state"), legacy: false };
+  return { dir: path.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
+}
+function readNewestSnapshot(snapDir) {
+  let names;
+  try {
+    names = fs2.readdirSync(snapDir).filter((n) => n.endsWith(".json")).sort();
+  } catch {
+    return null;
+  }
+  const skipped = [];
+  for (let i = names.length - 1; i >= 0; i--) {
+    const name = names[i];
+    try {
+      const parsed = JSON.parse(fs2.readFileSync(path.join(snapDir, name), "utf8"));
+      if (parsed && typeof parsed === "object" && parsed.dirs) {
+        return { snapshot: parsed, file: name, skipped };
+      }
+      skipped.push(name);
+    } catch {
+      skipped.push(name);
+    }
+  }
+  return null;
+}
 
 // bin/detect-hook-outages.ts
 function resolveLogDir(configDir) {
   const fromEnv = process.env["CLAUDE_PLUGIN_DATA"];
   if (fromEnv) {
     const d = path.join(fromEnv, "logs");
-    if (fs.existsSync(d)) return { dirs: [d], legacy: false };
+    if (fs2.existsSync(d)) return { dirs: [d], legacy: false };
   }
   const dataRoot = path.join(configDir, "plugins", "data");
-  if (fs.existsSync(dataRoot)) {
-    const candidates = fs.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n, "logs")).filter((d) => fs.existsSync(d));
+  if (fs2.existsSync(dataRoot)) {
+    const candidates = fs2.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path.join(dataRoot, n, "logs")).filter((d) => fs2.existsSync(d));
     if (candidates.length > 0) return { dirs: candidates, legacy: false };
   }
   const legacy = path.join(configDir, "logs", "continuity");
-  if (fs.existsSync(legacy)) return { dirs: [legacy], legacy: true };
+  if (fs2.existsSync(legacy)) return { dirs: [legacy], legacy: true };
   return null;
 }
 function* logLines(dirs) {
   for (const dir of dirs)
-    for (const name of fs.readdirSync(dir)) {
+    for (const name of fs2.readdirSync(dir)) {
       if (!name.startsWith("permission-feedback.log") && !name.startsWith("hooks.log")) continue;
       let text;
       try {
-        text = fs.readFileSync(path.join(dir, name), "utf8");
+        text = fs2.readFileSync(path.join(dir, name), "utf8");
       } catch {
         continue;
       }
@@ -159,13 +285,13 @@ function* logLines(dirs) {
     }
 }
 function* transcriptRecords(projectsRoot) {
-  if (!fs.existsSync(projectsRoot)) return;
-  for (const proj of fs.readdirSync(projectsRoot)) {
+  if (!fs2.existsSync(projectsRoot)) return;
+  for (const proj of fs2.readdirSync(projectsRoot)) {
     const dir = path.join(projectsRoot, proj);
     let entries;
     try {
-      if (!fs.statSync(dir).isDirectory()) continue;
-      entries = fs.readdirSync(dir);
+      if (!fs2.statSync(dir).isDirectory()) continue;
+      entries = fs2.readdirSync(dir);
     } catch {
       continue;
     }
@@ -173,7 +299,7 @@ function* transcriptRecords(projectsRoot) {
       if (!name.endsWith(".jsonl")) continue;
       let text;
       try {
-        text = fs.readFileSync(path.join(dir, name), "utf8");
+        text = fs2.readFileSync(path.join(dir, name), "utf8");
       } catch {
         continue;
       }
@@ -238,6 +364,61 @@ VERDICT       : ${outages.length} OUTAGE HOUR(S) \u2014 ctk hooks did not run wh
     "\nDuring these hours the session ran with no security-blocker, no permission hooks and no\ncontinuity lifecycle. See issue #82. If an outage is ONGOING, capture evidence before\nrepairing \u2014 /doctor Step 1b has the checklist."
   );
 }
+function stateDiff(configDir) {
+  const resolved = resolvePluginStateDir(configDir);
+  const snapDir = resolved.dir;
+  if (resolved.legacy) {
+    console.log("\u26A0 Falling back to the LEGACY data directory \u2014 snapshots there are written by");
+    console.log("  the test suite, not by live hooks. Treat any result below as unreliable.\n");
+  }
+  const loaded = readNewestSnapshot(snapDir);
+  if (!loaded) {
+    console.log(`VERDICT: INCONCLUSIVE (no readable snapshot at ${snapDir})`);
+    console.log("Snapshots begin at the next session start with ctk >= 2.17.0 loaded.");
+    return 2;
+  }
+  const { snapshot: before, file: newest, skipped } = loaded;
+  if (skipped.length > 0) {
+    console.log(`\u26A0 Skipped ${skipped.length} unreadable snapshot(s): ${skipped.join(", ")}`);
+  }
+  const after = capturePluginState(path.join(configDir, "plugins"), { sessionId: "live" });
+  const d = diffSnapshots(before, after);
+  console.log(`snapshot      : ${newest}`);
+  console.log(`captured      : ${before.capturedAt}  session=${before.sessionId}`);
+  console.log(
+    `snapshot dirs : ${Object.keys(before.dirs).length}${before.truncated ? "  \u26A0 TRUNCATED" : ""}`
+  );
+  console.log(
+    `live dirs     : ${Object.keys(after.dirs).length}${after.truncated ? "  \u26A0 TRUNCATED" : ""}`
+  );
+  if (before.truncated || after.truncated) {
+    console.log(
+      '\n\u26A0 A truncated snapshot cannot be compared safely \u2014 missing entries look like\n  removals. Treat any "removed" list below as unreliable.'
+    );
+  }
+  if (d.identical) {
+    console.log(
+      "\nVERDICT       : IDENTICAL \u2014 the plugin tree has not changed since session start"
+    );
+    return 0;
+  }
+  console.log(
+    `
+VERDICT       : CHANGED  (removed ${d.dirsRemoved.length}, added ${d.dirsAdded.length}, touched ${d.dirsTouched.length}, files ${d.filesChanged.length})`
+  );
+  const show = (label, xs) => {
+    if (xs.length === 0) return;
+    console.log(`
+  ${label}:`);
+    for (const x of xs.slice(0, 25)) console.log(`    ${x}`);
+    if (xs.length > 25) console.log(`    \u2026 and ${xs.length - 25} more`);
+  };
+  show("REMOVED since session start (strongest sweep evidence)", d.dirsRemoved);
+  show("added", d.dirsAdded);
+  show("contents changed (mtime or entry count)", d.dirsTouched);
+  show("state files changed", d.filesChanged);
+  return 1;
+}
 function main() {
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
@@ -251,6 +432,7 @@ function main() {
   }
   const minTools = Number.isFinite(rawMin) ? rawMin : DEFAULT_MIN_TOOLS;
   const configDir = process.env["CLAUDE_CONFIG_DIR"] || path.join(os.homedir(), ".claude");
+  if (argv.includes("--state-diff")) return stateDiff(configDir);
   const log = resolveLogDir(configDir);
   if (!log) {
     console.log("VERDICT: INCONCLUSIVE (no ctk log directory found)");

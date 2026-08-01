@@ -1,6 +1,6 @@
-import * as fs6 from 'fs';
+import * as fs7 from 'fs';
 import { readSync, writeFileSync, renameSync, readFileSync } from 'fs';
-import * as path2 from 'path';
+import * as path4 from 'path';
 import { join } from 'path';
 import * as os from 'os';
 import { tmpdir } from 'os';
@@ -497,7 +497,7 @@ function getPluginName() {
 var PLUGIN_NAME = getPluginName();
 function computeLogDir() {
   const pluginDataDir = process.env["CLAUDE_PLUGIN_DATA"];
-  return pluginDataDir ? path2.join(pluginDataDir, "logs") : path2.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
+  return pluginDataDir ? path4.join(pluginDataDir, "logs") : path4.join(process.env["HOME"] || "/tmp", ".claude", "logs", PLUGIN_NAME);
 }
 var cachedLogDir = null;
 function resolveLogDir() {
@@ -507,10 +507,10 @@ function resolveLogDir() {
   return cachedLogDir;
 }
 function resolveHookLogFile() {
-  return path2.join(resolveLogDir(), "hooks.log");
+  return path4.join(resolveLogDir(), "hooks.log");
 }
 function resolvePermissionLogFile() {
-  return path2.join(resolveLogDir(), "permission-feedback.log");
+  return path4.join(resolveLogDir(), "permission-feedback.log");
 }
 var HOOK_LOG_MAX_SIZE = 204800;
 var PERMISSION_LOG_MAX_SIZE = 102400;
@@ -551,8 +551,8 @@ function ensureLogDir() {
   }
   try {
     const logDir = resolveLogDir();
-    if (!fs6.existsSync(logDir)) {
-      fs6.mkdirSync(logDir, { recursive: true });
+    if (!fs7.existsSync(logDir)) {
+      fs7.mkdirSync(logDir, { recursive: true });
     }
     logDirCreated = true;
   } catch {
@@ -560,7 +560,7 @@ function ensureLogDir() {
 }
 function getFileSize(filePath) {
   try {
-    const stats = fs6.statSync(filePath);
+    const stats = fs7.statSync(filePath);
     return stats.size;
   } catch {
     return 0;
@@ -572,7 +572,7 @@ function rotateLog(logFile, maxSize) {
     if (size > maxSize) {
       const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const rotatedFile = `${logFile}.old.${timestamp}`;
-      fs6.renameSync(logFile, rotatedFile);
+      fs7.renameSync(logFile, rotatedFile);
     }
   } catch {
   }
@@ -582,7 +582,7 @@ function getTimestamp() {
 }
 function writeLogLine(logFile, line) {
   try {
-    fs6.appendFileSync(logFile, `${line}
+    fs7.appendFileSync(logFile, `${line}
 `, { encoding: "utf8" });
   } catch {
   }
@@ -709,9 +709,9 @@ var CONTINUITY_DIRS = {
   context: ".claude/context"
 };
 function ensureDirectory(dirPath) {
-  if (!fs6.existsSync(dirPath)) {
+  if (!fs7.existsSync(dirPath)) {
     try {
-      fs6.mkdirSync(dirPath, { recursive: true });
+      fs7.mkdirSync(dirPath, { recursive: true });
       return true;
     } catch {
       return false;
@@ -723,7 +723,7 @@ function formatTimestamp() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function createDefaultSharedContext(projectDir, projectName) {
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   const timestamp = formatTimestamp();
   const defaultContext = {
     version: "1.0.0",
@@ -773,7 +773,7 @@ function createDefaultSharedContext(projectDir, projectName) {
       was_cleanly_ended: true
     }
   };
-  fs6.writeFileSync(contextFile, `${JSON.stringify(defaultContext, null, 2)}
+  fs7.writeFileSync(contextFile, `${JSON.stringify(defaultContext, null, 2)}
 `);
 }
 function createDefaultLedger(ledgerPath, projectName) {
@@ -828,12 +828,12 @@ _None_
 *Created: ${timestamp}*
 *Updated: ${timestamp}*
 `;
-  fs6.writeFileSync(ledgerPath, ledgerContent);
+  fs7.writeFileSync(ledgerPath, ledgerContent);
 }
 function createContinuityDirectories(projectDir) {
   let createdAny = false;
-  const claudeDir = path2.join(projectDir, ".claude");
-  if (!fs6.existsSync(claudeDir)) {
+  const claudeDir = path4.join(projectDir, ".claude");
+  if (!fs7.existsSync(claudeDir)) {
     if (!ensureDirectory(claudeDir)) {
       throw new Error("Failed to create .claude directory");
     }
@@ -848,8 +848,8 @@ function createContinuityDirectories(projectDir) {
     CONTINUITY_DIRS.context
   ];
   for (const dir of directories) {
-    const dirPath = path2.join(projectDir, dir);
-    if (!fs6.existsSync(dirPath)) {
+    const dirPath = path4.join(projectDir, dir);
+    if (!fs7.existsSync(dirPath)) {
       if (!ensureDirectory(dirPath)) {
         throw new Error(`Failed to create directory: ${dir}`);
       }
@@ -866,22 +866,22 @@ function createGitkeepFiles(projectDir) {
     CONTINUITY_DIRS.learnings
   ];
   for (const dir of gitkeepDirs) {
-    const gitkeepPath = path2.join(projectDir, dir, ".gitkeep");
-    if (!fs6.existsSync(gitkeepPath)) {
+    const gitkeepPath = path4.join(projectDir, dir, ".gitkeep");
+    if (!fs7.existsSync(gitkeepPath)) {
       try {
-        fs6.writeFileSync(gitkeepPath, "");
+        fs7.writeFileSync(gitkeepPath, "");
       } catch {
       }
     }
   }
 }
 function createLedgerIfNeeded(projectDir, projectName) {
-  const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
-  const defaultLedger = path2.join(ledgersDir, `CONTINUITY_${projectName}.md`);
-  if (fs6.existsSync(defaultLedger)) {
+  const ledgersDir = path4.join(projectDir, CONTINUITY_DIRS.ledgers);
+  const defaultLedger = path4.join(ledgersDir, `CONTINUITY_${projectName}.md`);
+  if (fs7.existsSync(defaultLedger)) {
     return false;
   }
-  const files = fs6.readdirSync(ledgersDir);
+  const files = fs7.readdirSync(ledgersDir);
   const hasLedger = files.some((f) => f.endsWith(".md") && f !== ".gitkeep");
   if (!hasLedger) {
     createDefaultLedger(defaultLedger, projectName);
@@ -890,15 +890,15 @@ function createLedgerIfNeeded(projectDir, projectName) {
   return false;
 }
 function ensureContinuityStructure(projectDir) {
-  const projectName = path2.basename(projectDir);
+  const projectName = path4.basename(projectDir);
   let createdAny = false;
   try {
     if (createContinuityDirectories(projectDir)) {
       createdAny = true;
     }
     createGitkeepFiles(projectDir);
-    const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-    if (!fs6.existsSync(contextFile)) {
+    const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+    if (!fs7.existsSync(contextFile)) {
       createDefaultSharedContext(projectDir, projectName);
       createdAny = true;
     }
@@ -911,15 +911,15 @@ function ensureContinuityStructure(projectDir) {
   }
 }
 function getCurrentLedgerPath(projectDir) {
-  const ledgersDir = path2.join(projectDir, CONTINUITY_DIRS.ledgers);
-  if (!fs6.existsSync(ledgersDir)) {
+  const ledgersDir = path4.join(projectDir, CONTINUITY_DIRS.ledgers);
+  if (!fs7.existsSync(ledgersDir)) {
     return null;
   }
   try {
-    const files = fs6.readdirSync(ledgersDir);
+    const files = fs7.readdirSync(ledgersDir);
     const ledgerFile = files.find((f) => f.endsWith(".md") && f !== ".gitkeep");
     if (ledgerFile) {
-      return path2.join(ledgersDir, ledgerFile);
+      return path4.join(ledgersDir, ledgerFile);
     }
   } catch {
   }
@@ -1201,7 +1201,7 @@ function stampHookLiveness(sessionId, hookName) {
 }
 var LOCK_RETRY_DELAY_MS = 100;
 function sleep(ms) {
-  return new Promise((resolve7) => setTimeout(resolve7, ms));
+  return new Promise((resolve8) => setTimeout(resolve8, ms));
 }
 function isPidAlive(pid) {
   try {
@@ -1213,11 +1213,11 @@ function isPidAlive(pid) {
 }
 function removeStaleLock(lockPath, expectedMtimeMs) {
   try {
-    const stat = fs6.statSync(lockPath);
+    const stat = fs7.statSync(lockPath);
     if (stat.mtimeMs !== expectedMtimeMs) {
       return false;
     }
-    fs6.rmSync(lockPath, { recursive: true, force: true });
+    fs7.rmSync(lockPath, { recursive: true, force: true });
     return true;
   } catch {
     return true;
@@ -1226,7 +1226,7 @@ function removeStaleLock(lockPath, expectedMtimeMs) {
 function clearStaleLockIfNeeded(lockPath, maxAge) {
   let stat;
   try {
-    stat = fs6.statSync(lockPath);
+    stat = fs7.statSync(lockPath);
   } catch {
     return true;
   }
@@ -1236,7 +1236,7 @@ function clearStaleLockIfNeeded(lockPath, maxAge) {
   }
   let pid = null;
   try {
-    const pidStr = fs6.readFileSync(path2.join(lockPath, "pid"), "utf-8").trim();
+    const pidStr = fs7.readFileSync(path4.join(lockPath, "pid"), "utf-8").trim();
     const parsed = Number.parseInt(pidStr, 10);
     if (!Number.isNaN(parsed) && parsed > 0) {
       pid = parsed;
@@ -1251,7 +1251,7 @@ function clearStaleLockIfNeeded(lockPath, maxAge) {
 async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      fs6.mkdirSync(lockPath);
+      fs7.mkdirSync(lockPath);
     } catch {
       if (clearStaleLockIfNeeded(lockPath, maxAge)) {
         continue;
@@ -1260,12 +1260,12 @@ async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
       continue;
     }
     try {
-      fs6.writeFileSync(path2.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
+      fs7.writeFileSync(path4.join(lockPath, "pid"), String(process.pid), { flag: "wx" });
       return true;
     } catch (err) {
       if (err.code !== "ENOENT") {
         try {
-          fs6.rmSync(lockPath, { recursive: true, force: true });
+          fs7.rmSync(lockPath, { recursive: true, force: true });
         } catch {
         }
       }
@@ -1276,8 +1276,126 @@ async function acquireLock(lockPath, maxAttempts = 50, maxAge = 1e4) {
 }
 function releaseLock(lockPath) {
   try {
-    fs6.rmSync(lockPath, { recursive: true, force: true });
+    fs7.rmSync(lockPath, { recursive: true, force: true });
   } catch {
+  }
+}
+var DEFAULT_MAX_DEPTH = 4;
+var MAX_ENTRIES = 5e3;
+var STATE_FILES = [
+  "installed_plugins.json",
+  "known_marketplaces.json",
+  "plugin-catalog-cache.json",
+  ".last_inuse_sweep"
+];
+function capturePluginState(pluginsRoot, opts = {}) {
+  const maxDepth = opts.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const maxEntries = opts.maxEntries ?? MAX_ENTRIES;
+  const dirs = {};
+  const files = {};
+  let truncated = false;
+  let dirCount = 0;
+  const excluded = opts.snapshotDir ? path4.resolve(opts.snapshotDir) : null;
+  const walk = (abs, rel, depth) => {
+    if (truncated) return;
+    if (excluded && path4.resolve(abs) === excluded) return;
+    let entries;
+    try {
+      entries = fs7.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    try {
+      dirs[rel || "."] = { m: Math.round(fs7.statSync(abs).mtimeMs), n: entries.length };
+    } catch {
+      return;
+    }
+    dirCount++;
+    if (dirCount >= maxEntries) {
+      truncated = true;
+      return;
+    }
+    if (depth >= maxDepth) return;
+    for (const e of entries) {
+      if (e.isDirectory())
+        walk(path4.join(abs, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+    }
+  };
+  walk(pluginsRoot, "", 0);
+  for (const name of STATE_FILES) {
+    const p = path4.join(pluginsRoot, name);
+    try {
+      const st = fs7.statSync(p);
+      const entry = { size: st.size, m: Math.round(st.mtimeMs) };
+      if (st.size <= 64 * 1024) entry.content = fs7.readFileSync(p, "utf8");
+      files[name] = entry;
+    } catch {
+    }
+  }
+  return {
+    version: 1,
+    capturedAt: opts.capturedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+    sessionId: opts.sessionId ?? "unknown",
+    dirs,
+    files,
+    truncated
+  };
+}
+function pruneSnapshots(dir, keep) {
+  let names;
+  try {
+    names = fs7.readdirSync(dir).filter((n) => n.endsWith(".json"));
+  } catch {
+    return 0;
+  }
+  const doomed = names.sort().slice(0, Math.max(0, names.length - keep));
+  let removed = 0;
+  for (const n of doomed) {
+    try {
+      fs7.unlinkSync(path4.join(dir, n));
+      removed++;
+    } catch {
+    }
+  }
+  return removed;
+}
+function resolvePluginStateDir(configDir, env = process.env) {
+  const explicit = env["CLAUDE_PLUGIN_DATA"];
+  if (explicit) return { dir: path4.join(explicit, "plugin-state"), legacy: false };
+  const dataRoot = path4.join(configDir, "plugins", "data");
+  let candidates = [];
+  try {
+    candidates = fs7.readdirSync(dataRoot).sort().filter((n) => n.startsWith("ctk-") || n.startsWith("continuity")).map((n) => path4.join(dataRoot, n));
+  } catch {
+    candidates = [];
+  }
+  const populated = candidates.find((c) => {
+    try {
+      return fs7.readdirSync(path4.join(c, "plugin-state")).some((f) => f.endsWith(".json"));
+    } catch {
+      return false;
+    }
+  });
+  const chosen = populated ?? candidates[candidates.length - 1];
+  if (chosen) return { dir: path4.join(chosen, "plugin-state"), legacy: false };
+  return { dir: path4.join(configDir, "logs", "continuity", "plugin-state"), legacy: true };
+}
+function snapshotFilename(capturedAt, sessionId) {
+  const stamp = capturedAt.replace(/[:.]/g, "-");
+  return `${stamp}_${(sessionId || "unknown").slice(0, 8)}.json`;
+}
+function writePluginStateSnapshot(pluginsRoot, outDir, opts = {}) {
+  try {
+    fs7.mkdirSync(outDir, { recursive: true });
+    const snap = capturePluginState(pluginsRoot, { ...opts, snapshotDir: outDir });
+    const file = path4.join(outDir, snapshotFilename(snap.capturedAt, snap.sessionId));
+    const tmp = `${file}.tmp`;
+    fs7.writeFileSync(tmp, JSON.stringify(snap), "utf8");
+    fs7.renameSync(tmp, file);
+    pruneSnapshots(outDir, opts.keep ?? 20);
+    return file;
+  } catch {
+    return null;
   }
 }
 var ENV_PATTERNS = [
@@ -1340,9 +1458,9 @@ var SYSTEM_DIR_PATTERNS = [
   ...SYSTEM_DIR_PATTERNS
 ];
 function resolveRealPath(inputPath) {
-  const absolutePath = path2.isAbsolute(inputPath) ? inputPath : path2.resolve(getProjectDir2(), inputPath);
+  const absolutePath = path4.isAbsolute(inputPath) ? inputPath : path4.resolve(getProjectDir2(), inputPath);
   try {
-    return fs6.realpathSync(absolutePath);
+    return fs7.realpathSync(absolutePath);
   } catch {
     return resolveClosestAncestor(absolutePath);
   }
@@ -1350,22 +1468,22 @@ function resolveRealPath(inputPath) {
 function resolveClosestAncestor(absolutePath) {
   const components = [];
   let currentPath = absolutePath;
-  while (currentPath !== path2.dirname(currentPath)) {
+  while (currentPath !== path4.dirname(currentPath)) {
     try {
-      const resolved = fs6.realpathSync(currentPath);
-      return components.length > 0 ? path2.join(resolved, ...components.reverse()) : resolved;
+      const resolved = fs7.realpathSync(currentPath);
+      return components.length > 0 ? path4.join(resolved, ...components.reverse()) : resolved;
     } catch {
-      components.push(path2.basename(currentPath));
-      currentPath = path2.dirname(currentPath);
+      components.push(path4.basename(currentPath));
+      currentPath = path4.dirname(currentPath);
     }
   }
-  return path2.resolve(absolutePath);
+  return path4.resolve(absolutePath);
 }
 function normalizePath(inputPath) {
   if (!inputPath) {
     return ".";
   }
-  let normalized = path2.normalize(inputPath);
+  let normalized = path4.normalize(inputPath);
   if (normalized.startsWith("./")) {
     normalized = normalized.slice(2);
   }
@@ -1381,7 +1499,7 @@ function isWithinProject(inputPath, projectDir) {
   const projectRoot = getProjectDir2();
   const resolvedPath = resolveRealPath(inputPath);
   const resolvedProjectRoot = resolveRealPath(projectRoot);
-  const projectRootWithSep = resolvedProjectRoot.endsWith(path2.sep) ? resolvedProjectRoot : resolvedProjectRoot + path2.sep;
+  const projectRootWithSep = resolvedProjectRoot.endsWith(path4.sep) ? resolvedProjectRoot : resolvedProjectRoot + path4.sep;
   return resolvedPath === resolvedProjectRoot || resolvedPath.startsWith(projectRootWithSep);
 }
 var PATTERN_CHECKS = [
@@ -1452,7 +1570,7 @@ function getCacheRoot() {
   if (override && override.length > 0) {
     return override;
   }
-  return path2.join(os.homedir(), ".claude", "cache", "token-compress");
+  return path4.join(os.homedir(), ".claude", "cache", "token-compress");
 }
 function sanitizeSessionId(sessionId) {
   return sessionId.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -1461,19 +1579,19 @@ function currentSessionIdFromEnv() {
   return process.env["CLAUDE_CODE_SESSION_ID"] || process.env["CLAUDE_SESSION_ID"];
 }
 function getSessionDir(sessionId) {
-  return path2.join(getCacheRoot(), sanitizeSessionId(sessionId));
+  return path4.join(getCacheRoot(), sanitizeSessionId(sessionId));
 }
 function getReadsPath(sessionId) {
-  return path2.join(getSessionDir(sessionId), "reads.jsonl");
+  return path4.join(getSessionDir(sessionId), "reads.jsonl");
 }
 function ensureSessionDir(sessionId) {
   const dir = getSessionDir(sessionId);
-  if (!fs6.existsSync(dir)) {
-    fs6.mkdirSync(dir, { recursive: true, mode: 448 });
+  if (!fs7.existsSync(dir)) {
+    fs7.mkdirSync(dir, { recursive: true, mode: 448 });
     return;
   }
   try {
-    fs6.chmodSync(dir, 448);
+    fs7.chmodSync(dir, 448);
   } catch {
   }
 }
@@ -1497,12 +1615,12 @@ function parseEntryLine(line) {
 }
 async function readEntry(sessionId, absPath) {
   const readsPath = getReadsPath(sessionId);
-  if (!fs6.existsSync(readsPath)) {
+  if (!fs7.existsSync(readsPath)) {
     return null;
   }
   let raw;
   try {
-    raw = fs6.readFileSync(readsPath, "utf8");
+    raw = fs7.readFileSync(readsPath, "utf8");
   } catch {
     return null;
   }
@@ -1543,7 +1661,7 @@ async function writeEntry(sessionId, entry) {
   try {
     const line = `${JSON.stringify(entry)}
 `;
-    fs6.appendFileSync(readsPath, line, { encoding: "utf8", mode: 384 });
+    fs7.appendFileSync(readsPath, line, { encoding: "utf8", mode: 384 });
   } finally {
     releaseLock(lockPath);
   }
@@ -1554,7 +1672,7 @@ async function snapshotFileToCache(sessionId, absPath) {
   }
   let stat;
   try {
-    stat = fs6.statSync(absPath);
+    stat = fs7.statSync(absPath);
   } catch {
     return null;
   }
@@ -1563,7 +1681,7 @@ async function snapshotFileToCache(sessionId, absPath) {
   }
   let content;
   try {
-    content = fs6.readFileSync(absPath, "utf8");
+    content = fs7.readFileSync(absPath, "utf8");
   } catch {
     return null;
   }
@@ -1588,17 +1706,17 @@ function dirSizeBytes(dir) {
   let total = 0;
   let entries;
   try {
-    entries = fs6.readdirSync(dir, { withFileTypes: true });
+    entries = fs7.readdirSync(dir, { withFileTypes: true });
   } catch {
     return 0;
   }
   for (const entry of entries) {
-    const full = path2.join(dir, entry.name);
+    const full = path4.join(dir, entry.name);
     try {
       if (entry.isDirectory()) {
         total += dirSizeBytes(full);
       } else if (entry.isFile()) {
-        total += fs6.statSync(full).size;
+        total += fs7.statSync(full).size;
       }
     } catch {
     }
@@ -1607,7 +1725,7 @@ function dirSizeBytes(dir) {
 }
 async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
   const root = getCacheRoot();
-  if (!fs6.existsSync(root)) {
+  if (!fs7.existsSync(root)) {
     return { evictedCount: 0, freedBytes: 0 };
   }
   const currentSessionId = currentSessionIdFromEnv();
@@ -1617,24 +1735,24 @@ async function evictOldSessions(maxAgeMs = DEFAULT_MAX_AGE_MS) {
   let freedBytes = 0;
   let entries;
   try {
-    entries = fs6.readdirSync(root, { withFileTypes: true });
+    entries = fs7.readdirSync(root, { withFileTypes: true });
   } catch {
     return { evictedCount, freedBytes };
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     if (currentSanitized !== null && entry.name === currentSanitized) continue;
-    const sessionDir = path2.join(root, entry.name);
+    const sessionDir = path4.join(root, entry.name);
     let mtimeMs;
     try {
-      mtimeMs = fs6.statSync(sessionDir).mtimeMs;
+      mtimeMs = fs7.statSync(sessionDir).mtimeMs;
     } catch {
       continue;
     }
     if (now - mtimeMs <= maxAgeMs) continue;
     const sizeBefore = dirSizeBytes(sessionDir);
     try {
-      fs6.rmSync(sessionDir, { recursive: true, force: true });
+      fs7.rmSync(sessionDir, { recursive: true, force: true });
       evictedCount++;
       freedBytes += sizeBefore;
     } catch {
@@ -1794,12 +1912,28 @@ function buildWindowTitleSequence(segments) {
 
 // src/lifecycle/session-loader.ts
 var HOOK_NAME2 = "session-start";
+var SNAPSHOT_KEEP = 20;
+function captureStartupPluginState(sessionId) {
+  try {
+    const home = process.env["HOME"] || os.homedir();
+    const configDir = process.env["CLAUDE_CONFIG_DIR"] || path4.join(home, ".claude");
+    const pluginsRoot = path4.join(configDir, "plugins");
+    if (!fs7.existsSync(pluginsRoot)) return;
+    const outDir = resolvePluginStateDir(configDir).dir;
+    const written = writePluginStateSnapshot(pluginsRoot, outDir, {
+      sessionId,
+      keep: SNAPSHOT_KEEP
+    });
+    if (written) logDebug(HOOK_NAME2, `plugin-state snapshot: ${written}`);
+  } catch {
+  }
+}
 function checkStaleSession(contextFile) {
-  if (!fs6.existsSync(contextFile)) {
+  if (!fs7.existsSync(contextFile)) {
     return null;
   }
   try {
-    const content = fs6.readFileSync(contextFile, "utf8");
+    const content = fs7.readFileSync(contextFile, "utf8");
     const context = JSON.parse(content);
     const wasClean = context.session_heartbeat?.was_cleanly_ended ?? true;
     if (wasClean === false) {
@@ -1822,7 +1956,7 @@ function formatStaleWarning(staleInfo) {
   return warning;
 }
 async function initializeSession(contextFile, lockDir) {
-  if (!fs6.existsSync(contextFile)) {
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME2, "Context file not found, skipping state management");
     return;
   }
@@ -1831,7 +1965,7 @@ async function initializeSession(contextFile, lockDir) {
     return;
   }
   try {
-    const content = fs6.readFileSync(contextFile, "utf8");
+    const content = fs7.readFileSync(contextFile, "utf8");
     const context = JSON.parse(content);
     const timestamp = formatTimestamp();
     context.session_heartbeat = context.session_heartbeat || {};
@@ -1843,9 +1977,9 @@ async function initializeSession(contextFile, lockDir) {
     context.dirty_tracking.files_edited_this_session = [];
     context.dirty_tracking.last_edit_timestamp = null;
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logDebug(HOOK_NAME2, "Session initialized, dirty_tracking reset");
   } catch (error) {
     logError(HOOK_NAME2, `Failed to update context file: ${error}`);
@@ -1872,7 +2006,7 @@ function writeEnvFile(projectDir) {
       lines.push(`export CLAUDE_PROJECT_DIR=${shellEscape(projectDir)}`);
     }
     if (lines.length > 0) {
-      fs6.appendFileSync(envFile, `${lines.join("\n")}
+      fs7.appendFileSync(envFile, `${lines.join("\n")}
 `);
       logDebug(HOOK_NAME2, `Wrote ${lines.length} env var(s) to CLAUDE_ENV_FILE`);
     }
@@ -1881,12 +2015,12 @@ function writeEnvFile(projectDir) {
   }
 }
 function checkContinuitySetup(projectDir) {
-  const ledgerDir = path2.join(projectDir, ".claude", "continuity", "ledgers");
-  if (!fs6.existsSync(ledgerDir)) {
+  const ledgerDir = path4.join(projectDir, ".claude", "continuity", "ledgers");
+  if (!fs7.existsSync(ledgerDir)) {
     return "TIP: Run `/setup-continuity` to enable session state tracking.\n\n";
   }
   try {
-    const files = fs6.readdirSync(ledgerDir);
+    const files = fs7.readdirSync(ledgerDir);
     const ledgerFiles = files.filter((f) => f.startsWith("CONTINUITY_") && f.endsWith(".md"));
     if (ledgerFiles.length === 0) {
       return "TIP: Run `/setup-continuity` to enable session state tracking.\n\n";
@@ -1896,12 +2030,12 @@ function checkContinuitySetup(projectDir) {
   return "";
 }
 function getCurrentBranch(projectDir) {
-  const headPath = path2.join(projectDir, ".git", "HEAD");
-  if (!fs6.existsSync(headPath)) {
+  const headPath = path4.join(projectDir, ".git", "HEAD");
+  if (!fs7.existsSync(headPath)) {
     return null;
   }
   try {
-    const content = fs6.readFileSync(headPath, "utf8").trim();
+    const content = fs7.readFileSync(headPath, "utf8").trim();
     const match = content.match(/^ref: refs\/heads\/(.+)$/);
     return match?.[1] ?? null;
   } catch {
@@ -1910,12 +2044,12 @@ function getCurrentBranch(projectDir) {
 }
 function outputLedgerSummary(projectDir) {
   const ledgerPath = getCurrentLedgerPath(projectDir);
-  if (!ledgerPath || !fs6.existsSync(ledgerPath)) {
+  if (!ledgerPath || !fs7.existsSync(ledgerPath)) {
     logDebug(HOOK_NAME2, `No ledger found in ${projectDir}/.claude/continuity/ledgers/`);
     return "";
   }
   try {
-    const content = fs6.readFileSync(ledgerPath, "utf8");
+    const content = fs7.readFileSync(ledgerPath, "utf8");
     const summary = extractLedgerSummary(content);
     if (!summary) {
       return "";
@@ -1939,18 +2073,18 @@ function outputLedgerSummary(projectDir) {
   }
 }
 function outputHandoffSummary(projectDir) {
-  const handoffPath = path2.join(
+  const handoffPath = path4.join(
     projectDir,
     ".claude",
     "continuity",
     "handoffs",
     "handoff-latest.json"
   );
-  if (!fs6.existsSync(handoffPath)) {
+  if (!fs7.existsSync(handoffPath)) {
     return "";
   }
   try {
-    const raw = fs6.readFileSync(handoffPath, "utf8");
+    const raw = fs7.readFileSync(handoffPath, "utf8");
     const parsed = JSON.parse(raw);
     const handoff = validateHandoff(parsed);
     if (!handoff) {
@@ -1970,13 +2104,14 @@ function buildSessionWindowTitle(projectDir, branch) {
   if (process.env["CONTINUITY_TERMINAL_TITLE"] !== "1") {
     return "";
   }
-  const projectName = path2.basename(path2.resolve(projectDir));
+  const projectName = path4.basename(path4.resolve(projectDir));
   return buildWindowTitleSequence(branch ? [projectName, branch] : [projectName]);
 }
 async function sessionLoader(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const { provider } = getProviderInfo();
   stampHookLiveness(resolveSessionId(input.session_id), HOOK_NAME2);
+  captureStartupPluginState(resolveSessionId(input.session_id));
   logDebug(HOOK_NAME2, `Provider: ${provider}, project: ${projectDir}`);
   let output = "=== SESSION CONTEXT ===\n\n";
   const initResult = ensureContinuityStructure(projectDir);
@@ -1986,7 +2121,7 @@ async function sessionLoader(input) {
   } else if (initResult === "error") {
     logError(HOOK_NAME2, "Failed to initialize continuity structure");
   }
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
   const lockDir = `${contextFile}.lock`;
   const staleInfo = checkStaleSession(contextFile);
   if (staleInfo) {
@@ -2029,8 +2164,8 @@ async function sessionEnd(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const source = input.source || "unknown";
   logDebug(HOOK_NAME3, `Session ending, source: ${source}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME3, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -2040,7 +2175,7 @@ async function sessionEnd(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
+    const raw = fs7.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -2054,9 +2189,9 @@ async function sessionEnd(input) {
     heartbeat["last_activity"] = timestamp;
     context["session_heartbeat"] = heartbeat;
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME3, `Session cleanly ended (source: ${source})`);
   } catch (error) {
     logError(HOOK_NAME3, `Failed to update context file: ${error}`);
@@ -2137,22 +2272,22 @@ async function preCompactSaver(_input) {
   }
   logDebug(HOOK_NAME5, `Hook fired for project: ${projectDir}`);
   const ledgerPath = getCurrentLedgerPath(projectDir);
-  if (!ledgerPath || !fs6.existsSync(ledgerPath)) {
+  if (!ledgerPath || !fs7.existsSync(ledgerPath)) {
     logWarn(HOOK_NAME5, `Ledger not found at ${ledgerPath ?? "unknown"}`);
     return outputWarning("Ledger not found - state not preserved before compaction");
   }
   try {
-    fs6.accessSync(ledgerPath, fs6.constants.W_OK);
+    fs7.accessSync(ledgerPath, fs7.constants.W_OK);
   } catch {
     logWarn(HOOK_NAME5, `Ledger not writable at ${ledgerPath}`);
     return outputWarning("Ledger not writable - state not preserved before compaction");
   }
-  const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
+  const contextPath = path4.join(projectDir, ".claude", "context", "shared-context.json");
   try {
-    if (fs6.existsSync(contextPath)) {
-      const ctx = JSON.parse(fs6.readFileSync(contextPath, "utf8"));
+    if (fs7.existsSync(contextPath)) {
+      const ctx = JSON.parse(fs7.readFileSync(contextPath, "utf8"));
       const editCount = ctx?.dirty_tracking?.files_edited_count ?? 0;
-      const ledgerStat = fs6.statSync(ledgerPath);
+      const ledgerStat = fs7.statSync(ledgerPath);
       const minutesSinceLastSave = (Date.now() - ledgerStat.mtimeMs) / 6e4;
       if (editCount >= BLOCK_THRESHOLD && minutesSinceLastSave > RECENT_SAVE_MINUTES) {
         logWarn(
@@ -2175,7 +2310,7 @@ async function preCompactSaver(_input) {
 **Auto-saved before compaction**: ${timestamp}
 `;
   try {
-    fs6.appendFileSync(ledgerPath, marker);
+    fs7.appendFileSync(ledgerPath, marker);
     logInfo(HOOK_NAME5, "Timestamp added to ledger");
   } catch (error) {
     logWarn(HOOK_NAME5, `Failed to write to ledger: ${error}`);
@@ -2186,16 +2321,16 @@ async function preCompactSaver(_input) {
 }
 function writeHandoffJson(projectDir, timestamp) {
   try {
-    const handoffsDir = path2.join(projectDir, ".claude", "continuity", "handoffs");
-    if (!fs6.existsSync(handoffsDir)) {
-      fs6.mkdirSync(handoffsDir, { recursive: true });
+    const handoffsDir = path4.join(projectDir, ".claude", "continuity", "handoffs");
+    if (!fs7.existsSync(handoffsDir)) {
+      fs7.mkdirSync(handoffsDir, { recursive: true });
     }
-    const contextPath = path2.join(projectDir, ".claude", "context", "shared-context.json");
+    const contextPath = path4.join(projectDir, ".claude", "context", "shared-context.json");
     let dirtyFiles = [];
     let sessionId = process.env["CLAUDE_CODE_SESSION_ID"] ?? null;
-    if (fs6.existsSync(contextPath)) {
+    if (fs7.existsSync(contextPath)) {
       try {
-        const ctx = JSON.parse(fs6.readFileSync(contextPath, "utf8"));
+        const ctx = JSON.parse(fs7.readFileSync(contextPath, "utf8"));
         const tracked = ctx?.dirty_tracking?.files_edited_this_session;
         if (Array.isArray(tracked)) {
           dirtyFiles = tracked.filter((f) => typeof f === "string");
@@ -2214,11 +2349,11 @@ function writeHandoffJson(projectDir, timestamp) {
       compaction_trigger: "pre-compact",
       timestamp
     });
-    const outPath = path2.join(handoffsDir, "handoff-latest.json");
+    const outPath = path4.join(handoffsDir, "handoff-latest.json");
     const tmpPath = `${outPath}.tmp`;
-    fs6.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
+    fs7.writeFileSync(tmpPath, `${JSON.stringify(handoff, null, 2)}
 `);
-    fs6.renameSync(tmpPath, outPath);
+    fs7.renameSync(tmpPath, outPath);
     logInfo(HOOK_NAME5, `Handoff JSON written to ${outPath}`);
   } catch (error) {
     logWarn(HOOK_NAME5, `Failed to write handoff.json: ${error}`);
@@ -3607,8 +3742,8 @@ var SAFE_EXTENSIONS = [
 ];
 function isProtectedDirectory(normalizedPath) {
   const lower = normalizedPath.toLowerCase();
-  const path26 = lower.endsWith("/") ? lower : `${lower}/`;
-  return PROTECTED_DIRS.some((dir) => path26.includes(`/${dir}`) || path26.startsWith(dir));
+  const path27 = lower.endsWith("/") ? lower : `${lower}/`;
+  return PROTECTED_DIRS.some((dir) => path27.includes(`/${dir}`) || path27.startsWith(dir));
 }
 function isProtectedFile(normalizedPath) {
   return PROTECTED_FILE_PATTERNS.some((pattern) => pattern.test(normalizedPath));
@@ -3651,7 +3786,7 @@ async function autoApproveProjectWrites(input) {
 var HOOK_NAME9 = "permission-profiles";
 var profileCache = /* @__PURE__ */ new Map();
 function getProfilePath(projectDir, profileName = "default") {
-  return path2.join(projectDir, ".claude", "permissions", `${profileName}.json`);
+  return path4.join(projectDir, ".claude", "permissions", `${profileName}.json`);
 }
 async function loadPermissionProfile(projectDir, profileName = "default") {
   const cwd = projectDir;
@@ -3661,22 +3796,22 @@ async function loadPermissionProfile(projectDir, profileName = "default") {
     return profileCache.get(cacheKey) || null;
   }
   let profilePath = getProfilePath(cwd, profileName);
-  if (!fs6.existsSync(profilePath)) {
+  if (!fs7.existsSync(profilePath)) {
     const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
     if (pluginRoot) {
       const pluginProfilePath = getProfilePath(pluginRoot, profileName);
-      if (fs6.existsSync(pluginProfilePath)) {
+      if (fs7.existsSync(pluginProfilePath)) {
         logDebug(HOOK_NAME9, "Using plugin default permission profile");
         profilePath = pluginProfilePath;
       }
     }
   }
-  if (!fs6.existsSync(profilePath)) {
+  if (!fs7.existsSync(profilePath)) {
     logDebug(HOOK_NAME9, `Permission profile not found: ${profilePath}`);
     return null;
   }
   try {
-    const content = fs6.readFileSync(profilePath, "utf-8");
+    const content = fs7.readFileSync(profilePath, "utf-8");
     const profile = JSON.parse(content);
     if (!profile.name) {
       logError(HOOK_NAME9, "Invalid permission profile: missing name");
@@ -3701,7 +3836,7 @@ function matchesPathPattern(filePath, patterns, projectDir) {
   if (!filePath || !patterns || patterns.length === 0) {
     return false;
   }
-  const normalizedPath = path2.resolve(filePath);
+  const normalizedPath = path4.resolve(filePath);
   for (const pattern of patterns) {
     const regex = patternToRegex(pattern, projectDir);
     if (regex.test(normalizedPath)) {
@@ -3878,7 +4013,7 @@ var ALWAYS_VALID_BRANCHES = /* @__PURE__ */ new Set([
 ]);
 var branchPatternsCache = /* @__PURE__ */ new Map();
 function getBranchPatternsPath(projectDir) {
-  return path2.join(projectDir, ".claude", "rules", "branch-patterns.json");
+  return path4.join(projectDir, ".claude", "rules", "branch-patterns.json");
 }
 var MAX_BRANCH_PATTERN_LENGTH = 256;
 function patternStringToRegex(pattern) {
@@ -3898,12 +4033,12 @@ function loadBranchPatterns(projectDir) {
     return branchPatternsCache.get(cwd) || null;
   }
   const patternsPath = getBranchPatternsPath(cwd);
-  if (!fs6.existsSync(patternsPath)) {
+  if (!fs7.existsSync(patternsPath)) {
     logDebug(HOOK_NAME12, `Branch patterns file not found: ${patternsPath}`);
     return null;
   }
   try {
-    const content = fs6.readFileSync(patternsPath, "utf-8");
+    const content = fs7.readFileSync(patternsPath, "utf-8");
     const config = JSON.parse(content);
     branchPatternsCache.set(cwd, config);
     logDebug(
@@ -4475,27 +4610,27 @@ var HOOK_NAME18 = "post-tool-use";
 async function acquireLock2(lockPath, maxAttempts = 50) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      fs6.mkdirSync(lockPath);
-      fs6.writeFileSync(path2.join(lockPath, "pid"), process.pid.toString());
+      fs7.mkdirSync(lockPath);
+      fs7.writeFileSync(path4.join(lockPath, "pid"), process.pid.toString());
       return true;
     } catch {
-      await new Promise((resolve7) => setTimeout(resolve7, 100));
+      await new Promise((resolve8) => setTimeout(resolve8, 100));
     }
   }
   return false;
 }
 function releaseLock2(lockPath) {
   try {
-    fs6.rmSync(lockPath, { recursive: true, force: true });
+    fs7.rmSync(lockPath, { recursive: true, force: true });
   } catch {
   }
 }
 function getContextFilePath(projectDir) {
-  return path2.join(projectDir, ".claude", "context", "shared-context.json");
+  return path4.join(projectDir, ".claude", "context", "shared-context.json");
 }
 function readContextFile(contextFile) {
   try {
-    const content = fs6.readFileSync(contextFile, "utf-8");
+    const content = fs7.readFileSync(contextFile, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -4503,8 +4638,8 @@ function readContextFile(contextFile) {
 }
 function writeContextFile(contextFile, context) {
   const tmpFile = `${contextFile}.tmp`;
-  fs6.writeFileSync(tmpFile, JSON.stringify(context, null, 2));
-  fs6.renameSync(tmpFile, contextFile);
+  fs7.writeFileSync(tmpFile, JSON.stringify(context, null, 2));
+  fs7.renameSync(tmpFile, contextFile);
 }
 function updateContextWithEdit(context, filePath) {
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
@@ -4568,12 +4703,12 @@ async function dirtyStateTracker(input) {
   const projectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   const contextFile = getContextFilePath(projectDir);
   const lockDir = `${contextFile}.lock`;
-  if (!fs6.existsSync(contextFile)) {
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME18, `Context file not found: ${contextFile}`);
     return outputSilentSuccess();
   }
   try {
-    fs6.accessSync(contextFile, fs6.constants.W_OK);
+    fs7.accessSync(contextFile, fs7.constants.W_OK);
   } catch {
     logWarn(HOOK_NAME18, "Context file not writable");
     return outputSilentSuccess();
@@ -4705,7 +4840,7 @@ async function contextMonitor(input) {
 var HOOK_NAME20 = "error-rules";
 var rulesCache = /* @__PURE__ */ new Map();
 function getErrorRulesPath(projectDir) {
-  return path2.join(projectDir, ".claude", "rules", "error_rules.json");
+  return path4.join(projectDir, ".claude", "rules", "error_rules.json");
 }
 async function loadErrorRules(projectDir) {
   const cwd = projectDir;
@@ -4714,22 +4849,22 @@ async function loadErrorRules(projectDir) {
     return rulesCache.get(cwd) || null;
   }
   let rulesPath = getErrorRulesPath(cwd);
-  if (!fs6.existsSync(rulesPath)) {
+  if (!fs7.existsSync(rulesPath)) {
     const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"];
     if (pluginRoot) {
       const pluginRulesPath = getErrorRulesPath(pluginRoot);
-      if (fs6.existsSync(pluginRulesPath)) {
+      if (fs7.existsSync(pluginRulesPath)) {
         logDebug(HOOK_NAME20, "Using plugin default error rules");
         rulesPath = pluginRulesPath;
       }
     }
   }
-  if (!fs6.existsSync(rulesPath)) {
+  if (!fs7.existsSync(rulesPath)) {
     logDebug(HOOK_NAME20, `Error rules file not found: ${rulesPath}`);
     return null;
   }
   try {
-    const content = fs6.readFileSync(rulesPath, "utf-8");
+    const content = fs7.readFileSync(rulesPath, "utf-8");
     const config = JSON.parse(content);
     if (!config.rules || !Array.isArray(config.rules)) {
       logError(HOOK_NAME20, "Invalid error rules: missing rules array");
@@ -4870,15 +5005,15 @@ function findLinter(projectDir) {
   if (cachedLinterPath !== null) {
     return cachedLinterPath ?? void 0;
   }
-  const venvRuff = path2.join(projectDir, ".venv", "bin", "ruff");
-  if (fs6.existsSync(venvRuff)) {
+  const venvRuff = path4.join(projectDir, ".venv", "bin", "ruff");
+  if (fs7.existsSync(venvRuff)) {
     cachedLinterPath = venvRuff;
     logDebug(HOOK_NAME23, `Found ruff in venv: ${venvRuff}`);
     return venvRuff;
   }
   const homeDir = process.env["HOME"] || "/tmp";
-  const miseRuff = path2.join(homeDir, ".local", "share", "mise", "shims", "ruff");
-  if (fs6.existsSync(miseRuff)) {
+  const miseRuff = path4.join(homeDir, ".local", "share", "mise", "shims", "ruff");
+  if (fs7.existsSync(miseRuff)) {
     cachedLinterPath = miseRuff;
     logDebug(HOOK_NAME23, `Found ruff in mise shims: ${miseRuff}`);
     return miseRuff;
@@ -4951,8 +5086,8 @@ function findBiome(projectDir) {
   if (cachedBiomePath !== null) {
     return cachedBiomePath ?? void 0;
   }
-  const localBiome = path2.join(projectDir, "node_modules", ".bin", "biome");
-  if (fs6.existsSync(localBiome)) {
+  const localBiome = path4.join(projectDir, "node_modules", ".bin", "biome");
+  if (fs7.existsSync(localBiome)) {
     cachedBiomePath = localBiome;
     logDebug(HOOK_NAME23, `Found biome in node_modules: ${localBiome}`);
     return localBiome;
@@ -5037,7 +5172,7 @@ function readDiagnosticSources(diagnostics) {
     const f = diag.location?.path?.file;
     if (!f || contents.has(f)) continue;
     try {
-      contents.set(f, fs6.readFileSync(f, "utf8"));
+      contents.set(f, fs7.readFileSync(f, "utf8"));
     } catch {
     }
   }
@@ -5074,7 +5209,7 @@ function classifyViolations(violations) {
   return { security, general, totalCount: violations.length };
 }
 function formatViolationLine(v) {
-  const loc = `${path2.basename(v.filename)}:${v.location.row}:${v.location.column}`;
+  const loc = `${path4.basename(v.filename)}:${v.location.row}:${v.location.column}`;
   let fixHint = "no auto-fix";
   if (v.fix) {
     fixHint = v.fix.applicability === "safe" ? "safe fix" : "unsafe fix";
@@ -5108,11 +5243,11 @@ ${lines.join("\n")}`;
   return section;
 }
 function formatterFor(file) {
-  return JS_EXTENSIONS.has(path2.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
+  return JS_EXTENSIONS.has(path4.extname(file).toLowerCase()) ? "biome format --write" : "ruff format";
 }
 function formatFormatSection(files) {
   const fileLines = files.map(
-    (f) => `  ${path2.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
+    (f) => `  ${path4.basename(f)} needs formatting (run \`${formatterFor(f)}\`)`
   );
   return `Format issues (${plural(files.length, "file")}):
 ${fileLines.join("\n")}`;
@@ -5176,7 +5311,7 @@ function collectLintableFiles(input, toolName) {
   const python = [];
   const js = [];
   for (const fp of filePaths) {
-    const ext = path2.extname(fp).toLowerCase();
+    const ext = path4.extname(fp).toLowerCase();
     if (PYTHON_EXTENSIONS.has(ext)) {
       python.push(fp);
     } else if (JS_EXTENSIONS.has(ext)) {
@@ -5187,7 +5322,7 @@ function collectLintableFiles(input, toolName) {
 }
 function filterExisting(filePaths) {
   return filePaths.filter((fp) => {
-    if (!fs6.existsSync(fp)) {
+    if (!fs7.existsSync(fp)) {
       logDebug(HOOK_NAME23, `File not found: ${fp}`);
       return false;
     }
@@ -5278,8 +5413,8 @@ async function teammateIdleSaver(input) {
   const teammateName = input.teammate_name || "unknown";
   const teamName = input.team_name || "unknown";
   logDebug(HOOK_NAME25, `Teammate idle: teammate_name=${teammateName}, team_name=${teamName}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME25, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -5289,7 +5424,7 @@ async function teammateIdleSaver(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
+    const raw = fs7.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -5307,9 +5442,9 @@ async function teammateIdleSaver(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME25, `Heartbeat updated on teammate idle (teammate: ${teammateName})`);
   } catch (error) {
     logError(HOOK_NAME25, `Failed to update context file: ${error}`);
@@ -5326,11 +5461,11 @@ async function taskCompletedLogger(input) {
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
   logDebug(HOOK_NAME26, `Task completed: task_id=${taskId}, session_id=${sessionId}`);
-  const metricsDir = path2.join(projectDir, METRICS_DIR);
-  const metricsFile = path2.join(metricsDir, METRICS_FILE);
+  const metricsDir = path4.join(projectDir, METRICS_DIR);
+  const metricsFile = path4.join(metricsDir, METRICS_FILE);
   try {
-    if (!fs6.existsSync(metricsDir)) {
-      fs6.mkdirSync(metricsDir, { recursive: true });
+    if (!fs7.existsSync(metricsDir)) {
+      fs7.mkdirSync(metricsDir, { recursive: true });
     }
     const entry = {
       event: "completed",
@@ -5342,7 +5477,7 @@ async function taskCompletedLogger(input) {
       ...input.teammate_name && { teammate_name: input.teammate_name },
       ...input.team_name && { team_name: input.team_name }
     };
-    fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
+    fs7.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME26, `Task completion logged for task ${taskId}`);
   } catch (error) {
@@ -5358,11 +5493,11 @@ async function taskCreatedLogger(input) {
   const sessionId = input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown";
   const taskId = input.task_id || "unknown";
   logDebug(HOOK_NAME27, `Task created: task_id=${taskId}, session_id=${sessionId}`);
-  const metricsDir = path2.join(projectDir, METRICS_DIR2);
-  const metricsFile = path2.join(metricsDir, METRICS_FILE2);
+  const metricsDir = path4.join(projectDir, METRICS_DIR2);
+  const metricsFile = path4.join(metricsDir, METRICS_FILE2);
   try {
-    if (!fs6.existsSync(metricsDir)) {
-      fs6.mkdirSync(metricsDir, { recursive: true });
+    if (!fs7.existsSync(metricsDir)) {
+      fs7.mkdirSync(metricsDir, { recursive: true });
     }
     const entry = {
       event: "created",
@@ -5374,7 +5509,7 @@ async function taskCreatedLogger(input) {
       ...input.teammate_name && { teammate_name: input.teammate_name },
       ...input.team_name && { team_name: input.team_name }
     };
-    fs6.appendFileSync(metricsFile, `${JSON.stringify(entry)}
+    fs7.appendFileSync(metricsFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME27, `Task creation logged for task ${taskId}`);
   } catch (error) {
@@ -5388,8 +5523,8 @@ async function worktreeRemove(input) {
   const worktreePath = input.worktree_path || "unknown";
   const mainProjectDir = process.env["CLAUDE_PROJECT_DIR"] || ".";
   logDebug(HOOK_NAME28, `Worktree removed: path=${worktreePath}`);
-  const contextFile = path2.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
+  const contextFile = path4.join(mainProjectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME28, "No main context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -5399,7 +5534,7 @@ async function worktreeRemove(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
+    const raw = fs7.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -5415,9 +5550,9 @@ async function worktreeRemove(input) {
     });
     context["archived_worktrees"] = archivedWorktrees;
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME28, `Worktree removal recorded: ${worktreePath}`);
   } catch (error) {
     logError(HOOK_NAME28, `Failed to update context file: ${error}`);
@@ -5433,8 +5568,8 @@ async function stopStateSaver(input) {
   const lastMessage = input.last_assistant_message || "";
   const source = input.source || "unknown";
   logDebug(HOOK_NAME29, `Stop event: reason=${source}, message_length=${lastMessage.length}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs7.existsSync(contextFile)) {
     logDebug(HOOK_NAME29, "No context file found, nothing to update");
     return outputSilentSuccess();
   }
@@ -5444,7 +5579,7 @@ async function stopStateSaver(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
+    const raw = fs7.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -5462,9 +5597,9 @@ async function stopStateSaver(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME29, `Stop state captured (reason: ${source})`);
   } catch (error) {
     logError(HOOK_NAME29, `Failed to update context file: ${error}`);
@@ -5480,8 +5615,8 @@ async function stopFailureHandler(input) {
   const sessionId = input.session_id || "unknown";
   const errorType = input.source || "unknown";
   logWarn(HOOK_NAME30, `API failure: type=${errorType}, session=${sessionId}`);
-  const contextFile = path2.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
-  if (!fs6.existsSync(contextFile)) {
+  const contextFile = path4.join(projectDir, CONTINUITY_DIRS.context, "shared-context.json");
+  if (!fs7.existsSync(contextFile)) {
     logInfo(HOOK_NAME30, "No context file found, logging failure without context update");
     return outputSilentSuccess();
   }
@@ -5491,7 +5626,7 @@ async function stopFailureHandler(input) {
     return outputSilentSuccess();
   }
   try {
-    const raw = fs6.readFileSync(contextFile, "utf8");
+    const raw = fs7.readFileSync(contextFile, "utf8");
     let context;
     try {
       context = JSON.parse(raw);
@@ -5509,9 +5644,9 @@ async function stopFailureHandler(input) {
       timestamp
     };
     const tempFile = `${contextFile}.tmp`;
-    fs6.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
+    fs7.writeFileSync(tempFile, `${JSON.stringify(context, null, 2)}
 `);
-    fs6.renameSync(tempFile, contextFile);
+    fs7.renameSync(tempFile, contextFile);
     logInfo(HOOK_NAME30, `API failure recorded (type: ${errorType})`);
   } catch (error) {
     logError(HOOK_NAME30, `Failed to update context file: ${error}`);
@@ -5525,24 +5660,24 @@ var MAX_LOG_SIZE = 200 * 1024;
 var REVIEW_COMMAND_PATTERN = /glab\s+mr\s+(note|approve)\s+(\d+)/;
 var DISCUSSION_COMMAND_PATTERN = /glab\s+api\b[\s\S]*?merge_requests\/(\d+)\/discussions/;
 function getReviewLogPath() {
-  return path2.join(getLogDir(), "review-history.jsonl");
+  return path4.join(getLogDir(), "review-history.jsonl");
 }
 function rotateIfNeeded(logPath) {
   try {
-    const stats = fs6.statSync(logPath);
+    const stats = fs7.statSync(logPath);
     if (stats.size > MAX_LOG_SIZE) {
       const rotatedPath = `${logPath}.1`;
-      fs6.renameSync(logPath, rotatedPath);
+      fs7.renameSync(logPath, rotatedPath);
     }
   } catch {
   }
 }
 function appendReviewEntry(logPath, entry) {
-  const dir = path2.dirname(logPath);
-  if (!fs6.existsSync(dir)) {
-    fs6.mkdirSync(dir, { recursive: true });
+  const dir = path4.dirname(logPath);
+  if (!fs7.existsSync(dir)) {
+    fs7.mkdirSync(dir, { recursive: true });
   }
-  fs6.appendFileSync(logPath, `${JSON.stringify(entry)}
+  fs7.appendFileSync(logPath, `${JSON.stringify(entry)}
 `);
 }
 async function reviewLogger(input) {
@@ -5583,8 +5718,8 @@ var HOOK_NAME32 = "denial-logger";
 async function denialLogger(input) {
   try {
     const projectDir = getProjectDir();
-    const feedbackDir = path2.join(projectDir, ".claude", "feedback");
-    fs6.mkdirSync(feedbackDir, { recursive: true });
+    const feedbackDir = path4.join(projectDir, ".claude", "feedback");
+    fs7.mkdirSync(feedbackDir, { recursive: true });
     const entry = {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       session_id: input.session_id || process.env["CLAUDE_SESSION_ID"] || "unknown",
@@ -5592,8 +5727,8 @@ async function denialLogger(input) {
       command_or_path: input.tool_input?.command || input.tool_input?.file_path || "",
       agent_id: input.agent_id
     };
-    const logFile = path2.join(feedbackDir, "denials.jsonl");
-    fs6.appendFileSync(logFile, `${JSON.stringify(entry)}
+    const logFile = path4.join(feedbackDir, "denials.jsonl");
+    fs7.appendFileSync(logFile, `${JSON.stringify(entry)}
 `);
     logInfo(HOOK_NAME32, `Logged denial: ${entry.tool_name} \u2014 ${entry.command_or_path.slice(0, 80)}`);
   } catch (err) {
@@ -6077,7 +6212,7 @@ var CREDENTIAL_PATTERNS2 = [
   /-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----/
 ];
 function getMeasurementsPath(sessionId) {
-  return path2.join(getSessionDir(sessionId), MEASUREMENTS_FILE);
+  return path4.join(getSessionDir(sessionId), MEASUREMENTS_FILE);
 }
 function extractCommandPrefix(command) {
   if (!command) return "<empty>";
@@ -6111,12 +6246,12 @@ function appendMeasurement(sessionId, record) {
     ensureSessionDir(sessionId);
     const line = `${JSON.stringify(record)}
 `;
-    fs6.appendFileSync(getMeasurementsPath(sessionId), line, { mode: 384 });
+    fs7.appendFileSync(getMeasurementsPath(sessionId), line, { mode: 384 });
   } catch {
   }
 }
 function recordReadEvent(sessionId, filePath, outcome, originalBytes, returnedBytes) {
-  const basename6 = path2.basename(filePath || "<unknown>");
+  const basename6 = path4.basename(filePath || "<unknown>");
   const event = {
     schemaVersion: 1,
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -6162,13 +6297,13 @@ async function readCacheHook(input) {
   if (!filePath || !sessionId || sessionId === "unknown") {
     return outputSilentSuccess();
   }
-  const absPath = path2.resolve(filePath);
-  if (!fs6.existsSync(absPath)) {
+  const absPath = path4.resolve(filePath);
+  if (!fs7.existsSync(absPath)) {
     return outputSilentSuccess();
   }
   let stat;
   try {
-    stat = fs6.statSync(absPath);
+    stat = fs7.statSync(absPath);
   } catch (e) {
     logDebug(HOOK_NAME40, `stat failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
@@ -6188,7 +6323,7 @@ async function readCacheHook(input) {
   }
   let currentContent;
   try {
-    currentContent = fs6.readFileSync(absPath, "utf8");
+    currentContent = fs7.readFileSync(absPath, "utf8");
   } catch (e) {
     logWarn(HOOK_NAME40, `read failed for ${absPath}: ${e}`);
     return outputSilentSuccess();
@@ -6249,7 +6384,7 @@ async function readCacheWriterHook(input) {
     if (!filePath || !sessionId || sessionId === "unknown") {
       return outputSilentSuccess();
     }
-    const absPath = path2.resolve(filePath);
+    const absPath = path4.resolve(filePath);
     let wasMiss = false;
     try {
       const prior = await readEntry(sessionId, absPath);
@@ -6286,7 +6421,7 @@ async function readCacheInvalidatorHook(input) {
     if (!filePath || !sessionId || sessionId === "unknown") {
       return outputSilentSuccess();
     }
-    const absPath = path2.resolve(filePath);
+    const absPath = path4.resolve(filePath);
     const size = await snapshotFileToCache(sessionId, absPath);
     if (size === null) {
       logDebug(HOOK_NAME42, `refresh skipped for ${absPath} (not a regular file or I/O error)`);
