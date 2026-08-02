@@ -9,17 +9,17 @@
  * trigger is still unidentified; this module is the *detection* half, which needs
  * no repro.
  *
- * ## What ships here: the writer only
+ * ## The writer, and now the reader
  *
  * A dead hook cannot report that it is dead, so whatever reads this marker must
- * run outside the hook system. This module is deliberately just the **writer**:
- * ctk hooks stamp a session-scoped marker, and `/doctor` Step 1b reads it on
- * demand. Absence of a marker is the signal.
+ * run outside the hook system. The **writer** is stamped by ctk hooks; `/doctor`
+ * Step 1b reads it on demand, and {@link assessHookLiveness} reads it from ctk's
+ * statusline, which Claude Code runs from `settings.json` with no plugin
+ * machinery involved. Absence of a *stamp* is the signal.
  *
- * A passive reader — ctk's statusline warning on every refresh, which is what
- * would have caught #82 unprompted — was designed, built, and then **cut before
- * release**. Two rounds of adversarial review found three defects that all lived
- * in that reader, one of them architectural:
+ * A passive statusline reader was designed, built, and **cut before release**
+ * once. Two rounds of adversarial review found three defects that all lived in
+ * that reader, one of them architectural:
  *
  * 1. Its capability check asked *"is a stamping-capable ctk **installed**?"* when
  *    the question is *"are the **loaded** hooks capable?"*. Plugin records flip at
@@ -33,13 +33,36 @@
  *    run on a payload lacking `context_window` — the same inert-by-placement bug
  *    the writer side has a test against.
  *
- * Resolving (1) needs a way to compare the loaded hook version against the
- * installed one, which is unsettled. Shipping the writer now means the marker
- * exists in the wild, so the reader can land later without a migration.
+ * **(1) is resolved by never asking the capability question.** The reader compares
+ * the stamp against the **last user prompt in the transcript**, so the evidence is
+ * the stamp itself and never an install record. A mid-session upgrade keeps the
+ * already-loaded stamping hooks running, so stamps continue and nothing fires; a
+ * session whose loaded hooks predate the writer has no marker at all, which is
+ * {@link HookLivenessVerdict} `unknown` and stays silent. (2) and (3) are pinned
+ * by tests in `tests/lib/hook-liveness.test.ts` and the statusline suite.
  *
- * **Do not add a reader here without solving (1).** A detector that cries wolf is
- * worth no more than the healthy-looking signals that caused #82, and a false
- * positive here is an alarm about *missing security hooks*.
+ * A detector that cries wolf is worth no more than the healthy-looking signals
+ * that caused #82, and a false positive here is an alarm about *missing security
+ * hooks* — so every ambiguous case resolves to `unknown`, never to `suspect`.
+ *
+ * ## ⚠ What this does NOT catch: the session-start total unload
+ *
+ * #82's one observed occurrence was a session that started with **zero** plugins
+ * loaded. No hook ran, so `session-loader` never stamped and **no marker exists at
+ * all** — which this reader reports as `unknown`, i.e. silently. It therefore
+ * would **not** have caught the 2026-07-29 event, and must not be described as
+ * closing #82.
+ *
+ * That blindness is forced, not an oversight. "No marker" has two causes that are
+ * indistinguishable from inside a session — hooks are dead, or the loaded hooks
+ * predate the writer — and separating them is exactly the capability question that
+ * got the first reader cut. What ships here catches **mid-session onset**: hooks
+ * that were stamping and stop. Extending it to session-start would need a signal
+ * that survives an unload *and* dates the loaded build; the transcript's
+ * `hook_success` attachment records were evaluated for this and rejected, because
+ * they name the hook **event** rather than the plugin (measured: 1.4% of 10,913
+ * local attachment records carry any ctk fingerprint, and non-plugin hooks
+ * registered in `settings.json` keep producing them throughout an unload).
  *
  * ## Two false positives the writer already handles
  *
@@ -61,7 +84,15 @@
  * @module lib/hook-liveness
  */
 
-import { renameSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { isTrustedSessionKey, sessionScopedTmpPath } from './session-key.js';
 
 /** Filename prefix for the per-session liveness marker. */
@@ -112,4 +143,205 @@ export function stampHookLiveness(sessionId: string, hookName: string): void {
   } catch {
     // Cannot stamp → the detector reports "not detected", the pre-#82 status quo.
   }
+}
+
+// =============================================================================
+// READER — runs in ctk's statusline, outside the hook system
+// =============================================================================
+
+/**
+ * Verdict on whether this session's ctk hooks are still running.
+ *
+ * There is no `dead`. `suspect` is the strongest claim the evidence supports, and
+ * `unknown` absorbs every case that cannot be told apart from a healthy one.
+ */
+export type HookLivenessVerdict = 'healthy' | 'suspect' | 'unknown';
+
+/**
+ * Grace applied to the stamp before a newer prompt counts as evidence.
+ *
+ * Claude Code writes the user's prompt into the transcript **before** it runs
+ * `UserPromptSubmit` hooks, so for a short window every healthy session has a
+ * prompt newer than its stamp. Measured across 20 live healthy sessions, the
+ * stamp lands **62–378 ms** after the prompt record. A statusline refresh inside
+ * that window would otherwise flash "no security guardrails" on every prompt.
+ *
+ * 30 s is ~80× the measured worst case, which leaves room for hook cold-start
+ * under load (ctk registers 34 hooks), and costs nothing in detection: a real
+ * outage never re-stamps, so the gap grows without bound and crosses any fixed
+ * grace within the first half-minute and stays across.
+ *
+ * This is not the threshold the design set out to avoid. That one was a count of
+ * *hooked tool calls*, which would have fired on long agentic turns; keying on
+ * user prompts makes a long turn identical to a healthy session by construction.
+ * This grace covers a measured write-ordering race, not a behavioural guess.
+ */
+export const LIVENESS_RACE_GRACE_MS = 30_000;
+
+/**
+ * How far back from EOF to scan a transcript for the last user prompt.
+ *
+ * The statusline re-runs on a refresh interval, so reading whole transcripts is a
+ * recurring cost in a UI path: measured locally, transcripts run to a **median of
+ * 4 MB and a maximum of 12 MB**, while the last real user prompt sits at most
+ * **1.6 MB** from EOF (p99 0.95 MB) across 111 of them. A 2 MB tail covered
+ * 111/111 with headroom.
+ *
+ * When the tail holds no user prompt — a single turn that produced more than 2 MB
+ * of tool results — the reader returns `null` and the verdict degrades to
+ * `unknown`. That is the safe direction: a missed alarm, never a false one.
+ */
+export const TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
+
+/** Read this session's marker, or `null` when there is none to read. */
+export function readHookLiveness(sessionId: string): HookLivenessRecord | null {
+  if (!isTrustedSessionKey(sessionId)) return null;
+  try {
+    const raw = readFileSync(getHookLivenessPath(sessionId), 'utf8');
+    const parsed = JSON.parse(raw) as Partial<HookLivenessRecord>;
+    if (typeof parsed?.at !== 'string') return null;
+    return { at: parsed.at, hook: typeof parsed.hook === 'string' ? parsed.hook : '?' };
+  } catch {
+    // Absent, unreadable, or torn — all indistinguishable, and all report as
+    // "no marker", which the verdict resolves to `unknown` rather than `suspect`.
+    return null;
+  }
+}
+
+/**
+ * Whether a transcript record is a prompt the **user actually submitted**.
+ *
+ * This predicate is the whole feature. `type: 'user'` alone is not "a user
+ * prompt": Claude Code files tool results under the same role, so the naive
+ * reading of "the newest user record" reports a prompt after every tool call.
+ * Measured against 20 live healthy sessions, each exclusion below was checked by
+ * removing it on its own:
+ *
+ * | predicate | false "suspect" verdicts |
+ * |---|---|
+ * | `type === 'user'` only | **20 / 20** |
+ * | without the `tool_result` exclusion | **20 / 20** |
+ * | without the `isMeta` exclusion | **6 / 20** |
+ * | without the `isSidechain` exclusion | 0 / 20 |
+ * | all three | **0 / 20** |
+ *
+ * So `tool_result` and `isMeta` are load-bearing and measured. `isSidechain` is
+ * **not** measured — no sidechain record appeared in any of the 3,686 user
+ * records scanned, because subagent turns are written to their own transcripts.
+ * It is kept on semantic grounds rather than evidential ones: a subagent's prompt
+ * is not a user prompt and does not raise `UserPromptSubmit`, so counting one
+ * would be wrong on the day it starts appearing, not merely unhelpful.
+ */
+function isUserPromptRecord(record: Record<string, unknown>): boolean {
+  if (record['type'] !== 'user') return false;
+  if (record['isMeta'] === true) return false;
+  if (record['isSidechain'] === true) return false;
+  const message = record['message'] as Record<string, unknown> | undefined;
+  const content = message?.['content'];
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (
+        block &&
+        typeof block === 'object' &&
+        (block as Record<string, unknown>)['type'] === 'tool_result'
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Last {@link TRANSCRIPT_TAIL_BYTES} of a file as whole lines, or `null`.
+ *
+ * Any leading partial line is dropped: a tail almost certainly begins mid-record,
+ * and a fragment either fails to parse or — worse — parses as something it is not.
+ */
+function readTranscriptTail(filePath: string): string | null {
+  let fd: number;
+  try {
+    fd = openSync(filePath, 'r');
+  } catch {
+    return null;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+    const length = size - start;
+    if (length <= 0) return null;
+    const buffer = Buffer.allocUnsafe(length);
+    readSync(fd, buffer, 0, length, start);
+    const text = buffer.toString('utf8');
+    if (start === 0) return text;
+    const firstBreak = text.indexOf('\n');
+    return firstBreak === -1 ? null : text.slice(firstBreak + 1);
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Epoch-ms timestamp of the newest genuine user prompt in a transcript, or `null`.
+ *
+ * Reads only the tail (see {@link TRANSCRIPT_TAIL_BYTES}) and takes the maximum
+ * timestamp rather than the last matching line, so an out-of-order write cannot
+ * make the reader look at an older prompt than one already on disk.
+ */
+export function lastUserPromptAt(transcriptPath: string): number | null {
+  const text = readTranscriptTail(transcriptPath);
+  if (text === null) return null;
+
+  let newest: number | null = null;
+  for (const line of text.split('\n')) {
+    // Cheap prefilter: parsing every tool-result record is the bulk of the cost.
+    if (!line || line.indexOf('"user"') === -1) continue;
+    let record: Record<string, unknown>;
+    try {
+      record = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      // A truncated trailing line is normal for a live transcript.
+      continue;
+    }
+    if (!isUserPromptRecord(record)) continue;
+    const at = Date.parse(String(record['timestamp']));
+    if (Number.isNaN(at)) continue;
+    if (newest === null || at > newest) newest = at;
+  }
+  return newest;
+}
+
+/**
+ * Decide whether this session still has running ctk hooks.
+ *
+ * | situation | evidence | verdict |
+ * |---|---|---|
+ * | healthy | stamp at or after the last user prompt | `healthy` |
+ * | long agentic turn | no new prompt since the stamp | `healthy` *by construction* |
+ * | mid-session outage | a user prompt newer than the stamp by more than the grace | `suspect` |
+ * | no marker, no transcript, untrusted key, unparsable tail | — | `unknown` |
+ *
+ * Read the module header before changing the last row: `unknown` is what keeps a
+ * mid-session ctk upgrade from alarming on a healthy session, and it is also why
+ * a session-start total unload goes undetected.
+ */
+export function assessHookLiveness(input: {
+  sessionId: string;
+  transcriptPath?: string | undefined;
+  graceMs?: number;
+}): HookLivenessVerdict {
+  const { sessionId, transcriptPath, graceMs = LIVENESS_RACE_GRACE_MS } = input;
+  if (!transcriptPath) return 'unknown';
+
+  const marker = readHookLiveness(sessionId);
+  if (!marker) return 'unknown';
+  const stampedAt = Date.parse(marker.at);
+  if (Number.isNaN(stampedAt)) return 'unknown';
+
+  const promptAt = lastUserPromptAt(transcriptPath);
+  if (promptAt === null) return 'unknown';
+
+  return promptAt - stampedAt > graceMs ? 'suspect' : 'healthy';
 }

@@ -9,13 +9,14 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANSI,
+  buildLivenessBanner,
   buildProgressBar,
   extractCost,
   extractEffort,
@@ -1016,19 +1017,13 @@ describe('CONTINUITY_STATUSLINE_SILENT', () => {
   };
 
   const pctFile = (sid: string): string => join(tmpdir(), `claude-context-pct-${sid}.txt`);
-  // The statusline keeps a per-session render count for the #82 liveness check,
-  // and this block runs the real built script against the real temp directory.
-  const renderFile = (sid: string): string =>
-    join(tmpdir(), `claude-ctk-statusline-renders-${sid}.txt`);
 
   afterEach(() => {
     for (const sid of ['silent-probe', 'loud-probe']) {
-      for (const path of [pctFile(sid), renderFile(sid)]) {
-        try {
-          unlinkSync(path);
-        } catch {
-          /* already gone */
-        }
+      try {
+        unlinkSync(pctFile(sid));
+      } catch {
+        /* already gone */
       }
     }
   });
@@ -1175,5 +1170,214 @@ describe('getGitBranch unborn HEAD', () => {
     vi.doUnmock('node:child_process');
     vi.doUnmock('node:fs');
     vi.resetModules();
+  });
+});
+
+// =============================================================================
+// #82 liveness banner — the alarm that ctk's hooks have stopped running
+//
+// These two blocks are the pins for the reasons the FIRST reader was cut:
+//
+//   blocker (2) — nothing pinned it, so deleting the whole user-visible warning
+//                 left all six test trees green. The subprocess assertions below
+//                 are the must-fail control: they read the real rendered output
+//                 of the real built script, so removing the banner, the call in
+//                 `main()`, or the `suspect` branch turns them red. Verified by
+//                 mutation, not by inspection.
+//   blocker (3) — it sat BELOW the four early returns, so a payload without a
+//                 `context_window` never reached it. The placement test feeds
+//                 exactly that payload and still demands the banner.
+//
+// The healthy-case assertions are the complement: a banner that always printed
+// would satisfy the alarm tests on its own, and this repo has shipped a control
+// that passed on a full revert before.
+// =============================================================================
+
+describe('#82 liveness banner (unit)', () => {
+  const SESSION = 'banner-unit-probe';
+  const markerPath = join(tmpdir(), `claude-ctk-hook-alive-${SESSION}.txt`);
+  const transcriptPath = join(tmpdir(), `ctk-banner-unit-${SESSION}.jsonl`);
+
+  const writeTranscript = (promptIso: string): void => {
+    writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        type: 'user',
+        timestamp: promptIso,
+        message: { role: 'user', content: 'hi' },
+      })}\n`,
+      'utf8'
+    );
+  };
+
+  afterEach(() => {
+    for (const p of [markerPath, transcriptPath]) {
+      try {
+        unlinkSync(p);
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+
+  it('warns when a prompt is far newer than the stamp', () => {
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ at: '2026-08-02T10:00:00.000Z', hook: 'x' }),
+      'utf8'
+    );
+    writeTranscript('2026-08-02T11:00:00.000Z');
+    const banner = buildLivenessBanner({
+      session_id: SESSION,
+      transcript_path: transcriptPath,
+    });
+    expect(banner).toContain('no security guardrails');
+    expect(banner).toContain('#82');
+    expect(banner.endsWith('\n')).toBe(true);
+  });
+
+  it('is EMPTY on a healthy session', () => {
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ at: '2026-08-02T11:00:01.000Z', hook: 'x' }),
+      'utf8'
+    );
+    writeTranscript('2026-08-02T11:00:00.000Z');
+    expect(buildLivenessBanner({ session_id: SESSION, transcript_path: transcriptPath })).toBe('');
+  });
+
+  it('is EMPTY when the payload carries no transcript_path', () => {
+    // The field is documented top-level in CC's statusline schema. If it ever
+    // stops arriving, the reader must go quiet rather than alarm — this pins the
+    // direction of that failure.
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ at: '2026-08-02T10:00:00.000Z', hook: 'x' }),
+      'utf8'
+    );
+    writeTranscript('2026-08-02T11:00:00.000Z');
+    expect(buildLivenessBanner({ session_id: SESSION })).toBe('');
+  });
+
+  it('is EMPTY when no marker exists, however old the prompt', () => {
+    writeTranscript('2026-08-02T11:00:00.000Z');
+    expect(
+      buildLivenessBanner({ session_id: 'banner-unit-no-marker', transcript_path: transcriptPath })
+    ).toBe('');
+  });
+});
+
+describe('#82 liveness banner (rendered by the built script)', () => {
+  const dist = fileURLToPath(
+    new URL('../../dist/src/statusline/context-percentage.js', import.meta.url)
+  );
+  const SESSION = 'banner-e2e-probe';
+  const markerPath = join(tmpdir(), `claude-ctk-hook-alive-${SESSION}.txt`);
+  const transcriptPath = join(tmpdir(), `ctk-banner-e2e-${SESSION}.jsonl`);
+  const pctPath = join(tmpdir(), `claude-context-pct-${SESSION}.txt`);
+
+  const arrangeOutage = (): void => {
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ at: '2026-08-02T10:00:00.000Z', hook: 'x' }),
+      'utf8'
+    );
+    writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        type: 'user',
+        timestamp: '2026-08-02T11:00:00.000Z',
+        message: { role: 'user', content: 'hi' },
+      })}\n`,
+      'utf8'
+    );
+  };
+
+  const run = (payload: Record<string, unknown>): string => {
+    const env = { ...globalThis.process.env } as Record<string, string>;
+    delete env['CONTINUITY_STATUSLINE_SILENT'];
+    return execFileSync('node', [dist], {
+      input: JSON.stringify(payload),
+      encoding: 'utf8',
+      env,
+    });
+  };
+
+  afterEach(() => {
+    for (const p of [markerPath, transcriptPath, pctPath]) {
+      try {
+        unlinkSync(p);
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+
+  it('MUST-FAIL CONTROL: the warning reaches real stdout on an outage', () => {
+    arrangeOutage();
+    const out = run({
+      session_id: SESSION,
+      transcript_path: transcriptPath,
+      context_window: { used_percentage: 42 },
+      model: { display_name: 'Opus' },
+    });
+    expect(out).toContain('no security guardrails');
+    // The normal statusline still renders — the banner is additive, not a
+    // replacement, so a user does not lose their context bar to the alarm.
+    expect(out).toContain('42%');
+  });
+
+  it('BLOCKER (3): warns even on a payload with NO context_window', () => {
+    // The cut reader sat below the early return this payload takes, so it could
+    // never run here. Deleting `banner = buildLivenessBanner(data)` or moving it
+    // below the `context_window` guard turns this red.
+    arrangeOutage();
+    const out = run({ session_id: SESSION, transcript_path: transcriptPath });
+    expect(out).toContain('no security guardrails');
+  });
+
+  it('prints NO banner on a healthy session', () => {
+    writeFileSync(
+      markerPath,
+      JSON.stringify({ at: '2026-08-02T11:00:01.000Z', hook: 'x' }),
+      'utf8'
+    );
+    writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        type: 'user',
+        timestamp: '2026-08-02T11:00:00.000Z',
+        message: { role: 'user', content: 'hi' },
+      })}\n`,
+      'utf8'
+    );
+    const out = run({
+      session_id: SESSION,
+      transcript_path: transcriptPath,
+      context_window: { used_percentage: 42 },
+    });
+    expect(out).not.toContain('no security guardrails');
+  });
+
+  it('stays silent in silent mode, so it cannot corrupt another statusline', () => {
+    // Silent mode exists so a user can cede the display to claude-hud or similar.
+    // Injecting a line there would be the same defect the FALLBACK_STATUS
+    // suppression test guards against — at the cost that silent-mode users get
+    // no banner, which is documented.
+    arrangeOutage();
+    const env = { ...globalThis.process.env, CONTINUITY_STATUSLINE_SILENT: '1' } as Record<
+      string,
+      string
+    >;
+    const out = execFileSync('node', [dist], {
+      input: JSON.stringify({
+        session_id: SESSION,
+        transcript_path: transcriptPath,
+        context_window: { used_percentage: 42 },
+      }),
+      encoding: 'utf8',
+      env,
+    });
+    expect(out).toBe('');
   });
 });

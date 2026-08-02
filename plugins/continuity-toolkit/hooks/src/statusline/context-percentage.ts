@@ -18,6 +18,7 @@ import { existsSync, readFileSync, readSync, renameSync, statSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assessHookLiveness } from '../lib/hook-liveness.js';
 import { resolveSessionId, sessionScopedTmpPath } from '../lib/session-key.js';
 
 // =============================================================================
@@ -322,6 +323,28 @@ export function extractSessionId(data: Record<string, unknown>): string {
  * public surface and its tests are unchanged.
  */
 export { isSafeSessionId } from '../lib/session-key.js';
+
+/**
+ * The #82 banner: a warning that this session's ctk hooks have stopped running.
+ *
+ * Returns `''` for every verdict but `suspect`, so the statusline is unchanged on
+ * a healthy session and — deliberately — on an ambiguous one. See
+ * `lib/hook-liveness.ts` for what `unknown` absorbs, including the session-start
+ * total unload this banner cannot see.
+ *
+ * Exported so the reader can be exercised without a subprocess; `main()` calls it
+ * above the `context_window` early returns, which is the placement the previously
+ * cut reader got wrong.
+ */
+export function buildLivenessBanner(data: Record<string, unknown>): string {
+  const transcriptPath = data['transcript_path'];
+  const verdict = assessHookLiveness({
+    sessionId: extractSessionId(data),
+    transcriptPath: typeof transcriptPath === 'string' ? transcriptPath : undefined,
+  });
+  if (verdict !== 'suspect') return '';
+  return `${ANSI.RED}⚠ ctk hooks stopped responding — no security guardrails this session (#82)${ANSI.RESET}\n`;
+}
 
 /**
  * Extract model display name from StatusLine stdin data.
@@ -700,12 +723,24 @@ function main(): void {
   // or working context warnings, never both. Every write below goes through
   // `emit` so no fallback string can leak into the other program's output.
   const silent = process.env['CONTINUITY_STATUSLINE_SILENT'] === '1';
+  // #82 banner, prepended to whatever this run prints. Set once the payload is
+  // parsed and then carried by EVERY emit path — that is what places the check
+  // above the `context_window` early returns below. The cut reader sat under
+  // them and so went inert on any payload without a context window.
+  //
+  // It rides `emit` rather than bypassing it so silent mode still prints nothing:
+  // a user who ceded the display to another statusline must not have ctk inject
+  // a line into that program's output. The cost is that silent-mode users get no
+  // banner, which is the same trade the fallback string already makes.
+  let banner = '';
   const emit = (text: string): void => {
-    if (!silent) process.stdout.write(text);
+    if (!silent) process.stdout.write(banner + text);
   };
 
   const raw = readStdinSync();
   if (!raw) {
+    // No payload at all: no session id and no transcript path, so the liveness
+    // question is unanswerable rather than unasked. Same for unparsable JSON.
     emit(`${FALLBACK_STATUS}\n`);
     return;
   }
@@ -717,6 +752,8 @@ function main(): void {
     emit(`${FALLBACK_STATUS}\n`);
     return;
   }
+
+  banner = buildLivenessBanner(data);
 
   // Extract used_percentage (pre-calculated by Claude Code)
   const contextWindow = data['context_window'] as Record<string, unknown> | undefined;
