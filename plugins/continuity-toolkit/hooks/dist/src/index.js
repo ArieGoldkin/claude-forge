@@ -3039,7 +3039,14 @@ var BASH_SECRET_PATTERNS = [
   // #114: both patterns above are PREFIX-DEPENDENT — they need the `.ssh/`
   // component, so `cd ~/.ssh && cat id_rsa` split the directory away from the
   // filename and was AUTO-APPROVED. Measured on 2.17.5, not hypothesised.
-  /\.ssh(?![\w\-/])/,
+  /(?<![\w.-])\.ssh(?![\w\-/])/,
+  // #114 REVIEW: the rule above declines on a TRAILING separator, so one extra
+  // character — `cd ~/.ssh/ && cat id_rsa` — walked straight back through it.
+  // The two qualified rules above are narrower than the directory they protect
+  // (`id_` prefix, `.pem` suffix), so `.ssh/config`, `.ssh/known_hosts` and
+  // `.ssh/authorized_keys` were never covered at all. Blanket the directory:
+  // nothing under it is a casual read.
+  /(?<![\w.-])\.ssh\//,
   // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks
   // `env`/`printenv`; without this, reading the same secrets straight out of
   // procfs walks around that control entirely.
@@ -3050,7 +3057,7 @@ var BASH_SECRET_PATTERNS = [
   /\/var\/run\/secrets\//,
   /\/run\/secrets\//,
   // #114: same trailing-separator defect — `cd /run/secrets && cat tok`.
-  /\/run\/secrets(?![\w\-/])/,
+  /(?<![\w.-])\/run\/secrets(?![\w\-/])/,
   // Require a NAME before the extension and reject a property-access or
   // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
   // `schema.key.ts` — a fresh instance of the very over-blocking this release
@@ -3065,16 +3072,23 @@ var BASH_SECRET_PATTERNS = [
   // Another user's home directory — never a legitimate read for our purposes.
   /\/root\//,
   // #114: `cd /root && cat k` — the bare form, with no trailing separator.
-  /\/root(?![\w\-/])/,
+  /(?<![\w.-])\/root(?![\w\-/])/,
   // macOS temp/home trees. Kept as always-block rather than mutation-gated:
   // the scratchpad carve-out below already solves the false-positive that
   // motivated relaxing these, so there is no reason to widen read access.
   /\/private\/tmp\/(?!claude-\d+\/)/,
+  // #114 REVIEW: this and /private/home carry the SAME trailing-separator
+  // defect and were missed by the first pass, while the CHANGELOG read as a
+  // complete closure. `ls /private/tmp` was AUTO-APPROVED. The bare rule never
+  // fires on a qualified path, so the claude-NNN scratchpad exemption above is
+  // untouched — verified, not assumed.
+  /(?<![\w.-])\/private\/tmp(?![\w\-/])/,
   // Companion guard — bash patterns match RAW command text with no `..`
   // normalization, so a traversal spelled from inside the allowed prefix
   // would otherwise slip past the lookahead above.
   /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
-  /\/private\/home\//
+  /\/private\/home\//,
+  /(?<![\w.-])\/private\/home(?![\w\-/])/
 ];
 var BASH_SYSTEM_DIR_PATTERNS = [
   /\/etc\//,
@@ -3120,10 +3134,16 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   //   - PREFIX-DEPENDENT — need a directory component (`.ssh/id_`,
   //     `/etc/(passwd|shadow|sudoers)`, `/root/`, `/run/secrets/`,
   //     `/proc/*/environ`, `/etc/ssl/private/`). A `cd` splits the directory
-  //     away from the filename and defeats them outright.
-  // Measured on 2.17.5 before this change: 6 of 12 protections were defeated by
-  // a `cd` split, including `cd ~/.ssh && cat id_rsa` — AUTO-APPROVED. The bare
-  // entries below and their siblings in BASH_SECRET_PATTERNS close that class.
+  //     away from the filename and can defeat them outright.
+  //
+  // ⚠ "PREFIX-DEPENDENT" DOES NOT MEAN "WAS DEFEATED" — do not read the list
+  // above as the casualty list. Measured on 2.17.5, 6 of 12 protections fell to
+  // a `cd` split: `.ssh/id_`, the three `/etc` account files, `/run/secrets/`
+  // and `/root/`. The last two named above — `/proc/*/environ` and
+  // `/etc/ssl/private/` — survived INCIDENTALLY, because the `cd` target itself
+  // still carries `/proc/` or `/etc/` and the system-dir rules caught it. They
+  // are prefix-dependent and were not defeated; both facts are true at once.
+  // The flagship casualty was `cd ~/.ssh && cat id_rsa` — AUTO-APPROVED.
   // The dangerous-bash registry still runs before both.
   /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
@@ -3134,17 +3154,34 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // command with no prompt — `ls /etc` and `cd /etc && cat passwd` alike. Note
   // the `cd` is incidental: the defect is the bare reference, not the chaining.
   //
-  // These are ADDITIVE and fire ONLY when the name is not followed by `/`, so
-  // they cannot match a qualified path. That is what makes them safe here: the
-  // /var/folders/ exemption (#99) lives entirely in qualified-path space and is
-  // provably untouched — verified by the KNOWN GAPS block still passing
-  // unchanged, not by inspection.
-  /\/etc(?![\w\-/])/,
-  /\/usr(?![\w\-/])/,
-  /\/var(?![\w\-/])/,
-  /\/sys(?![\w\-/])/,
-  /\/proc(?![\w\-/])/,
-  /\/boot(?![\w\-/])/
+  // ⚠ BOTH BOUNDARIES ARE LOAD-BEARING, AND THE FIRST DRAFT HAD ONLY ONE.
+  // Shipped without the LEFT lookbehind, these matched the last segment of any
+  // RELATIVE path: `cat config/boot.rb` (every Rails app), `cat app/root.tsx`
+  // (every Remix app), `du -sh ./var`, `ls -la ./etc` — all DENIED, and a
+  // denial is terminal for a subagent. That is strictly worse than the hole
+  // being closed. Found by adversarial review, reproduced, and fixed here.
+  //   (?<![\w.-])  the name may not begin INSIDE a token — the same statement
+  //                the env-file pattern above makes, and for the same reason.
+  //   (?![\w\-/])  the name must not continue into a longer name, and must not
+  //                be followed by `/` (that is the QUALIFIED rule's job).
+  //
+  // The precise safety property is narrower than "cannot match a qualified
+  // path" — an earlier revision of this comment claimed that, and it was false
+  // (`cat "/etc"/hosts` is a qualified path and does match). What is true:
+  // these never match a name IMMEDIATELY followed by `/`. That is enough for
+  // the #99 /var/folders exemption, which lives entirely in that space.
+  //
+  // ⚠ KNOWN GAPS, measured — this closes the bare spelling, not the class:
+  //   `cd / && cat etc/passwd`  — no protected literal appears at all
+  //   `cd ~root && cat k`       — tilde-user expansion
+  // Both need a shell parse, the wall this file hits everywhere. Do not claim
+  // the class is closed.
+  /(?<![\w.-])\/etc(?![\w\-/])/,
+  /(?<![\w.-])\/usr(?![\w\-/])/,
+  /(?<![\w.-])\/var(?![\w\-/])/,
+  /(?<![\w.-])\/sys(?![\w\-/])/,
+  /(?<![\w.-])\/proc(?![\w\-/])/,
+  /(?<![\w.-])\/boot(?![\w\-/])/
 ];
 [
   ...BASH_SECRET_PATTERNS,

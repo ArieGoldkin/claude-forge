@@ -11,12 +11,45 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
   Every pattern in `BASH_SYSTEM_DIR_PATTERNS`, and the directory-qualified half of
   `BASH_SECRET_PATTERNS`, required a trailing `/`. Measured end to end through
   `bashCombined`: `ls <etc>`, `cd <etc> && cat passwd`, `cd <var> && cat log/system.log`
-  were all **AUTO-APPROVED**. Closed with 9 additive patterns that fire only when the
-  name is *not* followed by `/`, so they cannot match a qualified path.
+  were all **AUTO-APPROVED**. Closed with 12 additive patterns carrying **both** a left
+  and a right boundary.
 
 - **Six protections were defeated by a `cd` split, including SSH private keys.**
   `cd ~/.ssh && cat id_rsa` was auto-approved, as were `/etc/shadow`, `/etc/passwd`,
-  `/etc/sudoers`, `/run/secrets/*` and `/root/*`. All now denied.
+  `/etc/sudoers`, `/run/secrets/*` and `/root/*`. All now denied. (Two further
+  prefix-dependent patterns, `/proc/*/environ` and `/etc/ssl/private/`, were *not*
+  defeated — they survived incidentally because the `cd` target still carried a
+  qualified system dir. Prefix-dependent and defeated are not the same set.)
+
+### Fixed during review of this change — three defects in the first draft
+
+- **The first draft had no LEFT boundary and denied ordinary project files.** It matched
+  the last segment of any *relative* path: `cat config/boot.rb` (every Rails app),
+  `cat app/root.tsx` (every Remix app), `du -sh ./var`, `ls -la ./etc` — all DENIED, and
+  a denial is terminal for a subagent. That is strictly worse than the hole being closed.
+  The 31-entry FP corpus could not detect it: every corpus entry uses an **absolute**
+  path, so it has zero overlap with this false-positive surface and its `fp=0` was
+  measuring the wrong thing. Fixed with `(?<![\w.-])`, and pinned by a new prefix-axis
+  test block plus a mutation control that strips the lookbehind.
+- **The flagship case reopened on one extra character.** `cd ~/.ssh/ && cat id_rsa` —
+  with a trailing separator — was still auto-approved, because the bare rule declines on
+  `/` and the two qualified ssh rules are narrower than the directory (`id_` prefix,
+  `.pem` suffix), leaving `.ssh/config`, `.ssh/known_hosts` and `.ssh/authorized_keys`
+  uncovered entirely. Closed with a blanket `.ssh/` rule.
+- **`/private/tmp` and `/private/home` had the identical defect and were missed**, while
+  this entry read as a complete closure. `ls /private/tmp` was auto-approved. Both now
+  have bare siblings; the `claude-NNN` scratchpad exemption underneath is untouched.
+
+### Known gaps — the bare *spelling* is closed, the *class* is not
+
+Pinned as failing-by-design in `security-blocker-bare-dirs.test.ts`, the same convention
+the #99 block uses:
+
+- `cd / && cat etc/passwd` — no protected literal appears in the command at all.
+- `cd ~root && cat k` — tilde-user expansion.
+
+Both need a shell parse, the wall this file hits everywhere. Do not read this release as
+closing the class.
 
 ### Documentation — corrected in place (#75 policy)
 
@@ -32,8 +65,10 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
 ### Notes on the #99 coupling
 
 - **#114's own framing — that closing it "converts #99's five documented gaps into live
-  bypasses" — is measured false.** Those gaps are unchanged by this fix: all 41 tests in
-  `security-blocker-macos-temp.test.ts` still pass, the five gaps still pinned `false`.
+  bypasses" — is measured false.** Those gaps are unchanged by this fix: all **40**
+  pre-existing tests in `security-blocker-macos-temp.test.ts` still pass (43 after the
+  3 added here — counted by running the file at `c5a9101`, not by counting `it(` blocks,
+  which loops make wrong), with the five gaps still pinned `false`.
   The bare patterns cannot fire on them, because the exempt path's only `/var` occurrence
   is followed by `/folders` and a bare rule never matches a name followed by `/`. What
   *did* change is their standing: gap #4 is now **load-bearing rather than redundant**,

@@ -60,7 +60,7 @@ trailing-separator requirement.
 
 > #114: *"closing this issue converts those five documented gaps into live bypasses."*
 
-**Measured false as stated.** Under the candidate fix, all 41 tests in
+**Measured false as stated.** Under the candidate fix, all 40 pre-existing tests in
 `security-blocker-macos-temp.test.ts` still pass — *including* the five KNOWN GAPS still pinned as
 `false`. Net outcomes for the five gaps are **identical before and after**: 4 AUTO-APPROVED,
 1 defer-to-prompt.
@@ -74,7 +74,7 @@ What is true is weaker and differently shaped:
 - ✅ #114 **is** why #113's "no new resource is reachable" held. `/var/log` was already reachable.
 - ❌ Closing #114 does **not** open, widen, or worsen the five gaps.
 - ⚠ It does make gap #4 **load-bearing instead of redundant** — after the fix it is the remaining
-  route into the exempt tree. That is a follow-up, not a blocker, and it cannot be closed by regex
+  route out of the exempt tree. That is a follow-up, not a blocker, and it cannot be closed by regex
   (deciding where a path resolves needs a shell parse — the wall the abandoned mutation gate hit).
 
 Note also that gap #4 as written (`cd <TMP> && cat ../../../log/system.log`) ascends only to
@@ -95,7 +95,7 @@ secrets:      /\.ssh(?![\w\-/])/  /\/run\/secrets(?![\w\-/])/
 | Measurement | Result |
 |---|---|
 | 31-entry FP corpus | **fp = 0, fn = 0** (gate asserts both) |
-| `security-blocker-macos-temp.test.ts` | **41/41 pass**, KNOWN GAPS unchanged |
+| `security-blocker-macos-temp.test.ts` | **40/40 pre-existing pass**, KNOWN GAPS unchanged |
 | #114 table | **all 6 rows DENY** |
 | Exposure bound | **6/12 defeated → 0/12** |
 | ctk full suite | **2621 pass** (2617 baseline + 4 probes), 0 fail |
@@ -130,3 +130,79 @@ Required in the same change:
    and a note that gap #4 is now load-bearing.
 3. Must-fail controls derived from the exported array, asserted through
    `matchesBashSensitivePattern(...).pattern` — never a re-declared local regex.
+
+---
+
+# POSTSCRIPT — the candidate above shipped a BLOCKER. Read this before §4 and §5.
+
+> Added 2026-08-02 after a constrained adversarial review of PR #115. Corrected in place per
+> the #75 policy: §4 and §5 describe a **superseded** candidate, and the recommendation above
+> ("costs nothing measurable") was **wrong**. Left standing rather than rewritten, because the
+> error is the point.
+
+## What the review found, and I reproduced
+
+**The 9-pattern candidate had no LEFT boundary.** `(?![\w\-/])` constrains only what *follows*
+the name; nothing constrained what *precedes* the `/`. So every pattern matched the last segment
+of any **relative** path:
+
+| Command | verdict under the candidate |
+|---|---|
+| `cat config/boot.rb` — every Rails app | **DENY** |
+| `cat app/root.tsx` — every Remix app | **DENY** |
+| `du -sh ./var` · `ls -la ./etc` | **DENY** |
+| `cat src/proc.rs` · `cat lib/sys.ts` · `cat pkg/usr.go` | **DENY** |
+
+A denial is terminal for a subagent. **This is strictly worse than the hole it closes.**
+
+**Why §4's evidence could not see it.** The 31-entry FP corpus uses an **absolute** protected
+path in every entry. It has *zero overlap* with this false-positive surface — so `fp = 0` was a
+true measurement of the wrong thing, and 4036 green tests said nothing about it either.
+
+**Why my own non-regression tests could not see it.** They varied only the **suffix**
+(`/etcetera`, `/etc-backup`, `/rootfs`). Not one varied the **prefix**. That is this repo's own
+recorded lesson — *a guard's negatives must vary the TARGET, not just the failure mode* — which
+I wrote down and then did not apply. `/user` was worse than useless: `/usr` is not a substring
+of `/user`, so that row could never fail under any mutation.
+
+**Two further defects in the same candidate.** The flagship case reopened on one character
+(`cd ~/.ssh/ && cat id_rsa`, trailing separator — and the qualified ssh rules are narrower than
+the directory, leaving `.ssh/config` and `.ssh/known_hosts` uncovered entirely). And
+`/private/tmp` / `/private/home` carried the identical defect and were missed, while the
+CHANGELOG read as a complete closure.
+
+**And a tautological control of mine**, in the file I had just corrected: the
+"bare form is denied" row used `${VAR}`, which is defined *with* a trailing separator — so it
+tested `cd /var/ …`, matched by the pre-existing #99 rule, and passed on a full revert of #114.
+The same defect class I had criticised PR #113 for, in the PR whose body boasted about not
+repeating it.
+
+## What shipped instead
+
+Both boundaries, plus the two missed trees:
+
+```
+system dirs:  /(?<![\w.-])\/etc(?![\w\-/])/   … usr, var, sys, proc, boot
+secrets:      /(?<![\w.-])\.ssh(?![\w\-/])/   + /(?<![\w.-])\.ssh\//   (blanket the directory)
+              /(?<![\w.-])\/root(?![\w\-/])/  /(?<![\w.-])\/run\/secrets(?![\w\-/])/
+              /(?<![\w.-])\/private\/tmp(?![\w\-/])/  /(?<![\w.-])\/private\/home(?![\w\-/])/
+```
+
+The safety property is narrower than §4 claimed. **Not** "cannot match a qualified path" —
+`cat "/etc"/hosts` is a qualified path and does match. What is true: these never match a name
+**immediately followed by `/`**, which is all the `/var/folders/` exemption needs.
+
+## Known gaps — the bare spelling is closed, the class is not
+
+- `cd / && cat etc/passwd` — no protected literal appears in the command at all.
+- `cd ~root && cat k` — tilde-user expansion.
+
+Both need a shell parse. Pinned as failing-by-design in `security-blocker-bare-dirs.test.ts`.
+
+## The lesson worth keeping
+
+§2's finding (the exposure bound covers only half the secret patterns, 6 of 12 defeated) was
+**correct and survived review**. The *fix* built on it was not. Being right about the diagnosis
+bought nothing for the remedy — and the confident part of the change, the part I called
+"provably untouched" and "costs nothing measurable", is exactly where the blocker was. Third
+session running that my own estimate of a diff's risk was not evidence about that diff.

@@ -47,8 +47,11 @@ import {
  */
 const NARROWED = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('(?!folders'));
 const TRAVERSAL_GUARD = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('\\.\\.'));
-if (!NARROWED || !TRAVERSAL_GUARD) {
-  throw new Error('#99 patterns missing from BASH_SYSTEM_DIR_PATTERNS — the fix was reverted');
+const BARE_VAR_114 = BASH_SYSTEM_DIR_PATTERNS.find(
+  (r) => r.source === '(?<![\\w.-])\\/var(?![\\w\\-/])'
+);
+if (!NARROWED || !TRAVERSAL_GUARD || !BARE_VAR_114) {
+  throw new Error('#99/#114 patterns missing from BASH_SYSTEM_DIR_PATTERNS — a fix was reverted');
 }
 
 // Assembled from fragments so this test file's own text carries no protected
@@ -289,7 +292,18 @@ describe('#99 macOS per-user temp tree', () => {
       // by regex — deciding where a path resolves needs a shell parse.
       expect(denied(`cd ${TMP} && cat ..${S}..${S}..${S}log${S}system.log`)).toBe(false);
       // …while the bare form #114 closed is denied, which is the asymmetry.
-      expect(denied(`cd ${VAR} && cat log${S}system.log`)).toBe(true);
+      //
+      // ⚠ THIS ROW WAS TAUTOLOGICAL AND REVIEW CAUGHT IT. It used `${VAR}`,
+      // which is defined at the top of this file WITH a trailing separator, so
+      // it tested `cd /var/ …` — matched by the pre-existing #99 rule both
+      // before and after #114. It passed on a full revert of the fix while
+      // being cited as the proof of the fix. The genuine bare form has no
+      // trailing separator, and the attribution is asserted so it cannot drift
+      // back into testing the other rule.
+      const bare = `cd ${S}var && cat log${S}system.log`;
+      const hit = matchesBashSensitivePattern(bare);
+      expect(hit.matched).toBe(true);
+      expect(hit.pattern).toBe(BARE_VAR_114.source);
     });
 
     it('the #99 exemption has the MIRROR of #114, and it fails SAFE', () => {
