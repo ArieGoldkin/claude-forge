@@ -71,7 +71,10 @@ describe('#116 case-insensitive path rules', () => {
       ['qualified system dir C', `\\${S}${lo.vr}\\${S}(?!folders\\${S})`],
       ['bare system dir A', `(?<![\\w.-])\\${S}${lo.etc}(?![\\w\\-${S}])`],
       ['bare system dir B', `(?<![\\w.-])\\${S}${lo.vr}(?![\\w\\-${S}])`],
-      ['account-file rule', `\\${S}${lo.etc}\\${S}(?:${PW}|shadow|sudoers|gshadow|master\\.${PW})\\b`],
+      [
+        'account-file rule',
+        `\\${S}${lo.etc}\\${S}(?:${PW}|shadow|sudoers|gshadow|master\\.${PW})\\b`,
+      ],
       ['secret dir qualified', `(?<![\\w.-])\\${lo.ssh}\\${S}`],
       ['secret dir bare', `(?<![\\w.-])\\${lo.ssh}(?![\\w\\-${S}])`],
       ['key-prefix rule', `\\${lo.ssh}\\${S}id_`],
@@ -80,7 +83,10 @@ describe('#116 case-insensitive path rules', () => {
     for (const [label, src] of MUST_BE_INSENSITIVE) {
       it(`carries the i flag: ${label}`, () => {
         const rule = bySource(src);
-        expect(rule, `rule missing from the shipped arrays — renamed or reverted: ${src}`).toBeDefined();
+        expect(
+          rule,
+          `rule missing from the shipped arrays — renamed or reverted: ${src}`
+        ).toBeDefined();
         expect(rule?.flags).toContain('i');
       });
     }
@@ -90,8 +96,11 @@ describe('#116 case-insensitive path rules', () => {
     // makes the block above non-tautological — otherwise "add i everywhere"
     // would satisfy every assertion in this file.
     const MUST_STAY_SENSITIVE: Array<[string, string]> = [
-      ['identifier rule: env file', `(?<![\\w.-])(?!process\\${ENVF}\\b)(?!import\\.meta\\${ENVF}\\b)[\\w.-]*\\${ENVF}\\b`],
-      ['identifier rule: key family', `[\\w-]+\\.(?:key|keytab|p12|pfx|jks)\\b(?![\\w(.])`],
+      [
+        'identifier rule: env file',
+        `(?<![\\w.-])(?!process\\${ENVF}\\b)(?!import\\.meta\\${ENVF}\\b)[\\w.-]*\\${ENVF}\\b`,
+      ],
+      ['identifier rule: key family', '[\\w-]+\\.(?:key|keytab|p12|pfx|jks)\\b(?![\\w(.])'],
       ['identifier rule: cluster config', `\\b${KC}\\b`],
       ['identifier rule: superuser home', `\\${S}${lo.root}\\${S}`],
     ];
@@ -99,7 +108,10 @@ describe('#116 case-insensitive path rules', () => {
     for (const [label, src] of MUST_STAY_SENSITIVE) {
       it(`stays case-sensitive: ${label}`, () => {
         const rule = bySource(src);
-        expect(rule, `rule missing from the shipped arrays — renamed or reverted: ${src}`).toBeDefined();
+        expect(
+          rule,
+          `rule missing from the shipped arrays — renamed or reverted: ${src}`
+        ).toBeDefined();
         expect(rule?.flags).not.toContain('i');
       });
     }
@@ -115,7 +127,10 @@ describe('#116 case-insensitive path rules', () => {
       ['upper bare dir, second name', `ls ${S}${up.usr}`],
       // Load-bearing for the /root exclusion: root's real macOS home is under
       // the /var tree, so the case-insensitive /var rule must cover it.
-      ['upper superuser home via var tree', `cat ${S}${up.vr}${S}${up.root}${S}${up.ssh}${S}id_rsa`],
+      [
+        'upper superuser home via var tree',
+        `cat ${S}${up.vr}${S}${up.root}${S}${up.ssh}${S}id_rsa`,
+      ],
     ];
     for (const [label, cmd] of cases) {
       it(`net DENY: ${label}`, async () => {
