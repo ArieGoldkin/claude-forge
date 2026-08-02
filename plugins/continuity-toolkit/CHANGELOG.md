@@ -21,20 +21,41 @@ All notable changes to the continuity-toolkit (`ctk`) plugin will be documented 
      never an install record. Absence of a marker is `unknown`, never `suspect`.
   2. **Nothing pinned it** — deleting the entire user-visible warning left all six test trees
      green. Now pinned by subprocess assertions against the built script's real stdout, and
-     **mutation-verified in both directions**: eleven mutations were applied and all eleven turn
-     the suite red, including deleting the banner, un-calling the reader, moving it back below
-     the early returns, and neutralising each predicate exclusion.
+     **mutation-verified in both directions**: eleven mutations, all eleven killed — deleting the
+     banner, un-calling the reader, moving it back below the early returns, removing the
+     `promptSource` allowlist, neutralising each remaining guard, grace at 0 and at
+     `MAX_SAFE_INTEGER`, absent-marker ⇒ `suspect`, and removing the tail bound. Two mutations
+     first appeared to *survive*; both times the pattern had not matched (the formatter had
+     reflowed the code), so the battery now asserts the file actually changed before drawing any
+     conclusion from a green suite — a no-op mutation and a blind control look identical.
   3. **Inert by placement** — it sat below four early returns in `main()`. The check now runs
      above them, pinned by a test on a payload carrying no `context_window`.
 
 ### Notes on two things the design did not specify, both settled by measurement
 
-- **The predicate is the whole feature.** "Newest `type: user` record" is *not* "newest user
-  prompt": CC files tool results under the same role. Measured against 20 live healthy sessions —
-  naive predicate: **20/20 false alarms**; without the `tool_result` exclusion: **20/20**; without
-  the `isMeta` exclusion: **6/20**; with both: **0/20**. `isSidechain` is kept on semantic grounds
-  and is documented as **unmeasured** (0 of 3,686 records — subagent turns get their own
-  transcripts).
+- **The predicate is the whole feature, and it is an allowlist.** The question is not "does this
+  look like a user message?" but "did this raise `UserPromptSubmit`?" — that is the event whose
+  missing stamp is the alarm. CC writes `type: user` records for four things that raise no
+  `UserPromptSubmit`: tool results, built-in slash commands (`/model`, `/plugin`),
+  `<local-command-stdout>` echoes, and **interrupts** (pressing `Esc` mid-turn).
+
+  | predicate | false `suspect` verdicts |
+  |---|---|
+  | exclusion list (`type: user` minus tool results / meta / sidechain) | **493, across 73 of 113 transcripts** |
+  | allowlist (`promptSource` present) | **0, across 0 of 113** |
+
+  The exclusion list's worst case was the one the design calls safest: interrupting a long agentic
+  turn raised a "no security guardrails" banner precisely when nothing was wrong. The fix requires
+  CC's own `promptSource` marker — absent from **0%** of all four non-submitting classes, present
+  on 91% of genuine prompts (the missing 9% go undetected, the safe direction). Allowlist rather
+  than denylist is the load-bearing choice: if CC renames or drops the field, every record fails
+  the predicate and the verdict degrades to `unknown` — silent. A denylist fails the other way.
+
+  Verified by driving the **real built module** at **26,316 mid-session positions** across 113
+  transcripts: 0 false alarms, with a positive control confirming it still fires on a genuine
+  outage. ⚠ The first measurement of this predicate sampled each transcript only at its **final
+  state** and reported 0/20 — but only 16% of transcripts *end* on a non-submitting record, so it
+  was blind to the other 83%. The harness was wrong, not just the rule.
 - **A write-ordering race exists.** CC writes the prompt record *before* running
   `UserPromptSubmit` hooks, so every healthy session is briefly "prompt newer than stamp" —
   measured at **62–378 ms**. Without a grace window the statusline would flash the alarm on every
