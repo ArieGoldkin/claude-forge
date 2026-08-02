@@ -2,6 +2,107 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.6] - 2026-08-02 — bare system-directory names were auto-approved (#114)
+
+### Fixed
+
+- **`security-blocker`: a system directory named without a trailing separator was
+  unmatched, and `auto-approve-safe-bash` then approved the command with no prompt.**
+  Every pattern in `BASH_SYSTEM_DIR_PATTERNS`, and the directory-qualified half of
+  `BASH_SECRET_PATTERNS`, required a trailing `/`. Measured end to end through
+  `bashCombined`: `ls <etc>`, `cd <etc> && cat passwd`, `cd <var> && cat log/system.log`
+  were all **AUTO-APPROVED**. Closed with 12 additive patterns carrying **both** a left
+  and a right boundary.
+
+- **Six protections were defeated by a `cd` split, including SSH private keys.**
+  `cd ~/.ssh && cat id_rsa` was auto-approved, as were `/etc/shadow`, `/etc/passwd`,
+  `/etc/sudoers`, `/run/secrets/*` and `/root/*`. All now denied. (Two further
+  prefix-dependent patterns, `/proc/*/environ` and `/etc/ssl/private/`, were *not*
+  defeated — they survived incidentally because the `cd` target still carried a
+  qualified system dir. Prefix-dependent and defeated are not the same set.)
+
+### Fixed during review of this change — three defects in the first draft
+
+- **The first draft had no LEFT boundary and denied ordinary project files.** It matched
+  the last segment of any *relative* path: `cat config/boot.rb` (every Rails app),
+  `cat app/root.tsx` (every Remix app), `du -sh ./var`, `ls -la ./etc` — all DENIED, and
+  a denial is terminal for a subagent. That is strictly worse than the hole being closed.
+  The 31-entry FP corpus could not detect it: every corpus entry uses an **absolute**
+  path, so it has zero overlap with this false-positive surface and its `fp=0` was
+  measuring the wrong thing. Fixed with `(?<![\w.-])`, and pinned by a new prefix-axis
+  test block plus a mutation control that strips the lookbehind.
+- **The flagship case reopened on one extra character.** `cd ~/.ssh/ && cat id_rsa` —
+  with a trailing separator — was still auto-approved, because the bare rule declines on
+  `/` and the two qualified ssh rules are narrower than the directory (`id_` prefix,
+  `.pem` suffix), leaving `.ssh/config`, `.ssh/known_hosts` and `.ssh/authorized_keys`
+  uncovered entirely. Closed with a blanket `.ssh/` rule.
+- **`/private/tmp` and `/private/home` had the identical defect and were missed**, while
+  this entry read as a complete closure. `ls /private/tmp` was auto-approved. Both now
+  have bare siblings; the `claude-NNN` scratchpad exemption underneath is untouched.
+
+### Known gaps — the bare *spelling* is closed, the *class* is not
+
+Pinned as failing-by-design in `security-blocker-bare-dirs.test.ts`, the same convention
+the #99 block uses:
+
+- `cd / && cat etc/passwd` — no protected literal appears in the command at all.
+- `cd ~root && cat k` — tilde-user expansion.
+
+Both need a shell parse. **This list is not exhaustive** — a second adversarial review pass
+found further spellings that reach the same resources and are net auto-approved. All were
+measured **pre-existing** (identical verdicts at `c5a9101`, before this change), so they are
+tracked separately rather than expanding this fix:
+
+- **#116** — glob (`~/.s*h/*` dumps a key directory in one auto-approved command), case
+  (`/ETC` resolves to the same inode on a case-insensitive volume), quote/brace splitting.
+- **#117** — a protected name is matched only as the **leading** path component, leaving
+  `/private/etc`, `/private/var` and `/Users/../etc` open.
+
+⚠ #117 is **not** fixed by weakening the left lookbehind — that is exactly what produced the
+Rails/Remix false-positive blocker documented above. Do not re-derive that fix.
+
+Do not read this release as closing the class. It closes the bare spelling of the leading
+path component, which is what #114 reported.
+
+### Documentation — corrected in place (#75 policy)
+
+- **The exposure-bound claim in `security-blocker.ts` was overstated and is now
+  corrected.** It read that what bounds the exposure is that `BASH_SECRET_PATTERNS`
+  "run first and independently". That holds for only **half** of them. The patterns
+  split into *self-identifying* (`.env`, `kubeconfig`, `*.key` — match on filename
+  alone, so a `cd` cannot separate a name from its own pattern) and *prefix-dependent*
+  (`.ssh/id_`, `/etc/shadow`, `/root/`, `/run/secrets/` — need a directory component,
+  and a `cd` defeats them). The KNOWN GAPS block asserted exactly the two cases where
+  the claim held; it now pins the distinction instead.
+
+### Notes on the #99 coupling
+
+- **#114's own framing — that closing it "converts #99's five documented gaps into live
+  bypasses" — is measured false.** Those gaps are unchanged by this fix: all **40**
+  pre-existing tests in `security-blocker-macos-temp.test.ts` still pass (43 after the
+  3 added here — counted by running the file at `c5a9101`, not by counting `it(` blocks,
+  which loops make wrong), with the five gaps still pinned `false`.
+  The bare patterns cannot fire on them, because the exempt path's only `/var` occurrence
+  is followed by `/folders` and a bare rule never matches a name followed by `/`. What
+  *did* change is their standing: gap #4 is now **load-bearing rather than redundant**,
+  and is pinned as such.
+- **The #99 exemption carries the mirror-image asymmetry, and it fails safe.** `(?!folders\/)`
+  requires a trailing separator too, so the bare parent `/var/folders` falls *outside* the
+  exemption and is denied by the #99 rule itself. #114 failed **open**; this fails **closed**.
+  Left as-is deliberately and pinned, so a future "consistency" edit has to argue with a test.
+
+### Tests
+
+- New `security-blocker-bare-dirs.test.ts` (25 tests): the reported defect measured through
+  the real wired entry point, both secret classes, the #99 exemption pinned as untouched,
+  and non-regression cases (`/etcetera`, `/etc-backup`, `/user`, `/variables`, `/rootfs`)
+  verified to genuinely discriminate — a loosened lookahead fails them.
+- Must-fail controls derive from the **exported** arrays and assert through
+  `matchesBashSensitivePattern(...).pattern`. PR #113 shipped a control that compared two
+  locally re-declared literals and stayed green when the whole fix was reverted; this one
+  throws at import if a pattern is missing.
+- ctk 2645 pass · shared 1415 · dtk/atk/ftk/etk 963 each · corpus fp=0, fn=0.
+
 ## [2.17.5] - 2026-08-02 — macOS per-user temp paths are no longer denied (#99)
 
 ### Fixed

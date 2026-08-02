@@ -47,8 +47,11 @@ import {
  */
 const NARROWED = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('(?!folders'));
 const TRAVERSAL_GUARD = BASH_SYSTEM_DIR_PATTERNS.find((r) => r.source.includes('\\.\\.'));
-if (!NARROWED || !TRAVERSAL_GUARD) {
-  throw new Error('#99 patterns missing from BASH_SYSTEM_DIR_PATTERNS — the fix was reverted');
+const BARE_VAR_114 = BASH_SYSTEM_DIR_PATTERNS.find(
+  (r) => r.source === '(?<![\\w.-])\\/var(?![\\w\\-/])'
+);
+if (!NARROWED || !TRAVERSAL_GUARD || !BARE_VAR_114) {
+  throw new Error('#99/#114 patterns missing from BASH_SYSTEM_DIR_PATTERNS — a fix was reverted');
 }
 
 // Assembled from fragments so this test file's own text carries no protected
@@ -253,6 +256,73 @@ describe('#99 macOS per-user temp tree', () => {
       // These are why the gaps above are a bounded trade rather than an opening.
       expect(denied(`cat "${TMP}${S}my dir${S}..${S}..${S}.ssh${S}id_rsa"`)).toBe(true);
       expect(denied(`cat "${TMP}${S}my dir${S}..${S}..${S}.env"`)).toBe(true);
+    });
+
+    it('⚠ CORRECTED (#114): that bound covers only HALF the secret patterns', () => {
+      // The assertion above is true and was over-generalised into a claim that
+      // the secret patterns bound this whole class. They do not — it tested the
+      // two cases where the bound happens to hold. The patterns split in two:
+      //
+      //   SELF-IDENTIFYING  match on the filename alone (`.env`, `kubeconfig`,
+      //                     `*.key`). A `cd` cannot separate a name from its own
+      //                     pattern, so these really do self-defend.
+      //   PREFIX-DEPENDENT  need a directory component (`.ssh/id_`,
+      //                     `/etc/shadow`, `/root/`, `/run/secrets/`). A `cd`
+      //                     splits the directory away and defeats them.
+      //
+      // Measured on 2.17.5, BEFORE #114: 6 of 12 were defeated this way,
+      // including `cd ~/.ssh && cat id_rsa` — AUTO-APPROVED, no prompt. Both
+      // halves are pinned in security-blocker-bare-dirs.test.ts; these two rows
+      // pin the distinction here, where the over-general claim was made.
+      expect(denied(`cd ~${S}.ssh && cat id_rsa`)).toBe(true); // was ALLOW pre-#114
+      expect(denied(`cd ${S}srv && cat .env`)).toBe(true); // self-identifying, always held
+    });
+
+    it('⚠ gap #4 is now LOAD-BEARING, not redundant (#114)', () => {
+      // Before #114, every top-level system dir was reachable by naming it bare
+      // and going relative, so these gaps added no resource that was not already
+      // open — which is what made #113's "no new resource is reachable" true.
+      // #114 closed that easier route. The gaps below did not change (they are
+      // still pinned `false` above, and #114's fix cannot fire on them: the
+      // exempt path's only /var occurrence is followed by `/folders`, and the
+      // bare rules never match a name followed by `/`).
+      //
+      // What changed is their STANDING: traversal out of the exempt tree is now
+      // the remaining route rather than the redundant one. It cannot be closed
+      // by regex — deciding where a path resolves needs a shell parse.
+      expect(denied(`cd ${TMP} && cat ..${S}..${S}..${S}log${S}system.log`)).toBe(false);
+      // …while the bare form #114 closed is denied, which is the asymmetry.
+      //
+      // ⚠ THIS ROW WAS TAUTOLOGICAL AND REVIEW CAUGHT IT. It used `${VAR}`,
+      // which is defined at the top of this file WITH a trailing separator, so
+      // it tested `cd /var/ …` — matched by the pre-existing #99 rule both
+      // before and after #114. It passed on a full revert of the fix while
+      // being cited as the proof of the fix. The genuine bare form has no
+      // trailing separator, and the attribution is asserted so it cannot drift
+      // back into testing the other rule.
+      const bare = `cd ${S}var && cat log${S}system.log`;
+      const hit = matchesBashSensitivePattern(bare);
+      expect(hit.matched).toBe(true);
+      expect(hit.pattern).toBe(BARE_VAR_114.source);
+    });
+
+    it('the #99 exemption has the MIRROR of #114, and it fails SAFE', () => {
+      // Found while writing the test above, by measuring an assertion I had
+      // reasoned my way to and got wrong. The exemption is `(?!folders\/)` —
+      // it requires `folders/` WITH a trailing separator, so the bare parent
+      // directory falls OUTSIDE the exemption and is denied by the #99 rule
+      // itself (not by #114's bare rules, which never fire on a name followed
+      // by `/`). Same trailing-separator asymmetry as #114, opposite direction.
+      //
+      // This is left as-is deliberately: #114 failed OPEN (a bare name escaped
+      // protection), this fails CLOSED (a bare name loses an exemption). Only
+      // the first is a security defect. Pinned so the asymmetry is visible and
+      // a future "consistency" edit has to argue with a test.
+      const hit = matchesBashSensitivePattern(`cd ${VAR}folders && cat ..${S}log${S}system.log`);
+      expect(hit.matched).toBe(true);
+      expect(hit.pattern).toBe(NARROWED.source);
+      // The per-user temp dirs BELOW it — the ones #99 exists for — stay exempt.
+      expect(denied(`sh ${TMP}${S}install.sh`)).toBe(false);
     });
   });
 });
