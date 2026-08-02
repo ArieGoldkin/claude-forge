@@ -164,15 +164,45 @@ describe('#116 shell-expandable path operands', () => {
       // reach inside `'…'` and start consuming the following character.
       expect(hasExpandablePathGlob(`cat '${S}tmp${S}a\\*b'`)).toBe(false);
     });
-    it('a flag is never a path operand', () => {
-      expect(hasExpandablePathGlob(`ls -la${S}*`)).toBe(false);
-    });
     it('an UNQUOTED pattern-flag value is still gated — the shell expands it', () => {
       // Pins the removal of the pattern-flag allowlist. Restoring that list
       // would make this false, which is the point: the list under-blocked.
       expect(hasExpandablePathGlob(`find apps -path *${S}node_modules${S}*`)).toBe(true);
       // ...while the QUOTED spelling people actually write stays inert.
       expect(hasExpandablePathGlob(`find apps -path "*${S}node_modules${S}*"`)).toBe(false);
+    });
+
+    // ⚠ THE TWO BLOCKS BELOW EXIST BECAUSE REVIEW OF PR #120 FOUND BOTH DEFECTS
+    // IN CODE THAT ALREADY HAD "PASSING" TESTS. Each pins a spelling whose only
+    // difference from an adjacent, already-covered one is the thing under test.
+    it('a token that merely LOOKS like a flag is still inspected', () => {
+      // A blanket `startsWith('-')` skip lived here and no test exercised it —
+      // deleting it changed nothing, which is how a dead guard hides. It also
+      // re-opened the pattern-flag hole by the back door: `--include=<pattern>`
+      // is ONE token beginning with `-`, and `=` is the only form that flag
+      // takes. Restore the skip and this row goes false.
+      expect(hasExpandablePathGlob(`grep -rn --include=*${S}.s*h${S}* x ~`)).toBe(true);
+      // The everyday spelling has no separator after its wildcard, so removing
+      // the skip costs nothing — that pairing is what makes the row above a
+      // statement about the SEPARATOR rather than about the leading dash.
+      expect(hasExpandablePathGlob('grep -rn --include=*.ts x src')).toBe(false);
+    });
+
+    it('whitespace inside a quoted path does not defeat the quote tracking', () => {
+      // A plain split(/\s+/) cut this into two tokens, the second BEGINNING mid
+      // quote, so its opening `"` read as the START of a quoted region and every
+      // metacharacter after it looked inert. The spelling WITH a space was
+      // auto-approved while the one WITHOUT deferred, though the shell expands
+      // both. The pair is the control: they must agree.
+      expect(hasExpandablePathGlob(`cat "${S}some dir"${S}.s*h${S}*`)).toBe(true);
+      expect(hasExpandablePathGlob(`cat "${S}somedir"${S}.s*h${S}*`)).toBe(true);
+    });
+
+    it('a genuinely quoted operand containing whitespace stays inert', () => {
+      // The other direction: quote-aware tokenising must not turn every spaced
+      // quoted string into a gate. Without this, the row above could be
+      // satisfied by a tokeniser that simply stopped tracking quotes at all.
+      expect(hasExpandablePathGlob(`cat "${S}some dir${S}.s*h${S}*"`)).toBe(false);
     });
   });
 
@@ -189,6 +219,14 @@ describe('#116 shell-expandable path operands', () => {
       // literal appears at all. Untouched here — listed so the boundary of this
       // fix is explicit rather than inferred.
       ['no protected literal appears', `cd ${S} && cat ${ETC}${S}${PW}`],
+      // ⚠ A RECURSIVE READER ROOTED AT AN UNPROTECTED ANCESTOR reaches the same
+      // material with NO metacharacter, NO flag and NO protected literal in its
+      // text, so no rule in this file can see it. Surfaced while checking a
+      // PR #120 review finding, which had framed the flag spelling as the hole;
+      // this is the class that spelling belongs to, and it is much wider.
+      // Tracked separately — listed here so the gate is not mistaken for a
+      // guarantee that a wildcard is the only way to reach a key directory.
+      ['recursive reader, no metacharacter at all', 'grep -r x ~'],
     ];
     for (const [label, cmd] of gaps) {
       it(`still AUTO-APPROVED (tracked in #116): ${label}`, async () => {

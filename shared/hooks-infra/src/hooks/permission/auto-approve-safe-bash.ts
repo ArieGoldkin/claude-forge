@@ -444,21 +444,34 @@ export function hasSafePrefix(command: string): boolean {
 const GLOB_METACHARS = new Set(['*', '?', '[', '{']);
 
 /*
- * ⚠ THERE IS DELIBERATELY NO "PATTERN FLAG" ALLOWLIST HERE, AND ADDING ONE IS A
- * REGRESSION. An earlier revision of this fix skipped the value of `-name`,
- * `-iname`, `-path`, `--include` and friends on the theory that those are
- * matched by the TOOL rather than expanded by the shell. Measured against the
- * corpus below it saved ZERO false prompts — the quote tracking in
- * `expandableGlobIndex` already covers the common spelling, because people
- * write `find . -iname "*.tsx"` with the quotes that make it work.
+ * ⚠ NO TOKEN IS SKIPPED FOR LOOKING LIKE A FLAG, AND RE-ADDING THAT SKIP IS A
+ * REGRESSION. Two successive attempts to exempt "pattern arguments" were made
+ * and both were removed on measurement:
  *
- * It was also wrong in principle, which is the reason it is called out rather
- * than quietly dropped: an UNQUOTED pattern value whose wildcard is followed by
- * a path separator is expanded by the shell BEFORE find ever runs, so skipping
- * it under-blocks the exact case the quotes were protecting. A list that costs
- * a maintenance surface, buys nothing measurable, and is unsound on its own
- * terms is not a narrowing. Both spellings are pinned in
- * tests/permission/auto-approve-glob.test.ts — quoted inert, unquoted gated.
+ *   1. An allowlist of `-name`, `-iname`, `-path`, `--include` and friends,
+ *      skipping the token AFTER each. Saved ZERO false prompts on the corpus —
+ *      quote tracking already covers the spelling people actually write, since
+ *      `find . -iname "*.tsx"` needs those quotes to work.
+ *   2. A blanket `token.startsWith('-')` skip. Also saved ZERO, was never
+ *      exercised by any test, and re-opened by the back door exactly what (1)
+ *      was removed for: `--include=<pattern>` is ONE token starting with `-`,
+ *      and the `=` form is the only spelling that flag accepts. Found by review
+ *      of PR #120 — deleting the line changed no test's outcome, which is how a
+ *      dead guard hides.
+ *
+ * Both were unsound on the same point: an UNQUOTED pattern value whose wildcard
+ * is followed by a path separator is expanded by the shell BEFORE the tool ever
+ * runs. A rule that costs a maintenance surface, buys nothing measurable, and
+ * is unsound on its own terms is not a narrowing. Removing the skip likewise
+ * costs zero — an ordinary `--include=*.ts` has no separator after its wildcard
+ * and is not rooted, so neither branch fires. All of these spellings are pinned
+ * in tests/permission/auto-approve-glob.test.ts.
+ *
+ * ⚠ THIS DOES NOT MAKE A RECURSIVE READER SAFE, AND MUST NOT BE READ THAT WAY.
+ * `grep -r x ~` reaches the same key material with no metacharacter, no flag and
+ * no protected literal anywhere in its text, and is auto-approved today —
+ * measured, and tracked separately. Gating the flag spelling would have been
+ * theatre if sold as closing that class; it is kept only because it is free.
  */
 
 /**
@@ -501,6 +514,48 @@ function expandableGlobIndex(token: string): number {
     if (quote === null && ch !== undefined && GLOB_METACHARS.has(ch)) return i;
   }
   return -1;
+}
+
+/**
+ * Split a segment into tokens on whitespace that is OUTSIDE quotes.
+ *
+ * ⚠ A PLAIN `split(/\s+/)` SILENTLY DEFEATS THE QUOTE TRACKING ABOVE, and that
+ * is not theoretical — review of PR #120 measured it. Splitting first cuts
+ * `cat "/some dir"/.s*h/*` into two tokens, and the second one BEGINS in the
+ * middle of a quoted region; `expandableGlobIndex` then reads its opening `"`
+ * as the START of a quote and treats every following metacharacter as inert.
+ * Net result: the spelling with a space was AUTO-APPROVED while the identical
+ * spelling without one deferred, though the shell expands both. Tokenising with
+ * quote state carried through is what makes "outside quotes" true of the whole
+ * function rather than only of one half of it.
+ *
+ * Costs nothing: measured against the corpus below, it adds zero false prompts.
+ */
+function splitOutsideQuotes(segment: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === undefined) continue;
+    if (ch === '\\' && quote !== "'" && i + 1 < segment.length) {
+      current += ch + segment[i + 1];
+      i++;
+      continue;
+    }
+    if (quote === null && (ch === '"' || ch === "'")) quote = ch;
+    else if (quote !== null && ch === quote) quote = null;
+    if (quote === null && /\s/.test(ch)) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.length > 0) tokens.push(current);
+  return tokens;
 }
 
 /**
@@ -569,12 +624,7 @@ function isRootedOperand(token: string): boolean {
  * @returns True if auto-approval should be withheld for this segment
  */
 export function hasExpandablePathGlob(segment: string): boolean {
-  const tokens = segment
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length > 0);
-  for (const token of tokens) {
-    if (token.startsWith('-')) continue;
+  for (const token of splitOutsideQuotes(segment)) {
     const g = expandableGlobIndex(token);
     if (g === -1) continue;
     // (a) rooted outside the project, or (b) the metacharacter sits inside a

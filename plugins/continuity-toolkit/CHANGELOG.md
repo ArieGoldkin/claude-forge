@@ -57,13 +57,43 @@ Two refinements came out of the same measurement rather than from judgement:
 Backslash-escape handling is kept for correctness and saves **zero** false prompts on
 the corpus. Recorded rather than dressed up as a benefit.
 
-### Known gaps — #116 stays OPEN
+### Addressed from review of #120
+
+Two defects in the gate itself, both found by review and both fixed at **zero**
+measured cost against the same 2,801-command corpus:
+
+- **A `token.startsWith('-')` skip re-opened by the back door exactly what removing
+  the pattern-flag allowlist had closed.** `--include=<pattern>` is ONE token starting
+  with `-`, and `=` is the only form that flag accepts, so
+  `grep -rn --include=*/.s*h/* x ~` was AUTO-APPROVED while its literal spelling was
+  DENIED. The line was also exercised by no test at all — deleting it changed nothing,
+  which is how a dead guard hides. Removed; no token is skipped for looking like a flag.
+- **Whitespace inside a quoted path defeated the quote tracking.** Tokenising with
+  `split(/\s+/)` before scanning cut `cat "/some dir"/.s*h/*` into two tokens, the
+  second beginning mid-quote, so its opening `"` read as the START of a quoted region
+  and every metacharacter after it looked inert. The spelling **with** a space was
+  auto-approved while the identical one **without** deferred, though the shell expands
+  both. Tokenising now carries quote state through.
+
+The mutation battery is now **seven** controls, all verified failing — the two above
+are pinned by spellings whose only difference from an adjacent covered row is the thing
+under test.
+
+### Known gaps — #116 stays OPEN, and a wider class is now #121
 
 - **Quote-splitting is untouched**: `cat "/e""tc/passwd"`, `cat /e''tc/passwd` and
   `cat ~/.s"s"h/id_rsa` carry no metacharacter at all, so no glob rule can reach
   them. Closing them needs quote-stripping normalization, the remaining half.
 - `cd / && cat etc/passwd` writes no protected literal and no metacharacter. That gap
   is pre-existing, documented in `BASH_SYSTEM_DIR_PATTERNS`, and untouched here.
+- ⚠ **A recursive reader rooted at an unprotected ancestor is a WIDER class than this
+  gate closes, and is now issue #121.** `grep -r x ~` reaches the same key material
+  with no wildcard, no flag and no protected literal anywhere in its text — nine such
+  spellings measured AUTO-APPROVED, `grep -r x /Users` among them. It surfaced while
+  checking the flag-value finding above: closing that spelling would have been theatre
+  if sold as closing the class, since the same resource is reachable with no flag at
+  all. The producer there is the **tool**, not the shell, so no shell-expansion
+  analysis reaches it. Pinned as a known gap rather than left implied.
 
 ### Testing
 

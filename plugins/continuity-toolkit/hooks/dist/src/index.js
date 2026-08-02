@@ -3768,14 +3768,38 @@ function expandableGlobIndex(token) {
   }
   return -1;
 }
+function splitOutsideQuotes(segment) {
+  const tokens = [];
+  let current = "";
+  let quote = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === void 0) continue;
+    if (ch === "\\" && quote !== "'" && i + 1 < segment.length) {
+      current += ch + segment[i + 1];
+      i++;
+      continue;
+    }
+    if (quote === null && (ch === '"' || ch === "'")) quote = ch;
+    else if (quote !== null && ch === quote) quote = null;
+    if (quote === null && /\s/.test(ch)) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.length > 0) tokens.push(current);
+  return tokens;
+}
 function isRootedOperand(token) {
   const bare = token.replace(/^["']+/, "");
   return bare.startsWith("/") || bare.startsWith("~") || bare.startsWith("$HOME") || bare.startsWith("${HOME}");
 }
 function hasExpandablePathGlob(segment) {
-  const tokens = segment.trim().split(/\s+/).filter((t) => t.length > 0);
-  for (const token of tokens) {
-    if (token.startsWith("-")) continue;
+  for (const token of splitOutsideQuotes(segment)) {
     const g = expandableGlobIndex(token);
     if (g === -1) continue;
     if (isRootedOperand(token)) return true;
