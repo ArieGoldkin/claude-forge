@@ -175,6 +175,15 @@ export type HookLivenessVerdict = 'healthy' | 'suspect' | 'unknown';
  * *hooked tool calls*, which would have fired on long agentic turns; keying on
  * user prompts makes a long turn identical to a healthy session by construction.
  * This grace covers a measured write-ordering race, not a behavioural guess.
+ *
+ * **One consequence worth knowing.** `context-monitor` is registered with
+ * `timeout: 2`, so a single invocation that exceeds it leaves that prompt
+ * unstamped; if the user then sits idle for longer than this grace, the banner
+ * appears. That is arguably *correct* — a hook that timed out genuinely did not
+ * run, and the banner's claim is that hooks are not running — and it self-heals
+ * on the next prompt that does stamp. It is documented rather than suppressed
+ * because widening the grace to hide it would blunt real detection, and
+ * suppressing it would mean deciding that some non-runs do not count.
  */
 export const LIVENESS_RACE_GRACE_MS = 30_000;
 
@@ -236,9 +245,18 @@ export function readHookLiveness(sessionId: string): HookLivenessRecord | null {
  * `promptSource` is Claude Code's own marker for a submitted prompt (observed
  * values: `typed`, `queued`, `system`, `suggestion_accepted` — all four are
  * followed by `UserPromptSubmit` firings at comparable rates, so none is
- * special-cased). It is absent from **0%** of the four non-submitting classes and
- * present on 91% of genuine prompts; the missing 9% simply go undetected, which
- * is the safe direction.
+ * special-cased). No record in any of the four non-submitting classes carries it.
+ *
+ * Coverage is **partial**, and the reproducible way to state that is per session
+ * rather than per record: in **0 of 99** local sessions did every genuine prompt
+ * lack the marker, so there is no session — and no CC version between 2.1.191 and
+ * 2.1.220, which is the range this corpus spans — for which the reader is
+ * permanently inert. Per-*record* coverage depends on how "genuine prompt" is
+ * labelled, and there is no mechanical way to do that (this module's own figure
+ * came from content-matching the four classes, which a reader cannot reconstruct;
+ * a reviewer using a different denominator measured a different number, and both
+ * were right about different things). Whatever the denominator, an unmarked
+ * prompt can only cause a **missed** alarm, never a false one.
  *
  * **Allowlist, not denylist, is the load-bearing choice.** If Claude Code renames
  * or drops this field, every record fails the predicate, no prompt is found, and
