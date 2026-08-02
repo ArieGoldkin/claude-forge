@@ -234,7 +234,13 @@ export function matchesGitPush(command: string): boolean {
  * — the point that decided it — **both have lowercase twins that are ALREADY
  * denied at baseline**, because the qualified rules carry no left boundary. `i`
  * makes an existing over-broad class case-consistent; it does not create one.
- * That pre-existing class is filed separately, not widened here.
+ * That pre-existing class is #118, not widened here.
+ *
+ * ⚠ #118 IS COUPLED TO #117 — READ BOTH BEFORE TOUCHING THE QUALIFIED RULES.
+ * Their missing left boundary is also the ONLY reason `/private/etc/passwd` and
+ * `/private/var/root/.ssh/id_rsa` are denied today (measured). Adding the
+ * boundary to fix #118's false positives converts both into real bypasses. The
+ * obvious fix is the dangerous one, exactly as it was for #117.
  *
  * ⚠ `cat .ENV` STAYS OPEN, deliberately. Closing it requires `i` on the env-file
  * rules, which denies the docker idiom above. A new denial surface on an
