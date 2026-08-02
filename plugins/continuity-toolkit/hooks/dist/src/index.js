@@ -3034,65 +3034,83 @@ var BASH_SECRET_PATTERNS = [
   // Verified end-to-end against the compiled hook, not just the bare regex.
   /(?<![\w.-])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.envrc\b/,
   /(?<![\w.-])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
-  /\.ssh\/id_/,
-  /\.ssh\/.*\.pem/,
+  /\.ssh\/id_/i,
+  /\.ssh\/.*\.pem/i,
   // #114: both patterns above are PREFIX-DEPENDENT — they need the `.ssh/`
   // component, so `cd ~/.ssh && cat id_rsa` split the directory away from the
   // filename and was AUTO-APPROVED. Measured on 2.17.5, not hypothesised.
-  /(?<![\w.-])\.ssh(?![\w\-/])/,
+  /(?<![\w.-])\.ssh(?![\w\-/])/i,
   // #114 REVIEW: the rule above declines on a TRAILING separator, so one extra
   // character — `cd ~/.ssh/ && cat id_rsa` — walked straight back through it.
   // The two qualified rules above are narrower than the directory they protect
   // (`id_` prefix, `.pem` suffix), so `.ssh/config`, `.ssh/known_hosts` and
   // `.ssh/authorized_keys` were never covered at all. Blanket the directory:
   // nothing under it is a casual read.
-  /(?<![\w.-])\.ssh\//,
+  /(?<![\w.-])\.ssh\//i,
   // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks
   // `env`/`printenv`; without this, reading the same secrets straight out of
   // procfs walks around that control entirely.
-  /\/proc\/[^/\s]+\/environ\b/,
+  /\/proc\/[^/\s]+\/environ\b/i,
   // Credential material that lives under otherwise-readable system trees.
-  /\/etc\/ssl\/private\//,
-  /\/etc\/(?:kubernetes|docker)\//,
-  /\/var\/run\/secrets\//,
-  /\/run\/secrets\//,
+  /\/etc\/ssl\/private\//i,
+  /\/etc\/(?:kubernetes|docker)\//i,
+  /\/var\/run\/secrets\//i,
+  /\/run\/secrets\//i,
   // #114: same trailing-separator defect — `cd /run/secrets && cat tok`.
-  /(?<![\w.-])\/run\/secrets(?![\w\-/])/,
+  /(?<![\w.-])\/run\/secrets(?![\w\-/])/i,
   // Require a NAME before the extension and reject a property-access or
   // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
   // `schema.key.ts` — a fresh instance of the very over-blocking this release
   // exists to fix, and a deny inside a fork is terminal.
+  // ⚠ #116: NO `i` ON THE NEXT TWO — DO NOT "FIX" THE INCONSISTENCY. Measured:
+  // `i` here denies `item.Key` / `pair.Key` (the .NET KeyValuePair idiom) and
+  // `export KUBECONFIG=…` (the universal spelling of that env var). See the
+  // CASE RULE block in this array's docstring.
   /[\w-]+\.(?:key|keytab|p12|pfx|jks)\b(?![\w(.])/,
   /\bkubeconfig\b/,
   // Credential-bearing files under /etc. The directory as a whole is only
   // mutation-gated (reading /etc/hosts is routine), but these specific entries
   // are secrets or account data and stay read-blocked.
-  /\/etc\/(?:passwd|shadow|sudoers|gshadow|master\.passwd)\b/,
-  /\/etc\/ssh\//,
+  // #116: this rule is the flagship of the case fix — `cat /ETC/passwd` reads
+  // the account file on any default macOS volume and was AUTO-APPROVED.
+  /\/etc\/(?:passwd|shadow|sudoers|gshadow|master\.passwd)\b/i,
+  /\/etc\/ssh\//i,
   // Another user's home directory — never a legitimate read for our purposes.
+  // ⚠ #116: NO `i` ON THE NEXT TWO EITHER, and this one is the counter-intuitive
+  // exclusion. `i` costs Tomcat's `webapps/ROOT/` and buys NOTHING: `/root` does
+  // not exist on macOS (root's home is `/var/root`, already covered by the
+  // case-insensitive `/var` rule — verified in both spellings), and Linux
+  // volumes are case-sensitive, so `/ROOT` is simply a different path there.
   /\/root\//,
   // #114: `cd /root && cat k` — the bare form, with no trailing separator.
   /(?<![\w.-])\/root(?![\w\-/])/,
   // macOS temp/home trees. Kept as always-block rather than mutation-gated:
   // the scratchpad carve-out below already solves the false-positive that
   // motivated relaxing these, so there is no reason to widen read access.
-  /\/private\/tmp\/(?!claude-\d+\/)/,
+  // #116: as with /var/folders above, the `i` also case-folds the claude-NNN
+  // scratchpad exemption. Correct rather than widening — `/private/tmp/CLAUDE-1`
+  // and `/private/tmp/claude-1` are one directory on a case-insensitive volume.
+  /\/private\/tmp\/(?!claude-\d+\/)/i,
   // #114 REVIEW: this and /private/home carry the SAME trailing-separator
   // defect and were missed by the first pass, while the CHANGELOG read as a
   // complete closure. `ls /private/tmp` was AUTO-APPROVED. The bare rule never
   // fires on a qualified path, so the claude-NNN scratchpad exemption above is
   // untouched — verified, not assumed.
-  /(?<![\w.-])\/private\/tmp(?![\w\-/])/,
+  /(?<![\w.-])\/private\/tmp(?![\w\-/])/i,
   // Companion guard — bash patterns match RAW command text with no `..`
   // normalization, so a traversal spelled from inside the allowed prefix
   // would otherwise slip past the lookahead above.
-  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/,
-  /\/private\/home\//,
-  /(?<![\w.-])\/private\/home(?![\w\-/])/
+  /\/private\/tmp\/claude-\d+\/\S*\.\.(\/|\s|$)/i,
+  /\/private\/home\//i,
+  /(?<![\w.-])\/private\/home(?![\w\-/])/i
 ];
 var BASH_SYSTEM_DIR_PATTERNS = [
-  /\/etc\//,
-  /\/usr\//,
+  // #116: EVERY rule below carries `i`. The default macOS volume is
+  // case-insensitive, so `/ETC/passwd` reaches the same inode as `/etc/passwd`
+  // and was AUTO-APPROVED — measured, not hypothesised. See the CASE RULE block
+  // above BASH_SECRET_PATTERNS for which rules are excluded and why.
+  /\/etc\//i,
+  /\/usr\//i,
   // #99: macOS puts each user's TMPDIR under /var/folders/, so any build,
   // installer, or test harness that writes there and then runs the result was
   // denied. That is ordinary work, not a risky operation. Narrowed rather than
@@ -3102,7 +3120,11 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // /private/var, and `/private/var/folders/` contains `/var/folders/` as a
   // substring, so the lookahead suppresses the private spelling too. Verified,
   // not assumed — see the both-spellings cases in security-blocker-macos-temp.
-  /\/var\/(?!folders\/)/,
+  // #116 note: the `i` makes the NEGATIVE LOOKAHEAD case-insensitive too, so
+  // `/VAR/FOLDERS/` is exempted exactly like `/var/folders/`. That is correct,
+  // not a widening — on the case-insensitive volume they are the same directory.
+  // Verified end to end, both spellings, in security-blocker-case.test.ts.
+  /\/var\/(?!folders\/)/i,
   // Partial traversal guard, mirroring the scratchpad carve-out above. It
   // catches the CONTIGUOUS form — `/var/folders/x/../../../log/system.log` —
   // which is what a build tool or installer actually emits by accident.
@@ -3145,10 +3167,10 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // are prefix-dependent and were not defeated; both facts are true at once.
   // The flagship casualty was `cd ~/.ssh && cat id_rsa` — AUTO-APPROVED.
   // The dangerous-bash registry still runs before both.
-  /\/var\/folders\/\S*\.\.(\/|\s|$)/,
-  /\/sys\//,
-  /\/proc\//,
-  /\/boot\//,
+  /\/var\/folders\/\S*\.\.(\/|\s|$)/i,
+  /\/sys\//i,
+  /\/proc\//i,
+  /\/boot\//i,
   // #114: every pattern above requires a TRAILING SEPARATOR, so a bare
   // directory name was unmatched and `auto-approve-safe-bash` then approved the
   // command with no prompt — `ls /etc` and `cd /etc && cat passwd` alike. Note
@@ -3188,12 +3210,12 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // ⚠ #117 is NOT fixed by weakening the lookbehind below — that is precisely
   // what shipped the Rails/Remix false-positive blocker. Read the postscript in
   // docs/reviews/2026-08-02_114-99-coupling-investigation.md first.
-  /(?<![\w.-])\/etc(?![\w\-/])/,
-  /(?<![\w.-])\/usr(?![\w\-/])/,
-  /(?<![\w.-])\/var(?![\w\-/])/,
-  /(?<![\w.-])\/sys(?![\w\-/])/,
-  /(?<![\w.-])\/proc(?![\w\-/])/,
-  /(?<![\w.-])\/boot(?![\w\-/])/
+  /(?<![\w.-])\/etc(?![\w\-/])/i,
+  /(?<![\w.-])\/usr(?![\w\-/])/i,
+  /(?<![\w.-])\/var(?![\w\-/])/i,
+  /(?<![\w.-])\/sys(?![\w\-/])/i,
+  /(?<![\w.-])\/proc(?![\w\-/])/i,
+  /(?<![\w.-])\/boot(?![\w\-/])/i
 ];
 [
   ...BASH_SECRET_PATTERNS,
