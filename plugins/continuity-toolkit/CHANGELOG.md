@@ -2,6 +2,92 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.18.0] - 2026-08-02 — the statusline announces a mid-session hook outage (#82)
+
+### Added
+
+- **The statusline now warns when this session's ctk hooks have stopped running.** ctk cannot
+  detect its own absence — every mechanism it owns is a plugin hook, and a plugin hook does not
+  run when the plugin is unloaded. The statusline is the one channel that survives, because CC
+  launches it from `settings.json` with no plugin machinery involved. The marker *writer* has
+  shipped since 2.17.x; this adds the reader, which was designed, built, reviewed twice and
+  **cut before release**, together with fixes for all three defects it was cut for:
+
+  1. **Architectural.** It asked *"is a stamping-capable ctk **installed**?"* when the question
+     is *"are the **loaded** hooks capable?"*, so a mid-session ctk upgrade would have displayed
+     "no security guardrails" on a perfectly healthy session — on the very upgrade that installs
+     the feature. Resolved by **never asking the capability question**: the stamp is compared
+     against the **last user prompt in the transcript**, so the evidence is the stamp itself and
+     never an install record. Absence of a marker is `unknown`, never `suspect`.
+  2. **Nothing pinned it** — deleting the entire user-visible warning left all six test trees
+     green. Now pinned by subprocess assertions against the built script's real stdout, and
+     **mutation-verified in both directions**: eleven mutations, all eleven killed — deleting the
+     banner, un-calling the reader, moving it back below the early returns, removing the
+     `promptSource` allowlist, neutralising each remaining guard, grace at 0 and at
+     `MAX_SAFE_INTEGER`, absent-marker ⇒ `suspect`, and removing the tail bound. Two mutations
+     first appeared to *survive*; both times the pattern had not matched (the formatter had
+     reflowed the code), so the battery now asserts the file actually changed before drawing any
+     conclusion from a green suite — a no-op mutation and a blind control look identical.
+  3. **Inert by placement** — it sat below four early returns in `main()`. The check now runs
+     above them, pinned by a test on a payload carrying no `context_window`.
+
+### Notes on two things the design did not specify, both settled by measurement
+
+- **The predicate is the whole feature, and it is an allowlist.** The question is not "does this
+  look like a user message?" but "did this raise `UserPromptSubmit`?" — that is the event whose
+  missing stamp is the alarm. CC writes `type: user` records for four things that raise no
+  `UserPromptSubmit`: tool results, built-in slash commands (`/model`, `/plugin`),
+  `<local-command-stdout>` echoes, and **interrupts** (pressing `Esc` mid-turn).
+
+  | predicate | false `suspect` verdicts |
+  |---|---|
+  | exclusion list (`type: user` minus tool results / meta / sidechain) | **493, across 73 of 113 transcripts** |
+  | allowlist (`promptSource` present) | **0, across 0 of 113** |
+
+  The exclusion list's worst case was the one the design calls safest: interrupting a long agentic
+  turn raised a "no security guardrails" banner precisely when nothing was wrong. The fix requires
+  CC's own `promptSource` marker — absent from **0%** of all four non-submitting classes, present
+  on 91% of genuine prompts (the missing 9% go undetected, the safe direction). Allowlist rather
+  than denylist is the load-bearing choice: if CC renames or drops the field, every record fails
+  the predicate and the verdict degrades to `unknown` — silent. A denylist fails the other way.
+
+  Verified by driving the **real built module** at **26,316 mid-session positions** across 113
+  transcripts: 0 false alarms, with a positive control confirming it still fires on a genuine
+  outage. ⚠ The first measurement of this predicate sampled each transcript only at its **final
+  state** and reported 0/20 — but only 16% of transcripts *end* on a non-submitting record, so it
+  was blind to the other 83%. The harness was wrong, not just the rule.
+- **A write-ordering race exists.** CC writes the prompt record *before* running
+  `UserPromptSubmit` hooks, so every healthy session is briefly "prompt newer than stamp" —
+  measured at **62–378 ms**. Without a grace window the statusline would flash the alarm on every
+  prompt. The grace is **30 s**, ~80× the measured worst case, and costs no detection: a real
+  outage never re-stamps, so the gap grows without bound and stays across.
+
+The reader tail-reads **2 MB** rather than whole transcripts, which run to a 4 MB median and 12 MB
+maximum locally while the last user prompt sits at most 1.6 MB from EOF (111/111 transcripts). A
+prompt outside the tail degrades to `unknown` — a missed alarm, never a false one.
+
+### ⚠ Scope — this does not close #82
+
+It catches **mid-session onset**: hooks that were stamping and stop. The one *observed*
+occurrence of #82 was a **session-start total unload**, where no hook ever ran, so no marker
+exists at all and the verdict is `unknown` — silent. Separating "hooks are dead" from "loaded
+hooks predate the writer" is precisely the capability question that got the first reader cut, so
+the blindness is forced rather than an oversight. The transcript's `hook_success` attachment
+records were evaluated as an alternative signal and **rejected**: they name the hook *event*, not
+the plugin (1.4% of 10,913 local attachment records carry any ctk fingerprint, and non-plugin
+hooks registered in `settings.json` keep producing them right through an unload). The issue's
+trigger remains unidentified and still needs a live recurrence.
+
+Silent mode (`CONTINUITY_STATUSLINE_SILENT=1`) suppresses the banner along with all other output,
+so a user who ceded the display to another statusline gets no warning — the same trade the
+fallback-string suppression already makes.
+
+### Fixed
+
+- Removed a dead test helper and a comment claiming the statusline keeps a per-session render
+  count "for the #82 liveness check". Nothing in `src/` has ever written that file; it was
+  residue from the cut reader, and it describes behaviour that does not exist.
+
 ## [2.17.9] - 2026-08-02 — `security-blocker` is documented as advisory; sandbox guidance added (ADR-0002)
 
 ### Changed

@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { writeFileSync, renameSync, readSync, existsSync, statSync, readFileSync } from 'fs';
+import { writeFileSync, renameSync, readSync, existsSync, statSync, readFileSync, openSync, fstatSync, closeSync } from 'fs';
 import { tmpdir } from 'os';
 import { resolve, basename, join } from 'path';
 import { fileURLToPath } from 'url';
 
 var DEFAULT_SESSION_ID = "default";
+var UNTRUSTED_SESSION_IDS = [DEFAULT_SESSION_ID, "unknown"];
+function isTrustedSessionKey(sessionId) {
+  return isSafeSessionId(sessionId) && !UNTRUSTED_SESSION_IDS.includes(sessionId);
+}
 function isSafeSessionId(value) {
   if (typeof value !== "string") return false;
   if (value.includes("..")) return false;
@@ -22,6 +26,96 @@ function resolveSessionId(candidate) {
 function sessionScopedTmpPath(prefix, sessionId) {
   const safe = isSafeSessionId(sessionId) ? sessionId : DEFAULT_SESSION_ID;
   return join(tmpdir(), `${prefix}${safe}.txt`);
+}
+
+// src/lib/hook-liveness.ts
+var HOOK_ALIVE_PREFIX = "claude-ctk-hook-alive-";
+function getHookLivenessPath(sessionId) {
+  return sessionScopedTmpPath(HOOK_ALIVE_PREFIX, sessionId);
+}
+var LIVENESS_RACE_GRACE_MS = 3e4;
+var TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024;
+function readHookLiveness(sessionId) {
+  if (!isTrustedSessionKey(sessionId)) return null;
+  try {
+    const raw = readFileSync(getHookLivenessPath(sessionId), "utf8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.at !== "string") return null;
+    return { at: parsed.at, hook: typeof parsed.hook === "string" ? parsed.hook : "?" };
+  } catch {
+    return null;
+  }
+}
+function isUserPromptRecord(record) {
+  if (record["type"] !== "user") return false;
+  if (!Object.hasOwn(record, "promptSource")) return false;
+  if (record["isMeta"] === true) return false;
+  if (record["isSidechain"] === true) return false;
+  const message = record["message"];
+  const content = message?.["content"];
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block && typeof block === "object" && block["type"] === "tool_result") {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+function readTranscriptTail(filePath) {
+  let fd;
+  try {
+    fd = openSync(filePath, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+    const length = size - start;
+    if (length <= 0) return null;
+    const buffer = Buffer.allocUnsafe(length);
+    const bytesRead = readSync(fd, buffer, 0, length, start);
+    if (bytesRead <= 0) return null;
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    if (start === 0) return text;
+    const firstBreak = text.indexOf("\n");
+    return firstBreak === -1 ? null : text.slice(firstBreak + 1);
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+function lastUserPromptAt(transcriptPath) {
+  const text = readTranscriptTail(transcriptPath);
+  if (text === null) return null;
+  let newest = null;
+  for (const line of text.split("\n")) {
+    if (!line || line.indexOf('"user"') === -1) continue;
+    let record;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isUserPromptRecord(record)) continue;
+    const at = Date.parse(String(record["timestamp"]));
+    if (Number.isNaN(at)) continue;
+    if (newest === null || at > newest) newest = at;
+  }
+  return newest;
+}
+function assessHookLiveness(input) {
+  const { sessionId, transcriptPath, graceMs = LIVENESS_RACE_GRACE_MS } = input;
+  if (!transcriptPath) return "unknown";
+  const marker = readHookLiveness(sessionId);
+  if (!marker) return "unknown";
+  const stampedAt = Date.parse(marker.at);
+  if (Number.isNaN(stampedAt)) return "unknown";
+  const promptAt = lastUserPromptAt(transcriptPath);
+  if (promptAt === null) return "unknown";
+  return promptAt - stampedAt > graceMs ? "suspect" : "healthy";
 }
 
 // src/statusline/context-percentage.ts
@@ -156,6 +250,16 @@ function extractPr(data) {
 }
 function extractSessionId(data) {
   return resolveSessionId(data["session_id"]);
+}
+function buildLivenessBanner(data) {
+  const transcriptPath = data["transcript_path"];
+  const verdict = assessHookLiveness({
+    sessionId: extractSessionId(data),
+    transcriptPath: typeof transcriptPath === "string" ? transcriptPath : void 0
+  });
+  if (verdict !== "suspect") return "";
+  return `${ANSI.RED}\u26A0 ctk hooks stopped responding \u2014 no security guardrails this session (#82)${ANSI.RESET}
+`;
 }
 function extractModelName(data) {
   const model = data["model"];
@@ -344,8 +448,9 @@ function readStdinSync() {
 }
 function main() {
   const silent = process.env["CONTINUITY_STATUSLINE_SILENT"] === "1";
+  let banner = "";
   const emit = (text) => {
-    if (!silent) process.stdout.write(text);
+    if (!silent) process.stdout.write(banner + text);
   };
   const raw = readStdinSync();
   if (!raw) {
@@ -361,6 +466,7 @@ function main() {
 `);
     return;
   }
+  banner = buildLivenessBanner(data);
   const contextWindow = data["context_window"];
   if (!contextWindow) {
     emit(`${FALLBACK_STATUS}
@@ -406,6 +512,6 @@ if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(proce
   main();
 }
 
-export { ANSI, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractSessionId, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch, isSafeSessionId };
+export { ANSI, buildLivenessBanner, buildProgressBar, extractCost, extractEffort, extractModelName, extractPr, extractRateLimits, extractSessionId, extractTokenUsage, extractWorkspaceName, extractWorktreePath, formatCost, formatDuration, formatEffortBadge, formatLine1, formatLine2, formatLine3, formatLine4, formatPrSegment, formatResetIn, formatStatusLine, formatTokenCount, getBarColor, getContextEmoji, getGitBranch, isSafeSessionId };
 //# sourceMappingURL=context-percentage.js.map
 //# sourceMappingURL=context-percentage.js.map

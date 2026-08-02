@@ -1,5 +1,5 @@
 /**
- * Tests for lib/hook-liveness — the #82 silent-total-unload detector (writer half).
+ * Tests for lib/hook-liveness — the WRITER half of the #82 detector.
  *
  * `node:fs` is mocked rather than exercised. An earlier revision of this module
  * wrote a machine-global arming flag, and the live install's copy of that flag was
@@ -8,10 +8,10 @@
  * lives in the real temp directory must not be tested against the real temp
  * directory.
  *
- * Only the writer ships. The passive statusline reader was cut before release
- * (see this module's header), so there is deliberately no reader to test here —
- * and no reader-side helper kept "for later", because an exported function with no
- * caller is how this repo ends up with public API nobody has ever run (#67).
+ * The reader ships too, and is tested in `hook-liveness-reader.test.ts`. It lives
+ * in its own file because it tail-reads a transcript by descriptor and offset —
+ * behaviour a whole-module `node:fs` mock cannot represent honestly — so it needs
+ * real files, which this file's mock exists to forbid.
  */
 
 import { renameSync, writeFileSync } from 'node:fs';
