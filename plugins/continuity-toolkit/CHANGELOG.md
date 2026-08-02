@@ -2,6 +2,66 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.7] - 2026-08-02 — protected path rules were case-sensitive (#116, case half)
+
+### Fixed
+
+- **Every protected-path rule was case-sensitive, and the default macOS volume is
+  not.** An upper- or mixed-case spelling of a protected directory reaches the same
+  inode, so those spellings matched no rule and `auto-approve-safe-bash` then
+  approved the command **with no prompt**. Measured end to end through
+  `bashCombined`, the real wired entry point — never at the bare regex. The
+  flagship case was reading the account file by its uppercase directory spelling,
+  and dumping a key directory by the uppercase home spelling. Fixed by adding the
+  `i` flag to every rule that matches a filesystem **path component**.
+
+### Deliberately NOT fixed — and why (each is a MEASURED false positive)
+
+Four rules keep case sensitivity. Making them case-insensitive was measured to deny
+ordinary work, and a denial is terminal for a subagent:
+
+| Rule | What `i` would newly deny |
+|---|---|
+| env-file rules | a container-inspect Go-template field, which is capitalised |
+| private-key extension family | the .NET dictionary-property idiom |
+| cluster-config filename | that tool's env var, whose uppercase spelling is universal |
+| superuser home | a popular servlet container's default webapp uses the uppercase name |
+
+The superuser-home exclusion also **buys nothing**: that directory does not exist on
+macOS (the account's home lives under the per-user tree, already covered by the
+case-folded rule), and Linux volumes are case-sensitive, so the uppercase spelling
+is simply a different path there. Pure cost, zero benefit.
+
+### Scope and known gaps
+
+- **Scope is the CASE half of #116 only.** The glob and quote/brace-splitting halves
+  are untouched, pinned as known gaps, and **#116 stays open**.
+- The uppercase env-file spelling stays reachable — closing it requires `i` on the
+  env-file rules, which denies the container-inspect idiom above. The more expensive
+  error is the new denial surface, so the gap is documented rather than closed.
+- **The remaining false-positive cost is not zero and is not claimed to be.** Two
+  contrived uppercase directory spellings are newly denied. Both have lowercase
+  twins that were **already denied before this change**, because the qualified rules
+  carry no left boundary — `i` makes an existing over-broad class case-consistent
+  rather than creating one. That pre-existing class is filed as **#118**, which also
+  records the trap: fixing it by adding a left boundary to the qualified rules turns
+  the `/private/`-prefixed spellings into real bypasses (measured), so #118 and #117
+  are coupled and must not be fixed independently.
+
+### Testing
+
+- New `security-blocker-case.test.ts` (39 tests). **It pins the `i` flag, which
+  `.source` cannot see** — the #114 tripwire looks patterns up by `.source`, and
+  flags are not part of it, so that tripwire stays green on a complete revert of
+  this fix. Verified by mutation: reverting the source file turns the new file red
+  (16 failures) while the #114 file stays green at 48/48.
+- The control asserts both directions — that the path rules **carry** `i` and that
+  the four excluded rules **do not**. Without the second half, "add `i` everywhere"
+  would satisfy every assertion in the file.
+- The #99 per-user-temp exemption is asserted in **both** spellings: the flag
+  case-folds its negative lookahead too, which is correct rather than widening.
+- ctk 2707 tests (+39), shared 1415 — both green, no pre-existing test changed.
+
 ## [2.17.6] - 2026-08-02 — bare system-directory names were auto-approved (#114)
 
 ### Fixed
