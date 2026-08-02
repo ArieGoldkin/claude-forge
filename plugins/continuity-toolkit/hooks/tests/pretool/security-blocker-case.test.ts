@@ -91,18 +91,31 @@ describe('#116 case-insensitive path rules', () => {
       });
     }
 
-    // The other half of the control. These four must STAY case-sensitive; each
-    // has a measured false positive behind it. Asserting their absence is what
-    // makes the block above non-tautological — otherwise "add i everywhere"
-    // would satisfy every assertion in this file.
+    // The other half of the control. These must STAY case-sensitive; each has a
+    // measured false positive behind it. Asserting their absence is what makes
+    // the block above non-tautological — otherwise "add i everywhere" would
+    // satisfy every assertion in this file.
+    //
+    // ⚠ THIS LIST IS EXHAUSTIVE, AND THE COMPLEMENT TEST BELOW ENFORCES THAT.
+    // It covers BOTH spellings of the two-rule pairs. An earlier draft named
+    // only four and silently omitted the `.envrc` sibling and the bare
+    // superuser-home rule — review of PR #119 proposed a complement assertion
+    // against that four-entry list, which would have compared a six-element set
+    // to a four-element list and failed. The omission was the real defect; the
+    // complement test is what makes it impossible to repeat.
     const MUST_STAY_SENSITIVE: Array<[string, string]> = [
       [
         'identifier rule: env file',
         `(?<![\\w.-])(?!process\\${ENVF}\\b)(?!import\\.meta\\${ENVF}\\b)[\\w.-]*\\${ENVF}\\b`,
       ],
+      [
+        'identifier rule: env file sibling',
+        `(?<![\\w.-])(?!process\\${ENVF}\\b)(?!import\\.meta\\${ENVF}\\b)[\\w.-]*\\${ENVF}rc\\b`,
+      ],
       ['identifier rule: key family', '[\\w-]+\\.(?:key|keytab|p12|pfx|jks)\\b(?![\\w(.])'],
       ['identifier rule: cluster config', `\\b${KC}\\b`],
-      ['identifier rule: superuser home', `\\${S}${lo.root}\\${S}`],
+      ['identifier rule: superuser home qualified', `\\${S}${lo.root}\\${S}`],
+      ['identifier rule: superuser home bare', `(?<![\\w.-])\\${S}${lo.root}(?![\\w\\-${S}])`],
     ];
 
     for (const [label, src] of MUST_STAY_SENSITIVE) {
@@ -115,6 +128,26 @@ describe('#116 case-insensitive path rules', () => {
         expect(rule?.flags).not.toContain('i');
       });
     }
+
+    // ⚠ THE TOTAL CONTROL — the two loops above are ENUMERATIVE, and enumeration
+    // is exactly the shape this file's own docstring warns about. Review of
+    // PR #119 measured the cost: the named list pinned 10 of the 30 rules that
+    // carry `i`, and stripping the other 20 left the whole suite GREEN while six
+    // measured commands reverted from DENY to AUTO-APPROVED — including the
+    // procfs environment dump, which the source comment specifically calls out
+    // as the thing that walks around the ENV_DUMP_PATTERNS control.
+    //
+    // This assertion has no such gap in either direction: a rule that LOSES `i`
+    // appears in `sensitive` and fails, and a rule that GAINS `i` disappears
+    // from it and fails. Adding any new rule forces an explicit decision here
+    // rather than defaulting to unpinned.
+    it('the case-sensitive set is EXACTLY the measured exclusions — no rule unpinned', () => {
+      const sensitive = ALL.filter((r) => !r.flags.includes('i'))
+        .map((r) => r.source)
+        .sort();
+      const expected = MUST_STAY_SENSITIVE.map(([, src]) => src).sort();
+      expect(sensitive).toEqual(expected);
+    });
   });
 
   describe('the reported defect — measured end to end, not just at the matcher', () => {

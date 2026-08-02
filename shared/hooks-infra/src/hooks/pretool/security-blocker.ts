@@ -229,12 +229,19 @@ export function matchesGitPush(command: string): boolean {
  *                       on Linux the volume is case-sensitive so `/ROOT` is a
  *                       different path. Pure cost, zero benefit.
  *
- * ⚠ THE REMAINING COST IS NOT ZERO AND IS NOT CLAIMED TO BE. `docs/ETC/notes.md`
- * and `internal/VAR/main.go` are newly denied. Both are contrived spellings, and
- * — the point that decided it — **both have lowercase twins that are ALREADY
- * denied at baseline**, because the qualified rules carry no left boundary. `i`
- * makes an existing over-broad class case-consistent; it does not create one.
- * That pre-existing class is #118, not widened here.
+ * ⚠ THE REMAINING COST IS NOT ZERO AND IS NOT CLAIMED TO BE. Any relative path
+ * with a capitalised protected segment is newly denied. An earlier revision of
+ * this comment called such spellings "contrived" and cited two invented ones;
+ * review of PR #119 found REAL examples, so that wording was withdrawn — the tz
+ * database's `Etc/` zone directory (`zoneinfo/Etc/UTC`) is capitalised by the
+ * IANA data itself, and `src/Boot/` and `internal/Sys/` occur in ordinary trees.
+ *
+ * The conclusion is unchanged, and it is the reason the trade was taken: **every
+ * one of these has a lowercase twin that is ALREADY denied at baseline**, because
+ * the qualified rules carry no left boundary. `i` makes an existing over-broad
+ * class case-consistent; it does not create one. That pre-existing class is #118,
+ * not widened here — and #118 is where the real fix belongs, since it removes the
+ * denial for BOTH spellings rather than restoring the asymmetry.
  *
  * ⚠ #118 IS COUPLED TO #117 — READ BOTH BEFORE TOUCHING THE QUALIFIED RULES.
  * Their missing left boundary is also the ONLY reason `/private/etc/passwd` and
