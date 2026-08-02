@@ -3747,6 +3747,66 @@ function requiresApproval(command) {
 function isExactSafeCommand(command) {
   return SAFE_COMMANDS_EXACT.includes(command);
 }
+var GLOB_METACHARS = /* @__PURE__ */ new Set(["*", "?", "[", "{"]);
+function expandableGlobIndex(token) {
+  let quote = null;
+  for (let i = 0; i < token.length; i++) {
+    const ch = token[i];
+    if (ch === "\\" && quote !== "'") {
+      i++;
+      continue;
+    }
+    if (quote === null && (ch === '"' || ch === "'")) {
+      quote = ch;
+      continue;
+    }
+    if (quote !== null && ch === quote) {
+      quote = null;
+      continue;
+    }
+    if (quote === null && ch !== void 0 && GLOB_METACHARS.has(ch)) return i;
+  }
+  return -1;
+}
+function splitOutsideQuotes(segment) {
+  const tokens = [];
+  let current = "";
+  let quote = null;
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === void 0) continue;
+    if (ch === "\\" && quote !== "'" && i + 1 < segment.length) {
+      current += ch + segment[i + 1];
+      i++;
+      continue;
+    }
+    if (quote === null && (ch === '"' || ch === "'")) quote = ch;
+    else if (quote !== null && ch === quote) quote = null;
+    if (quote === null && /\s/.test(ch)) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current.length > 0) tokens.push(current);
+  return tokens;
+}
+function isRootedOperand(token) {
+  const bare = token.replace(/^["']+/, "");
+  return bare.startsWith("/") || bare.startsWith("~") || bare.startsWith("$HOME") || bare.startsWith("${HOME}");
+}
+function hasExpandablePathGlob(segment) {
+  for (const token of splitOutsideQuotes(segment)) {
+    const g = expandableGlobIndex(token);
+    if (g === -1) continue;
+    if (isRootedOperand(token)) return true;
+    if (token.indexOf("/", g) !== -1) return true;
+  }
+  return false;
+}
 function splitIntoSegments(command) {
   return command.split(/\s*(?:&&|\|\||;|\||&|\n|\r)\s*/).map((s) => s.trim()).filter((s) => s.length > 0);
 }
@@ -3781,6 +3841,10 @@ async function autoApproveSafeBash(input) {
     const segment = stripProxyPrefix(rawSegment);
     if (requiresApproval(segment)) {
       logDebug(HOOK_NAME7, `Requires approval: segment '${segment.slice(0, 60)}'`);
+      return outputSilentSuccess();
+    }
+    if (hasExpandablePathGlob(segment)) {
+      logDebug(HOOK_NAME7, `Shell-expandable path operand: '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();
     }
     if (!isSegmentSafe(segment)) {
