@@ -48,6 +48,7 @@ function readHookLiveness(sessionId) {
 }
 function isUserPromptRecord(record) {
   if (record["type"] !== "user") return false;
+  if (!Object.hasOwn(record, "promptSource")) return false;
   if (record["isMeta"] === true) return false;
   if (record["isSidechain"] === true) return false;
   const message = record["message"];
@@ -74,8 +75,9 @@ function readTranscriptTail(filePath) {
     const length = size - start;
     if (length <= 0) return null;
     const buffer = Buffer.allocUnsafe(length);
-    readSync(fd, buffer, 0, length, start);
-    const text = buffer.toString("utf8");
+    const bytesRead = readSync(fd, buffer, 0, length, start);
+    if (bytesRead <= 0) return null;
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
     if (start === 0) return text;
     const firstBreak = text.indexOf("\n");
     return firstBreak === -1 ? null : text.slice(firstBreak + 1);

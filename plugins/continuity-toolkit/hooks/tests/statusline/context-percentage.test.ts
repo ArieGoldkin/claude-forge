@@ -1198,11 +1198,16 @@ describe('#82 liveness banner (unit)', () => {
   const markerPath = join(tmpdir(), `claude-ctk-hook-alive-${SESSION}.txt`);
   const transcriptPath = join(tmpdir(), `ctk-banner-unit-${SESSION}.jsonl`);
 
+  // `promptSource` is required by the predicate — it is CC's own marker for a
+  // prompt that actually raised UserPromptSubmit. Omitting it here would make
+  // these tests pass for the wrong reason (no prompt found => unknown => silent),
+  // which is exactly how a must-fail control goes blind.
   const writeTranscript = (promptIso: string): void => {
     writeFileSync(
       transcriptPath,
       `${JSON.stringify({
         type: 'user',
+        promptSource: 'typed',
         timestamp: promptIso,
         message: { role: 'user', content: 'hi' },
       })}\n`,
@@ -1286,6 +1291,7 @@ describe('#82 liveness banner (rendered by the built script)', () => {
       transcriptPath,
       `${JSON.stringify({
         type: 'user',
+        promptSource: 'typed',
         timestamp: '2026-08-02T11:00:00.000Z',
         message: { role: 'user', content: 'hi' },
       })}\n`,
@@ -1346,6 +1352,7 @@ describe('#82 liveness banner (rendered by the built script)', () => {
       transcriptPath,
       `${JSON.stringify({
         type: 'user',
+        promptSource: 'typed',
         timestamp: '2026-08-02T11:00:00.000Z',
         message: { role: 'user', content: 'hi' },
       })}\n`,

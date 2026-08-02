@@ -211,29 +211,49 @@ export function readHookLiveness(sessionId: string): HookLivenessRecord | null {
 /**
  * Whether a transcript record is a prompt the **user actually submitted**.
  *
- * This predicate is the whole feature. `type: 'user'` alone is not "a user
- * prompt": Claude Code files tool results under the same role, so the naive
- * reading of "the newest user record" reports a prompt after every tool call.
- * Measured against 20 live healthy sessions, each exclusion below was checked by
- * removing it on its own:
+ * This predicate is the whole feature, and it is an **allowlist on purpose**.
  *
- * | predicate | false "suspect" verdicts |
+ * The question it must answer is not "does this look like a user message?" but
+ * "did this raise `UserPromptSubmit`?" — because that is the event whose absence
+ * of a stamp is the alarm. Those are not the same set, and an exclusion list got
+ * it badly wrong: Claude Code writes `type: 'user'` records for tool results,
+ * built-in slash commands (`/model`, `/plugin`), `<local-command-stdout>`, and
+ * **interrupts** (`[Request interrupted by user]`) — none of which raise
+ * `UserPromptSubmit`, so none of which are followed by a stamp.
+ *
+ * Replayed at **every position** across 113 local transcripts:
+ *
+ * | predicate | false `suspect` verdicts |
  * |---|---|
- * | `type === 'user'` only | **20 / 20** |
- * | without the `tool_result` exclusion | **20 / 20** |
- * | without the `isMeta` exclusion | **6 / 20** |
- * | without the `isSidechain` exclusion | 0 / 20 |
- * | all three | **0 / 20** |
+ * | exclusion list (`type: user` minus tool results / meta / sidechain) | **493, across 73 of 113 transcripts** |
+ * | this allowlist (`promptSource` present) | **0, across 0 of 113** |
  *
- * So `tool_result` and `isMeta` are load-bearing and measured. `isSidechain` is
- * **not** measured — no sidechain record appeared in any of the 3,686 user
- * records scanned, because subagent turns are written to their own transcripts.
- * It is kept on semantic grounds rather than evidential ones: a subagent's prompt
- * is not a user prompt and does not raise `UserPromptSubmit`, so counting one
- * would be wrong on the day it starts appearing, not merely unhelpful.
+ * The exclusion list's worst case was the one the design calls safest: pressing
+ * `Esc` during a long agentic turn writes an interrupt record, which it counted
+ * as a fresh prompt and alarmed on — a "no security guardrails" banner precisely
+ * when nothing is wrong.
+ *
+ * `promptSource` is Claude Code's own marker for a submitted prompt (observed
+ * values: `typed`, `queued`, `system`, `suggestion_accepted` — all four are
+ * followed by `UserPromptSubmit` firings at comparable rates, so none is
+ * special-cased). It is absent from **0%** of the four non-submitting classes and
+ * present on 91% of genuine prompts; the missing 9% simply go undetected, which
+ * is the safe direction.
+ *
+ * **Allowlist, not denylist, is the load-bearing choice.** If Claude Code renames
+ * or drops this field, every record fails the predicate, no prompt is found, and
+ * the verdict degrades to `unknown` — silent. A denylist fails the other way: an
+ * unrecognised record class becomes a false alarm about missing security hooks.
+ *
+ * The `isMeta` guard is kept and is still measured — 32 records carry both
+ * `promptSource` and `isMeta`. The `tool_result` and `isSidechain` guards have
+ * **zero** measured overlap once `promptSource` is required; they are retained as
+ * cheap defence-in-depth, not because evidence demands them.
  */
 function isUserPromptRecord(record: Record<string, unknown>): boolean {
   if (record['type'] !== 'user') return false;
+  // The positive marker. Everything below is defence-in-depth behind it.
+  if (!Object.hasOwn(record, 'promptSource')) return false;
   if (record['isMeta'] === true) return false;
   if (record['isSidechain'] === true) return false;
   const message = record['message'] as Record<string, unknown> | undefined;
@@ -271,8 +291,13 @@ function readTranscriptTail(filePath: string): string | null {
     const length = size - start;
     if (length <= 0) return null;
     const buffer = Buffer.allocUnsafe(length);
-    readSync(fd, buffer, 0, length, start);
-    const text = buffer.toString('utf8');
+    // Decode only what was actually read. `allocUnsafe` hands back uninitialised
+    // heap, so on a short read the tail of the buffer is arbitrary memory that
+    // would be scanned as if it were transcript. `readStdinSync` in the
+    // statusline already respects this return value; this now matches it.
+    const bytesRead = readSync(fd, buffer, 0, length, start);
+    if (bytesRead <= 0) return null;
+    const text = buffer.subarray(0, bytesRead).toString('utf8');
     if (start === 0) return text;
     const firstBreak = text.indexOf('\n');
     return firstBreak === -1 ? null : text.slice(firstBreak + 1);

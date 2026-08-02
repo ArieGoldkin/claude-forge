@@ -42,8 +42,17 @@ function transcript(records: Record<string, unknown>[], name = 'session.jsonl'):
   return path;
 }
 
+// Every fixture below is shaped from a REAL local transcript record, not from an
+// idea of what one looks like. That distinction is not pedantic: the first
+// version of this file modelled a slash command as `isMeta: true`, which no real
+// slash command is, so the test named "IGNORES isMeta records" appeared to cover
+// slash commands and covered nothing of the sort. The predicate shipped with a
+// 493-false-alarm hole straight through that gap.
+
+/** A genuine submitted prompt — carries CC's own `promptSource` marker. */
 const userPrompt = (timestamp: string): Record<string, unknown> => ({
   type: 'user',
+  promptSource: 'typed',
   timestamp,
   message: { role: 'user', content: 'do the thing' },
 });
@@ -54,18 +63,58 @@ const toolResult = (timestamp: string): Record<string, unknown> => ({
   message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] },
 });
 
+/**
+ * A real `isMeta` record. It carries `promptSource` — 32 local records do — so
+ * this fixture can only pass because of the `isMeta` guard, not because the
+ * allowlist happens to reject it.
+ */
 const metaRecord = (timestamp: string): Record<string, unknown> => ({
   type: 'user',
   isMeta: true,
+  promptSource: 'typed',
   timestamp,
-  message: { role: 'user', content: [{ type: 'text', text: '<command-name>/x</command-name>' }] },
+  message: { role: 'user', content: [{ type: 'text', text: 'injected context' }] },
 });
 
 const sidechainPrompt = (timestamp: string): Record<string, unknown> => ({
   type: 'user',
   isSidechain: true,
+  promptSource: 'typed',
   timestamp,
   message: { role: 'user', content: 'subagent brief' },
+});
+
+/**
+ * A built-in slash command (`/model`, `/plugin`, …). NOT `isMeta`, string
+ * content, and **no** `promptSource` — CC handles it without raising
+ * `UserPromptSubmit`, so no stamp follows it. 397 local records look like this.
+ */
+const slashCommand = (timestamp: string): Record<string, unknown> => ({
+  type: 'user',
+  timestamp,
+  message: {
+    role: 'user',
+    content: '<command-name>/model</command-name>\n<command-message>model</command-message>',
+  },
+});
+
+/**
+ * An interrupt — what pressing `Esc` mid-turn writes. Array content, no
+ * `promptSource`. This is the worst of the four: interrupting a long agentic turn
+ * is the exact scenario the design calls "healthy by construction", and the
+ * exclusion-list predicate raised a missing-guardrails banner on it.
+ */
+const interrupt = (timestamp: string): Record<string, unknown> => ({
+  type: 'user',
+  timestamp,
+  message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] },
+});
+
+/** Output of a local command, echoed back as a user-role record. No `promptSource`. */
+const localCommandStdout = (timestamp: string): Record<string, unknown> => ({
+  type: 'user',
+  timestamp,
+  message: { role: 'user', content: '<local-command-stdout>ok</local-command-stdout>' },
 });
 
 describe('lastUserPromptAt — the predicate that decides the whole feature', () => {
@@ -74,9 +123,21 @@ describe('lastUserPromptAt — the predicate that decides the whole feature', ()
     expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
   });
 
+  it('requires CC’s own promptSource marker — an allowlist, not a denylist', () => {
+    // The direction matters more than the rule. A record CC stops marking, or a
+    // class nobody anticipated, must read as "not a prompt" and go silent — not
+    // as a fresh prompt and raise a missing-guardrails alarm.
+    const path = transcript([
+      {
+        type: 'user',
+        timestamp: '2026-08-02T10:00:00.000Z',
+        message: { role: 'user', content: 'unmarked' },
+      },
+    ]);
+    expect(lastUserPromptAt(path)).toBeNull();
+  });
+
   it('IGNORES tool results, which Claude Code files under role "user"', () => {
-    // Measured: counting these reported a newer-than-stamp prompt on 20 of 20
-    // live healthy sessions — a "no security guardrails" alarm on every one.
     const path = transcript([
       userPrompt('2026-08-02T10:00:00.000Z'),
       toolResult('2026-08-02T10:05:00.000Z'),
@@ -85,8 +146,8 @@ describe('lastUserPromptAt — the predicate that decides the whole feature', ()
     expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
   });
 
-  it('IGNORES isMeta records', () => {
-    // Measured: 6 of 20 live healthy sessions false-alarmed without this.
+  it('IGNORES isMeta records even when they carry promptSource', () => {
+    // 32 local records carry both, so this can only pass via the isMeta guard.
     const path = transcript([
       userPrompt('2026-08-02T10:00:00.000Z'),
       metaRecord('2026-08-02T10:07:00.000Z'),
@@ -95,14 +156,60 @@ describe('lastUserPromptAt — the predicate that decides the whole feature', ()
   });
 
   it('IGNORES sidechain records — a subagent brief raises no UserPromptSubmit', () => {
-    // Unlike the two above, this exclusion is NOT backed by a live false positive:
-    // zero sidechain records appeared in the 3,686 user records surveyed, because
-    // subagent turns are written to their own transcripts. It is kept because
-    // counting one would be semantically wrong the day they do appear.
     const path = transcript([
       userPrompt('2026-08-02T10:00:00.000Z'),
       sidechainPrompt('2026-08-02T10:08:00.000Z'),
     ]);
+    expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
+  });
+
+  // ---------------------------------------------------------------------------
+  // The four non-submitting record classes. Each of these shipped as a false
+  // alarm in the exclusion-list predicate; together they accounted for 493 false
+  // `suspect` verdicts across 73 of 113 local transcripts.
+  // ---------------------------------------------------------------------------
+
+  it('IGNORES a built-in slash command — CC raises no UserPromptSubmit for it', () => {
+    // 397 local records. Not isMeta, so the isMeta guard never touched them.
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      slashCommand('2026-08-02T10:40:00.000Z'),
+    ]);
+    expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
+  });
+
+  it('IGNORES an interrupt — pressing Esc mid-turn is not a new prompt', () => {
+    // The blocking defect this predicate was rewritten for: interrupting a long
+    // agentic turn is the case the design calls healthy BY CONSTRUCTION, and the
+    // previous predicate raised a missing-guardrails banner on it.
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      interrupt('2026-08-02T10:45:00.000Z'),
+    ]);
+    expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
+  });
+
+  it('IGNORES local-command-stdout echoes', () => {
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      localCommandStdout('2026-08-02T10:50:00.000Z'),
+    ]);
+    expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
+  });
+
+  it('stays healthy end-to-end through interrupt + slash command + tool results', () => {
+    // The full replay scenario in one transcript: a genuine prompt, a long turn,
+    // an Esc, a /model, and command output. Verdict must remain healthy.
+    const path = transcript(
+      [
+        userPrompt('2026-08-02T10:00:00.000Z'),
+        toolResult('2026-08-02T10:20:00.000Z'),
+        interrupt('2026-08-02T10:45:00.000Z'),
+        slashCommand('2026-08-02T10:46:00.000Z'),
+        localCommandStdout('2026-08-02T10:47:00.000Z'),
+      ],
+      'mixed-session.jsonl'
+    );
     expect(lastUserPromptAt(path)).toBe(Date.parse('2026-08-02T10:00:00.000Z'));
   });
 
@@ -211,6 +318,40 @@ describe('assessHookLiveness', () => {
       toolResult('2026-08-02T14:00:00.000Z'),
     ]);
     expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('healthy');
+  });
+
+  it('stays healthy when the user presses Esc 45 minutes into a long turn', () => {
+    // The blocking finding from the PR #124 review, at the shipped entry point.
+    // An interrupt raises no UserPromptSubmit, so no stamp follows it; counting
+    // it as a prompt produced a missing-guardrails banner on a healthy session.
+    // Replayed over 113 local transcripts, that class alone was 35 false alarms.
+    marker(SESSION, '2026-08-02T10:00:01.000Z');
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      interrupt('2026-08-02T10:45:00.000Z'),
+    ]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('healthy');
+  });
+
+  it('stays healthy after a built-in slash command', () => {
+    marker(SESSION, '2026-08-02T10:00:01.000Z');
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      slashCommand('2026-08-02T10:40:00.000Z'),
+    ]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('healthy');
+  });
+
+  it('STILL alarms on a genuine prompt that got no stamp', () => {
+    // The complement: the three tests above must not have bought their silence
+    // by disabling detection outright.
+    marker(SESSION, '2026-08-02T10:00:01.000Z');
+    const path = transcript([
+      userPrompt('2026-08-02T10:00:00.000Z'),
+      interrupt('2026-08-02T10:45:00.000Z'),
+      userPrompt('2026-08-02T10:50:00.000Z'),
+    ]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('suspect');
   });
 
   it('tolerates the measured write-ordering race instead of flashing an alarm', () => {
