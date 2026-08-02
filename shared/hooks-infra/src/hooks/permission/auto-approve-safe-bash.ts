@@ -430,6 +430,162 @@ export function hasSafePrefix(command: string): boolean {
   return getSafePrefix(command) !== null;
 }
 
+// =============================================================================
+// SHELL-EXPANDABLE PATH OPERANDS (#116, glob half)
+// =============================================================================
+
+/**
+ * Shell metacharacters that trigger filename expansion.
+ *
+ * `{` covers brace expansion, which is not technically globbing but reaches a
+ * path the same way and by the same mechanism — the SHELL produces the name, so
+ * the literal never appears in the command text a matcher can see.
+ */
+const GLOB_METACHARS = new Set(['*', '?', '[', '{']);
+
+/*
+ * ⚠ THERE IS DELIBERATELY NO "PATTERN FLAG" ALLOWLIST HERE, AND ADDING ONE IS A
+ * REGRESSION. An earlier revision of this fix skipped the value of `-name`,
+ * `-iname`, `-path`, `--include` and friends on the theory that those are
+ * matched by the TOOL rather than expanded by the shell. Measured against the
+ * corpus below it saved ZERO false prompts — the quote tracking in
+ * `expandableGlobIndex` already covers the common spelling, because people
+ * write `find . -iname "*.tsx"` with the quotes that make it work.
+ *
+ * It was also wrong in principle, which is the reason it is called out rather
+ * than quietly dropped: an UNQUOTED pattern value whose wildcard is followed by
+ * a path separator is expanded by the shell BEFORE find ever runs, so skipping
+ * it under-blocks the exact case the quotes were protecting. A list that costs
+ * a maintenance surface, buys nothing measurable, and is unsound on its own
+ * terms is not a narrowing. Both spellings are pinned in
+ * tests/permission/auto-approve-glob.test.ts — quoted inert, unquoted gated.
+ */
+
+/**
+ * Index of the first glob metacharacter in `token` that the shell would
+ * actually EXPAND — outside quotes and not backslash-escaped. Returns -1 if
+ * there is none.
+ *
+ * ⚠ QUOTING IS THE WHOLE POINT, NOT AN OPTIMISATION. A quoted glob does not
+ * expand: `cat "~/.s*h/*"` names one literal file that almost certainly does
+ * not exist. Treating it as dangerous is pure cost — measured against the
+ * corpus below, quote tracking is worth 15 of the 36 false prompts the rule
+ * would otherwise carry, and the shapes it saves are ordinary: a quoted `grep
+ * -E` regex containing a separator, and a quoted `git diff` pathspec with a
+ * recursive wildcard.
+ *
+ * Backslash escapes are honoured only OUTSIDE single quotes, which is what bash
+ * does — inside `'…'` a backslash is an ordinary character.
+ *
+ * ⚠ THE ESCAPE HANDLING SAVES NOTHING ON THE CORPUS — zero hits — and is kept
+ * for CORRECTNESS, not cost: `cat /tmp/real\*name` does not expand, so gating
+ * it would be a false prompt on a real input. Stated plainly so the next reader
+ * does not quote a benefit that was never measured.
+ */
+function expandableGlobIndex(token: string): number {
+  let quote: string | null = null;
+  for (let i = 0; i < token.length; i++) {
+    const ch = token[i];
+    if (ch === '\\' && quote !== "'") {
+      i++; // the escaped character is a literal, never a glob
+      continue;
+    }
+    if (quote === null && (ch === '"' || ch === "'")) {
+      quote = ch;
+      continue;
+    }
+    if (quote !== null && ch === quote) {
+      quote = null;
+      continue;
+    }
+    if (quote === null && ch !== undefined && GLOB_METACHARS.has(ch)) return i;
+  }
+  return -1;
+}
+
+/**
+ * Whether an operand is rooted OUTSIDE the project — absolute, home-relative,
+ * or spelled through `$HOME`.
+ *
+ * The `$HOME` spellings are here because `security-blocker` normalizes them
+ * (`normalizeHomeRefs`) and this hook does not; without them
+ * `grep -r x "$HOME"/.s*h` would be the one rooted spelling left open.
+ */
+function isRootedOperand(token: string): boolean {
+  const bare = token.replace(/^["']+/, '');
+  return (
+    bare.startsWith('/') ||
+    bare.startsWith('~') ||
+    bare.startsWith('$HOME') ||
+    bare.startsWith('${HOME}')
+  );
+}
+
+/**
+ * Whether a segment carries a path operand the SHELL would expand into a name
+ * this plugin's text matchers can never see (#116, glob half).
+ *
+ * WHY THIS EXISTS. `security-blocker` matches protected resources by literal
+ * TEXT. Any spelling that reaches the same inode without writing the literal is
+ * unmatched, and this hook then certifies the segment because `cat `/`ls`/
+ * `grep `/`find ` are on the safe-prefix allowlist. Measured net outcome before
+ * this gate: `cat ~/.s*h/*` — which dumps an entire key directory in one
+ * command — was AUTO-APPROVED with no prompt.
+ *
+ * ⚠ THIS WITHHOLDS AUTO-APPROVAL; IT DOES NOT DENY. A PreToolUse denial is
+ * terminal for a subagent (see the DENIAL_GUIDANCE note in security-blocker),
+ * so a new denial surface on an everyday shell idiom is the more expensive
+ * error. Returning true here drops the command into the standard permission
+ * flow, where the user sees it.
+ *
+ * ⚠ WHAT THAT DOES NOT DO, stated because the issue's phrasing ("converts the
+ * bypass into a prompt") overstates it: withholding OUR approval restores the
+ * user's CONFIGURED behaviour. A user who has separately allowlisted
+ * `Bash(cat:*)` in settings still gets no prompt. That is their explicit choice
+ * and not this plugin's bypass to override — but it means "always prompts" is
+ * false, and must not be written down as if it were true.
+ *
+ * ⚠ THE TWO BRANCHES ARE BOTH LOAD-BEARING, AND THE CHEAPER ONE ALONE IS NOT
+ * ENOUGH. Measured over 24,520 real commands from local session transcripts, of
+ * which 2,801 are auto-approved today:
+ *
+ *   rooted only .................. 14/21 rows,  13 false prompts (0.46%)
+ *   directory-component only ..... 12/21 rows,   8 false prompts (0.29%)
+ *   either (shipped) ............. 21/21 rows,  21 false prompts (0.75%)
+ *   any glob at all (the issue's
+ *     own proposal) .............. 21/21 rows, 254 false prompts (9.07%)
+ *
+ * Rooted-only misses `cd ~ && cat .s*h/id_rsa`; directory-component-only misses
+ * `ls /e*c` and `grep -r x ~/.s*h`. The union costs 8 more prompts than the
+ * cheapest option and closes both.
+ *
+ * ⚠ IT IS NOT A SHELL PARSER, AND THE LIMITS ARE MEASURED. `cd / && cat
+ * etc/passwd` writes no metacharacter and no protected literal at all — that
+ * gap is documented in BASH_SYSTEM_DIR_PATTERNS and is untouched here. So are
+ * the quote-splitting spellings (`cat "/e""tc/passwd"`), which carry no
+ * metacharacter either; they are the remaining half of #116.
+ *
+ * @param segment - One command segment, already split and proxy-stripped
+ * @returns True if auto-approval should be withheld for this segment
+ */
+export function hasExpandablePathGlob(segment: string): boolean {
+  const tokens = segment
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  for (const token of tokens) {
+    if (token.startsWith('-')) continue;
+    const g = expandableGlobIndex(token);
+    if (g === -1) continue;
+    // (a) rooted outside the project, or (b) the metacharacter sits inside a
+    // DIRECTORY component — a `/` follows it, so the shell is being asked to
+    // discover a directory NAME rather than a set of leaf files.
+    if (isRootedOperand(token)) return true;
+    if (token.indexOf('/', g) !== -1) return true;
+  }
+  return false;
+}
+
 /**
  * Split a command into individual segments on shell control operators
  * (`&&`, `||`, `;`, `|`, `&`, newline). Auto-approval must hold for EVERY
@@ -537,6 +693,15 @@ export async function autoApproveSafeBash(input: HookInput): Promise<HookResult>
     const segment = stripProxyPrefix(rawSegment);
     if (requiresApproval(segment)) {
       logDebug(HOOK_NAME, `Requires approval: segment '${segment.slice(0, 60)}'`);
+      return outputSilentSuccess();
+    }
+    // #116 (glob half): the safe-prefix allowlist certifies a segment by its
+    // COMMAND, never its operand. A shell-expanded path operand reaches a
+    // protected resource without ever writing the literal security-blocker
+    // matches on, so `cat ~/.s*h/*` was auto-approved. Withhold approval and
+    // let the standard flow decide — deliberately NOT a deny.
+    if (hasExpandablePathGlob(segment)) {
+      logDebug(HOOK_NAME, `Shell-expandable path operand: '${segment.slice(0, 60)}'`);
       return outputSilentSuccess();
     }
     if (!isSegmentSafe(segment)) {

@@ -224,15 +224,19 @@ describe('#116 case-insensitive path rules', () => {
 
   describe('KNOWN GAPS — the case class is closed, #116 is NOT', () => {
     // Pinned as their measured value deliberately, the same convention the #99
-    // and #114 blocks use: a documented trade, not a passing grade. Glob and
-    // quote/brace splitting are the remaining halves of #116; the env-file case
-    // gap is the price of not denying the container-inspect idiom above.
+    // and #114 blocks use: a documented trade, not a passing grade. The
+    // quote-splitting spellings are the remaining half of #116; the env-file
+    // case gap is the price of not denying the container-inspect idiom above.
+    //
+    // ⚠ THE GLOB AND BRACE ROWS MOVED OUT, WITH STRONGER ASSERTIONS — they are
+    // now gated by the #116 glob half and live in
+    // tests/permission/auto-approve-glob.test.ts. They were deliberately not
+    // left here and re-pointed: `not.toBe('DENY')` is satisfied by a DEFER just
+    // as well as by an AUTO-APPROVE, so this block could see neither that fix
+    // landing nor it being reverted. The new file asserts the exact net
+    // outcome, which is the assertion that can actually fail.
     const gaps: Array<[string, string]> = [
-      ['wildcard operand reaches the key dir', `cat ~${S}.s*h${S}*`],
-      ['wildcard operand reaches a system dir', `ls ${S}e*c`],
-      ['single-char wildcard', `cat ${S}et?${S}${PW}`],
       ['adjacent quoted strings concatenate', `cat "${S}e""tc${S}${PW}"`],
-      ['brace expansion', `cat ${S}{e,}tc${S}${PW}`],
       ['upper env-file spelling', `cat .${'ENV'}`],
     ];
     for (const [label, cmd] of gaps) {

@@ -2,6 +2,82 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.8] - 2026-08-02 — shell-expanded path operands bypassed every literal rule (#116, glob half)
+
+### Fixed
+
+- **A glob operand reached protected resources with no prompt.** `security-blocker`
+  matches protected resources by literal TEXT, so any spelling the SHELL expands at
+  runtime never appears in the text it can see; `auto-approve-safe-bash` then
+  certified the segment because `cat `/`ls`/`grep `/`find ` are on the safe-prefix
+  allowlist, which inspects the COMMAND and never the operand. Measured net outcome
+  through `bashCombined` on `a0ee038`: **21 spellings AUTO-APPROVED**, including
+  `cat ~/.s*h/*`, which dumps an entire key directory in one command. Closed by a
+  new per-segment gate, `hasExpandablePathGlob`, covering the wildcard, single-char,
+  bracket-class and brace-expansion forms.
+
+- **It withholds auto-approval; it does NOT deny.** A PreToolUse denial is terminal
+  for a subagent, so a new denial surface on an everyday shell idiom is the more
+  expensive error. The command drops into the standard permission flow instead.
+  ⚠ **That is not the same as "always prompts", and the difference is not cosmetic:**
+  withholding *our* approval restores the user's *configured* behaviour, so anyone
+  who has separately allowlisted e.g. `Bash(cat:*)` in settings still sees no
+  prompt. This closes the plugin's own over-approval, not the user's explicit
+  configuration. An `ask` gate would override that configuration and was rejected
+  for it.
+
+### Measured, not estimated
+
+The rule was chosen against **24,520 real Bash commands** extracted from 1,204 local
+session transcripts, of which **2,801** are auto-approved by this hook today. Both
+numbers are reported for every candidate so neither can be quoted alone:
+
+| candidate | bypass rows covered | false prompts |
+|---|---|---|
+| rooted operand only | 14/21 | 13 (0.46%) |
+| directory-component only | 12/21 | 8 (0.29%) |
+| **either — shipped** | **21/21** | **21 (0.75%)** |
+| any glob at all — *the issue's own proposal* | 21/21 | 254 (9.07%) |
+
+Rooted-only misses `cd ~ && cat .s*h/id_rsa`; directory-component-only misses
+`ls /e*c` and `grep -r x ~/.s*h`. The union closes both for 8 more prompts than the
+cheapest option, and costs **12× less than the fix the issue proposed** for identical
+coverage.
+
+Two refinements came out of the same measurement rather than from judgement:
+
+- **A quoted glob never expands** — `cat "~/.s*h/*"` names one literal file. Tracking
+  quotes is worth 15 of the 36 false prompts the rule would otherwise carry.
+- **A "pattern flag" allowlist (`-name`, `-iname`, `--include`) was REMOVED after
+  being written.** It saved **zero** false prompts — quote tracking already covers
+  the spelling people actually write — and it was unsound besides: an *unquoted*
+  pattern value is expanded by the shell before `find` ever runs, so skipping it
+  under-blocks. Both spellings are now pinned.
+
+Backslash-escape handling is kept for correctness and saves **zero** false prompts on
+the corpus. Recorded rather than dressed up as a benefit.
+
+### Known gaps — #116 stays OPEN
+
+- **Quote-splitting is untouched**: `cat "/e""tc/passwd"`, `cat /e''tc/passwd` and
+  `cat ~/.s"s"h/id_rsa` carry no metacharacter at all, so no glob rule can reach
+  them. Closing them needs quote-stripping normalization, the remaining half.
+- `cd / && cat etc/passwd` writes no protected literal and no metacharacter. That gap
+  is pre-existing, documented in `BASH_SYSTEM_DIR_PATTERNS`, and untouched here.
+
+### Testing
+
+- `tests/permission/auto-approve-glob.test.ts` — 44 new tests. Every row asserts the
+  **exact** net outcome rather than `not.toBe('DENY')`, which a defer satisfies just
+  as well as an auto-approve; the old pins in `security-blocker-case.test.ts` could
+  see neither this fix landing nor it being reverted, and moved here.
+- **Six mutation controls, all verified to fail**: dropping either branch, disabling
+  quote tracking, disabling escape handling, restoring the pattern-flag skip, and a
+  full revert of the gate. The first run of this battery found **two blind controls**
+  of mine — rows for quoting and pattern flags that passed under the very mutations
+  they existed to catch, because their operands were relative and basename-only, so
+  they failed both branches regardless. Both were replaced with rooted spellings.
+
 ## [2.17.7] - 2026-08-02 — protected path rules were case-sensitive (#116, case half)
 
 ### Fixed
