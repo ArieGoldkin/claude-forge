@@ -235,6 +235,10 @@ export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
   /(?<![\w.-])(?!process\.env\b)(?!import\.meta\.env\b)[\w.-]*\.env\b/,
   /\.ssh\/id_/,
   /\.ssh\/.*\.pem/,
+  // #114: both patterns above are PREFIX-DEPENDENT — they need the `.ssh/`
+  // component, so `cd ~/.ssh && cat id_rsa` split the directory away from the
+  // filename and was AUTO-APPROVED. Measured on 2.17.5, not hypothesised.
+  /\.ssh(?![\w\-/])/,
   // The file-based equivalent of an env dump. ENV_DUMP_PATTERNS blocks
   // `env`/`printenv`; without this, reading the same secrets straight out of
   // procfs walks around that control entirely.
@@ -244,6 +248,8 @@ export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
   /\/etc\/(?:kubernetes|docker)\//,
   /\/var\/run\/secrets\//,
   /\/run\/secrets\//,
+  // #114: same trailing-separator defect — `cd /run/secrets && cat tok`.
+  /\/run\/secrets(?![\w\-/])/,
   // Require a NAME before the extension and reject a property-access or
   // multi-part follow-on. A bare `\.key\b` denied `jq '.key'`, `m.key(1)` and
   // `schema.key.ts` — a fresh instance of the very over-blocking this release
@@ -257,6 +263,8 @@ export const BASH_SECRET_PATTERNS: readonly RegExp[] = [
   /\/etc\/ssh\//,
   // Another user's home directory — never a legitimate read for our purposes.
   /\/root\//,
+  // #114: `cd /root && cat k` — the bare form, with no trailing separator.
+  /\/root(?![\w\-/])/,
   // macOS temp/home trees. Kept as always-block rather than mutation-gated:
   // the scratchpad carve-out below already solves the false-positive that
   // motivated relaxing these, so there is no reason to widen read access.
@@ -317,13 +325,44 @@ export const BASH_SYSTEM_DIR_PATTERNS: readonly RegExp[] = [
   // This cannot be fixed by widening the regex: deciding "where does this path
   // resolve?" needs a shell parse, the same wall the abandoned mutation gate hit
   // (see the docstring above). The guard is kept because it is free and catches
-  // the accidental case; it is NOT a security boundary. What actually bounds the
-  // exposure is that BASH_SECRET_PATTERNS run first and independently, and the
-  // dangerous-bash registry runs before both.
+  // the accidental case; it is NOT a security boundary.
+  //
+  // ⚠ WHAT BOUNDS THE EXPOSURE — CORRECTED (#114). An earlier revision of this
+  // comment said the bound was that "BASH_SECRET_PATTERNS run first and
+  // independently". **That is true of only half of them**, and the KNOWN GAPS
+  // block tested exactly the two cases where it holds. The secret patterns
+  // split in two:
+  //   - SELF-IDENTIFYING — match on the filename alone (`.env`, `.envrc`,
+  //     `kubeconfig`, `*.key|keytab|p12|pfx|jks`). A `cd` cannot separate the
+  //     name from its own pattern, so these genuinely do bound the exposure.
+  //   - PREFIX-DEPENDENT — need a directory component (`.ssh/id_`,
+  //     `/etc/(passwd|shadow|sudoers)`, `/root/`, `/run/secrets/`,
+  //     `/proc/*/environ`, `/etc/ssl/private/`). A `cd` splits the directory
+  //     away from the filename and defeats them outright.
+  // Measured on 2.17.5 before this change: 6 of 12 protections were defeated by
+  // a `cd` split, including `cd ~/.ssh && cat id_rsa` — AUTO-APPROVED. The bare
+  // entries below and their siblings in BASH_SECRET_PATTERNS close that class.
+  // The dangerous-bash registry still runs before both.
   /\/var\/folders\/\S*\.\.(\/|\s|$)/,
   /\/sys\//,
   /\/proc\//,
   /\/boot\//,
+  // #114: every pattern above requires a TRAILING SEPARATOR, so a bare
+  // directory name was unmatched and `auto-approve-safe-bash` then approved the
+  // command with no prompt — `ls /etc` and `cd /etc && cat passwd` alike. Note
+  // the `cd` is incidental: the defect is the bare reference, not the chaining.
+  //
+  // These are ADDITIVE and fire ONLY when the name is not followed by `/`, so
+  // they cannot match a qualified path. That is what makes them safe here: the
+  // /var/folders/ exemption (#99) lives entirely in qualified-path space and is
+  // provably untouched — verified by the KNOWN GAPS block still passing
+  // unchanged, not by inspection.
+  /\/etc(?![\w\-/])/,
+  /\/usr(?![\w\-/])/,
+  /\/var(?![\w\-/])/,
+  /\/sys(?![\w\-/])/,
+  /\/proc(?![\w\-/])/,
+  /\/boot(?![\w\-/])/,
 ] as const;
 
 /**
