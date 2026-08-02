@@ -57,8 +57,17 @@ const userPrompt = (timestamp: string): Record<string, unknown> => ({
   message: { role: 'user', content: 'do the thing' },
 });
 
+/**
+ * A tool result. Real ones carry no `promptSource`, so the allowlist alone would
+ * reject them and the `tool_result` guard would be unreachable — a mutation
+ * removing it survived until this fixture was given the marker. It carries one
+ * deliberately, so the guard is pinned against the case it actually exists for:
+ * a record that clears the allowlist but is still not a prompt. Same reasoning as
+ * {@link sidechainPrompt}.
+ */
 const toolResult = (timestamp: string): Record<string, unknown> => ({
   type: 'user',
+  promptSource: 'typed',
   timestamp,
   message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] },
 });
