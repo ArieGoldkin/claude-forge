@@ -1,7 +1,7 @@
 # Continuity Toolkit - Claude Code Plugin
 
 > **Plugin Name**: ctk (formerly `continuity-toolkit`, renamed in v2.0.0)
-> **Version**: 2.17.8
+> **Version**: 2.17.9
 > **Last Updated**: 2026-07-19
 
 ## Overview
@@ -110,6 +110,34 @@ Configure in `settings.json` (user-global) or `.claude/settings.json` (project-s
 ```
 
 When a HIPAA-sensitive project needs to block PHI exfil to third-party domains, use `deniedDomains` as the primary control — our `security-blocker` catches bash-level bypass attempts but does not intercept `WebFetch` / `WebSearch` tool calls directly.
+
+### ⚠ `security-blocker` is advisory — enable the sandbox for a real boundary
+
+**Read [ADR-0002](../../docs/adrs/0002-security-blocker-is-best-effort.md) before relying on this hook.** `security-blocker` matches the **text** of a command, so it stops the *careless* read (`cat /etc/passwd` → denied) but cannot be complete: the shell has unbounded ways to spell a path, and known gaps are pinned in the test suite.
+
+Two facts that surprise people, both from CC's own docs:
+
+- **CC auto-approves `cat <anything>` by default.** Its built-in read-only set (`ls`, `cat`, `grep`, `find`, `head`, `tail`, `wc`, …) *"runs without a permission prompt in every mode"* and *"is not configurable"*. Without a sandbox, this hook is the only thing gating those commands.
+- **`Read(...)` deny rules do not cover Bash.** Permission rules are per-tool: `Read(~/.ssh/**)` governs the **Read tool**, not `cat` via Bash. And `Read(/etc/**)` is not even absolute — *"the single leading slash anchors at the settings source"*; absolute needs `//etc/**`.
+
+The enforceable control is the **Bash sandbox**, because *"the operating system enforces the sandbox boundary on the running process, so it holds regardless of what the model chose to run."* Its default read policy is permissive (*"this default still allows reading credential files such as `~/.aws/credentials` and `~/.ssh/`"*) and there is **no built-in credential deny list**, so name them:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws/credentials", "mode": "deny" },
+        { "path": "~/.config/gcloud", "mode": "deny" }
+      ]
+    }
+  }
+}
+```
+
+Caveats: `sandbox.filesystem.disabled: true` turns these read protections off (set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` to make CC ignore that key from every source), and the sandbox does not run on native Windows — macOS, Linux and WSL2 only.
 
 ## File Structure
 

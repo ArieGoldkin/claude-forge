@@ -2,6 +2,39 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.17.9] - 2026-08-02 — `security-blocker` is documented as advisory; sandbox guidance added (ADR-0002)
+
+### Changed
+
+- **`security-blocker` is now documented as a best-effort advisory layer, not an enforceable
+  boundary** — see `docs/adrs/0002-security-blocker-is-best-effort.md`. No protection was
+  removed and no fix was reverted. What changes is the triage rule: a newly-discovered
+  spelling is no longer automatically a bug. Eight issues were filed against this file in
+  eight days, and the four still open are four instances of one limit the source states
+  three times — *"no regex over unparsed text can answer it."*
+
+- **ctk's `CLAUDE.md` now carries the sandbox recommendation**, because the ADR is only
+  worth filing if the alternative actually ships. Two facts there surprise people, both
+  quoted from CC's own docs:
+  - **CC auto-approves `cat <anything>` by default.** Its built-in read-only set (`ls`,
+    `cat`, `grep`, `find`, `head`, `tail`, `wc`, …) *"runs without a permission prompt in
+    every mode"* and *"is not configurable"*. Without a sandbox, this hook is the only thing
+    gating those commands — which raises the stakes of calling it advisory rather than
+    lowering them.
+  - **`Read(...)` deny rules do not cover Bash.** Permission rules are per-tool, so
+    `Read(~/.ssh/**)` governs the Read tool, not `cat` via Bash. And `Read(/etc/**)` is not
+    absolute — *"the single leading slash anchors at the settings source"*.
+
+  The enforceable control is `sandbox.credentials.files`, because *"the operating system
+  enforces the sandbox boundary on the running process, so it holds regardless of what the
+  model chose to run."* That is the property this hook cannot have at any level of regex
+  effort.
+
+⚠ **Both of the above were errors in this ADR's own first draft**, caught by reading the
+official docs rather than trusting recall. They are recorded in the ADR rather than quietly
+corrected, because "the recommended alternative doesn't do what we said" is exactly the class
+of claim this repo keeps shipping.
+
 ## [2.17.8] - 2026-08-02 — shell-expanded path operands bypassed every literal rule (#116, glob half)
 
 ### Fixed
