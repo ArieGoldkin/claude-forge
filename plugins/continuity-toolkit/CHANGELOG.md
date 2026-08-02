@@ -48,8 +48,21 @@ the #99 block uses:
 - `cd / && cat etc/passwd` — no protected literal appears in the command at all.
 - `cd ~root && cat k` — tilde-user expansion.
 
-Both need a shell parse, the wall this file hits everywhere. Do not read this release as
-closing the class.
+Both need a shell parse. **This list is not exhaustive** — a second adversarial review pass
+found further spellings that reach the same resources and are net auto-approved. All were
+measured **pre-existing** (identical verdicts at `c5a9101`, before this change), so they are
+tracked separately rather than expanding this fix:
+
+- **#116** — glob (`~/.s*h/*` dumps a key directory in one auto-approved command), case
+  (`/ETC` resolves to the same inode on a case-insensitive volume), quote/brace splitting.
+- **#117** — a protected name is matched only as the **leading** path component, leaving
+  `/private/etc`, `/private/var` and `/Users/../etc` open.
+
+⚠ #117 is **not** fixed by weakening the left lookbehind — that is exactly what produced the
+Rails/Remix false-positive blocker documented above. Do not re-derive that fix.
+
+Do not read this release as closing the class. It closes the bare spelling of the leading
+path component, which is what #114 reported.
 
 ### Documentation — corrected in place (#75 policy)
 

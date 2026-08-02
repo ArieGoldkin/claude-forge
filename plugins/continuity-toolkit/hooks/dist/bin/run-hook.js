@@ -3030,11 +3030,23 @@ var BASH_SYSTEM_DIR_PATTERNS = [
   // these never match a name IMMEDIATELY followed by `/`. That is enough for
   // the #99 /var/folders exemption, which lives entirely in that space.
   //
-  // ⚠ KNOWN GAPS, measured — this closes the bare spelling, not the class:
+  // ⚠ KNOWN GAPS, measured — this closes the bare spelling, NOT the class.
+  // THE LIST BELOW IS NOT EXHAUSTIVE; treat it as examples, not a boundary.
   //   `cd / && cat etc/passwd`  — no protected literal appears at all
   //   `cd ~root && cat k`       — tilde-user expansion
-  // Both need a shell parse, the wall this file hits everywhere. Do not claim
-  // the class is closed.
+  // Both need a shell parse, the wall this file hits everywhere.
+  //
+  // Adversarial review of PR #115 found further spellings that reach the same
+  // resources and are net AUTO-APPROVED. All were measured PRE-EXISTING — they
+  // predate #114 and this change neither introduced nor widened them — so they
+  // are tracked separately rather than expanding this fix:
+  //   #116  glob (`~/.s*h/*` dumps the key dir), case (`/ETC` on a
+  //         case-insensitive volume), quote/brace splitting (`"/e""tc/…"`)
+  //   #117  the name matched only as the LEADING path component, so
+  //         `/private/etc`, `/private/var` and `/Users/../etc` are open
+  // ⚠ #117 is NOT fixed by weakening the lookbehind below — that is precisely
+  // what shipped the Rails/Remix false-positive blocker. Read the postscript in
+  // docs/reviews/2026-08-02_114-99-coupling-investigation.md first.
   /(?<![\w.-])\/etc(?![\w\-/])/,
   /(?<![\w.-])\/usr(?![\w\-/])/,
   /(?<![\w.-])\/var(?![\w\-/])/,
