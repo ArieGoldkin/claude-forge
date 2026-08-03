@@ -109,19 +109,57 @@ return promptAt - stampedAt > graceMs ? 'suspect' : 'healthy';
   healthy 07-28 period. Users prompted repeatedly through 07-29. `promptAt - stampedAt` ≈ **hours**
   versus a 30 s grace → **`suspect`**.
 
-So the reader would have stayed silent for the first ~6 seconds and then fired for the remaining
-~15.5 hours — i.e. for the part that actually cost something. **Contingent** on the tmp marker
-surviving the ~7 h gap; `sessionScopedTmpPath` lives in tmp and that survival is *not* measured here.
+So the reader would have stayed silent for the first few seconds and then fired for the remaining
+~15.5 hours — i.e. for the part that actually cost something.
 
 This does **not** close #82, and the header's core reasoning stands. It does mean the shipped
 reader's value on this incident class was **understated**, and the header's blanket sentence should
 be narrowed to the session-start case it actually describes.
 
+### ✅ The contingency is now discharged (measured 2026-08-03)
+
+This section originally labelled itself **contingent** on the tmp marker surviving the ~7.5 h gap,
+which was the one unmeasured link in what shipped to #82. It has since been measured, in the two
+halves it decomposes into:
+
+**Survival** — on the same `/var/folders/…/T` that `sessionScopedTmpPath` writes to:
+
+| Question | Measurement |
+|---|---|
+| Passive survival (mtime == atime, never re-read) | **≥25.3 h** — 3.4× the gap |
+| Survival where a read refreshes atime | **98 h** |
+| Reboot inside the incident's gap? | **No.** Reboots bracket it: Jul 15, then Jul 29 `19:15Z` — *after* the `03:28Z` resume |
+| Would a reboot have wiped it anyway? | **No.** A file **46 h older than the last boot** is still present |
+| Does any ctk code unlink markers? | **No.** The two `unlinkSync`/`rmSync` sites are a `.json`-only snapshot pruner and a `~/.claude/cache` root — neither reaches tmp |
+
+**Predicate** — driving the real module (not a reimplementation), 8/8 including a must-fail control:
+
+| Case | Verdict |
+|---|---|
+| Marker 7.5 h stale, prompt 1 min ago | `suspect` ✅ |
+| Marker 15.5 h stale (full outage) | `suspect` ✅ |
+| **Fresh stamp (must-fail control)** | `healthy` ✅ |
+| No marker (the `b0a7c248` case) | `unknown` ✅ |
+| Stale marker, no genuine prompt (long turn) | `unknown` ✅ |
+| 29 s stale / 31 s stale (grace boundary) | `healthy` / `suspect` ✅ |
+
+**Third dependency, also checked**: the reader runs at all inside a zero-plugin process, because
+ctk's statusline launcher (`~/.config/claude/continuity-statusline.sh`) resolves its script with a
+filesystem `find` over the plugin cache — not through plugin resolution.
+
+⚠ **One refinement the original text got slightly wrong.** The banner does *not* fire at the instant
+of resume: at that moment the newest prompt still predates the stamp, which is `healthy` by
+construction. It is the first **new** prompt in the resumed session that makes the gap evidence.
+
+`hook-liveness.ts`'s header has been narrowed accordingly. The correction is comment-only —
+`dist/**/*.js` is byte-identical, so no version bump.
+
 ## Suggested next steps (proposed, not applied)
 
-1. **Narrow the `hook-liveness.ts` header claim** to the brand-new-session case, and record that a
-   resumed session with a surviving marker evaluates to `suspect`. Verify the tmp-marker survival
-   assumption first — it is the one unmeasured link.
+1. ✅ **DONE (2026-08-03)** — **Narrowed the `hook-liveness.ts` header claim** to the
+   brand-new-session case, and recorded that a resumed session with a surviving marker evaluates to
+   `suspect`. The tmp-marker survival assumption was measured first; see "The contingency is now
+   discharged" above.
 2. **Update #82** with the process-scoped finding, the corrected repair attribution, and the
    refutation table. The issue currently directs a future investigator at global artifacts that are
    now measured healthy.
