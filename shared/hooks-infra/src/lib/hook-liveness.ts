@@ -47,11 +47,51 @@
  *
  * ## ⚠ What this does NOT catch: the session-start total unload
  *
- * #82's one observed occurrence was a session that started with **zero** plugins
- * loaded. No hook ran, so `session-loader` never stamped and **no marker exists at
- * all** — which this reader reports as `unknown`, i.e. silently. It therefore
- * would **not** have caught the 2026-07-29 event, and must not be described as
- * closing #82.
+ * #82's outage **began** in a session that started with **zero** plugins loaded.
+ * No hook ran, so `session-loader` never stamped and **no marker exists at all** —
+ * which this reader reports as `unknown`, i.e. silently. The onset is invisible
+ * here, and this must not be described as closing #82.
+ *
+ * **It does not follow that the reader would have stayed silent for the event.**
+ * An earlier revision of this header said exactly that, and it was too strong. The
+ * 2026-07-29 outage ran ~15.5 h across many `/resume`s inside the one broken
+ * process, and a resumed session **reuses its session id** — so `1ffd512a` **would
+ * still have carried** a marker from its healthy 07-28 period.
+ *
+ * ⚠ **That is a reconstruction, not an observation, and the subjunctive is
+ * load-bearing.** This module landed `352886c` on 2026-07-30, **~38 h after the
+ * incident**, so no marker for `1ffd512a` ever existed and none could be recovered.
+ * The survival figures below come from **real** markers written by sessions between
+ * 2026-07-30 and 08-02; the predicate figures come from synthetic inputs. Together
+ * they establish that the mechanism *would* have held — the strongest claim the
+ * evidence supports, and not the same as having watched it hold. Measured
+ * 2026-08-03, in two separable halves:
+ *
+ * - **Survival.** Markers in `os.tmpdir()` outlive the incident's ~7.5 h gap by a
+ *   wide margin: **≥25.3 h passively** (mtime == atime, i.e. never re-read) and
+ *   **98 h** where a read refreshes atime, measured on the same `/var/folders/…/T`
+ *   this module writes to. No reboot fell inside that gap, and a reboot would not
+ *   have mattered — a file **46 h older than the last boot** is still present.
+ *   Nothing in ctk unlinks these files.
+ * - **Predicate.** Driving this module with a 7.5 h-stale marker against a live
+ *   prompt returns `suspect`; 15.5 h likewise. Grace-boundary controls hold at
+ *   29 s ⇒ `healthy` and 31 s ⇒ `suspect`.
+ *
+ * The reader also survives the unload that silences the hooks, because ctk's
+ * statusline launcher resolves its script with a filesystem `find` over the plugin
+ * cache rather than through plugin resolution.
+ *
+ * So the honest scope on the one observed incident is: **silent from the process
+ * start until the user's first prompt inside a resumed session — at least ~7.5 s —
+ * then `suspect` for the remaining ~15.5 h.** That bound is the measured
+ * process-start-to-`/resume` interval (`03:28:15.598Z` → `03:28:23.073Z`); the true
+ * silent window is longer by however long the user then took to submit, which the
+ * transcript does not record. (It is not the instant of resume: at that point the
+ * newest prompt still predates the stamp, which is `healthy` by construction. It is
+ * the first *new* prompt that makes the gap evidence.) That is
+ * detection for the part that cost something, not a closure of #82 — the trigger
+ * remains unidentified, and a process that only ever starts fresh sessions leaves
+ * no marker and stays silent throughout.
  *
  * That blindness is forced, not an oversight. "No marker" has two causes that are
  * indistinguishable from inside a session — hooks are dead, or the loaded hooks

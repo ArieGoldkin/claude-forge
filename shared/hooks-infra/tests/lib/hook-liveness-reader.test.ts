@@ -381,6 +381,38 @@ describe('assessHookLiveness', () => {
     expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('suspect');
   });
 
+  // The #82 incident shape, at its measured magnitudes. The module header claims
+  // this reader would have fired for the RESUMED remainder of the 2026-07-29
+  // outage — the part that cost ~15.5 h — and that claim is a comment until
+  // something pins it. An earlier header said the opposite and was too strong.
+  it('ALARMS on the #82 resumed session — an hours-stale marker against a live prompt', () => {
+    // `1ffd512a` stamped normally through 07-28, was resumed at 07-29 03:28 inside
+    // the process that had resolved zero plugins, and never stamped again. The
+    // marker survives the gap: measured ≥25.3 h passively in `/var/folders/…/T`,
+    // no reboot fell inside it, and nothing in ctk unlinks these files.
+    marker(SESSION, '2026-07-28T20:00:00.000Z');
+    const path = transcript([userPrompt('2026-07-29T03:30:00.000Z')]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('suspect');
+  });
+
+  it('still alarms across the full 15.5 h the #82 outage ran', () => {
+    marker(SESSION, '2026-07-29T03:28:00.000Z');
+    const path = transcript([userPrompt('2026-07-29T18:58:00.000Z')]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('suspect');
+  });
+
+  it('does NOT alarm at the instant of resume, before any new prompt', () => {
+    // The refinement the write-up first got wrong: on resuming, the newest prompt
+    // in the transcript still predates the stamp, which is `healthy` by
+    // construction. It is the first NEW prompt that makes the gap evidence. Pinned
+    // so the header's "~8 s of silence, then suspect" cannot silently become
+    // "suspect the moment a stale marker is seen" — which would alarm on every
+    // `claude --resume` of a healthy old session.
+    marker(SESSION, '2026-07-28T20:00:00.000Z');
+    const path = transcript([userPrompt('2026-07-28T19:59:00.000Z')]);
+    expect(assessHookLiveness({ sessionId: SESSION, transcriptPath: path })).toBe('healthy');
+  });
+
   it('is UNKNOWN — never suspect — when no marker exists', () => {
     // This is what resolves blocker (1): a session whose loaded hooks predate the
     // writer has no marker, and must not be told its guardrails are gone. It is
