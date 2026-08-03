@@ -79,6 +79,14 @@ ARCHIVE_FILE=".claude/continuity/archive/ledger-$QUARTER.md"
 
 ### Step 4: Create Archive File
 
+Compose the archive from the structure below and write it to a **draft file** with the Write tool.
+Step 6 moves the draft into place — nothing overwrites a real file before then.
+
+```bash
+ARCHIVE_DRAFT="${TMPDIR:-/tmp}/ctk-archive-draft.md"
+# Write the composed archive (structure below) to "$ARCHIVE_DRAFT".
+```
+
 **Archive structure**:
 
 ```markdown
@@ -119,6 +127,14 @@ ARCHIVE_FILE=".claude/continuity/archive/ledger-$QUARTER.md"
 
 ### Step 5: Create Summarized Ledger
 
+Compose the lean ledger — the **whole** replacement file, not just the changed sections — and write
+it to a draft with the Write tool. Same rule as Step 4: draft now, move in Step 6.
+
+```bash
+LEAN_DRAFT="${TMPDIR:-/tmp}/ctk-lean-ledger-draft.md"
+# Write the composed lean ledger (sections below) to "$LEAN_DRAFT".
+```
+
 **New "Done (Previous Sessions)"**:
 
 ```markdown
@@ -155,16 +171,28 @@ See archive/ledger-{QUARTER}.md for decisions older than 30 days:
 
 ### Step 6: Write Updated Files
 
-```bash
-# Write archive
-echo "$ARCHIVE_CONTENT" > "$ARCHIVE_FILE"
+Back up the live ledger **before** replacing it. This is the rollback point the Safety section
+promises and the baseline Step 7 measures against, so it has to exist by the time either runs.
 
-# Write lean ledger
-echo "$LEAN_LEDGER" > "$LEDGER"
+```bash
+# Rollback point — must precede the overwrite below
+cp "$LEDGER" "$LEDGER.backup"
+
+# Move the drafts composed in Steps 4 and 5 into place
+mkdir -p "$(dirname "$ARCHIVE_FILE")"
+mv "$ARCHIVE_DRAFT" "$ARCHIVE_FILE"
+mv "$LEAN_DRAFT"    "$LEDGER"
 
 # Update metadata
 # Add archive record to .claude/continuity/archive/README.md
 ```
+
+> **Why drafts and not variables (issue #110).** Step 6 used to write `$ARCHIVE_CONTENT` and
+> `$LEAN_LEDGER`, neither of which was ever assigned. The second one is the dangerous shape: its
+> *destination* `$LEDGER` **is** bound, to the live `CONTINUITY_*.md`. Because these blocks are a
+> spec a model reads rather than a script the shell runs, the cost is ambiguity — a reader has to
+> invent the content — and literal lines from these blocks do propagate into commands a model
+> composes. Drafts remove the invention: Steps 4 and 5 produce named files, Step 6 moves them.
 
 ### Step 7: Verify Results
 
@@ -218,16 +246,22 @@ echo "Ledger reduced: $OLD_SIZE → $NEW_SIZE lines ($PERCENT% reduction)"
 ## Safety & Backup
 
 **Before archiving**:
-1. Create backup: `cp LEDGER LEDGER.backup.$(date +%Y%m%d)`
+1. Step 6 creates the backup at `"$LEDGER.backup"` — one fixed name, so rollback and the Step 7
+   baseline both resolve without guessing a date. Do not invent a second, differently-named copy.
 2. Verify archive file written successfully
 3. Verify main ledger still valid markdown
 
 **Rollback if needed**:
 ```bash
-# Restore from backup
+# Restore from the backup Step 6 wrote
 LEDGER=$(ls .claude/continuity/ledgers/CONTINUITY_*.md | head -1)
-cp "${LEDGER}.backup.20260116" "$LEDGER"
+cp "$LEDGER.backup" "$LEDGER"
 ```
+
+> The rollback path used to name `"${LEDGER}.backup.20260116"` — a hardcoded date that matched
+> nothing any step produced, against a backup instruction that used a *third* spelling. Part of
+> issue #110: a literal that looks runnable is worse than an obvious placeholder, because a reader
+> copies it.
 
 ## Archive Retention Policy
 

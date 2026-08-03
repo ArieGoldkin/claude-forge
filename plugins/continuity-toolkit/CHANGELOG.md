@@ -2,6 +2,42 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.18.1] - 2026-08-03 — `/ctk:archive-ledger` no longer tells you to write variables that do not exist (#110)
+
+### Fixed
+
+- **`archive-ledger.md` Steps 4–7 are now self-consistent.** Step 6 wrote `$ARCHIVE_CONTENT` and
+  `$LEAN_LEDGER`, **neither assigned anywhere in the file** — present since the initial commit
+  (`f0d2c5f`). The second is the dangerous shape: its *destination* `$LEDGER` **is** bound, to the
+  live `CONTINUITY_*.md`. Steps 4 and 5 now write their composed output to named draft files
+  (`$ARCHIVE_DRAFT`, `$LEAN_DRAFT`) and Step 6 moves those into place — the same resolution
+  `/ctk:doctor` took for `$INSTALLED_PLUGINS` in #109: removed, not assigned, because multi-KB
+  markdown does not belong in a shell variable.
+- **A third defect the issue did not name: Step 7 read `"$LEDGER.backup"`, which no step created.**
+  Invisible to every unbound-variable check, because `LEDGER` *is* bound — a bound name with a
+  wrong suffix passes a name-level parser. `OLD_SIZE` was therefore empty, making
+  `PERCENT=$((REDUCTION * 100 / OLD_SIZE))` a division by zero. Step 6 now creates that backup
+  before overwriting, which also gives the Safety section the rollback point it already promised.
+- **The Safety section's rollback path named a hardcoded date** (`.backup.20260116`) matching
+  nothing any step produced, against a backup instruction that used a *third* spelling
+  (`LEDGER.backup.$(date +%Y%m%d)`, unquoted, no `$`). All three now agree on `"$LEDGER.backup"`.
+
+### Severity
+
+**Spec-ambiguity, not data loss.** Command `.md` bash blocks are interpreted, not executed
+(measured in #109 / PR #112: 26 sessions, none ran the block), so the live ledger was never
+truncated. It still mattered: a reader had to invent the missing content, and literal lines from
+these blocks demonstrably propagate into the commands a model composes — 3 of those 26 sessions
+embedded a block's literal line verbatim, one after editing it.
+
+### Testing
+
+`tests/doctor-command-shell-vars.test.ts` widened from doctor.md to **both** command files (+5
+tests, ctk 2789 → 2794). archive-ledger.md needed no parser change: it contains no `eval` and no
+`$ARGUMENTS`, the two blockers that still prevent covering *every* command file. Includes a
+must-fail control run against the real pre-fix revision via `git cat-file blob`, plus a dedicated
+test for the backup defect the variable detector structurally cannot catch.
+
 ## [2.18.0] - 2026-08-02 — the statusline announces a mid-session hook outage (#82)
 
 ### Added
