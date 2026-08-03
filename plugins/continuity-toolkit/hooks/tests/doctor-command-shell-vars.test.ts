@@ -28,10 +28,24 @@
  * cannot catch that specific regression, so it is stated here: **do not reintroduce a per-plugin
  * loop whose body does not reference the loop variable.**
  *
- * SCOPE: doctor.md only. Widening to every command file needs an `eval`-aware parser (post-mr-
- * comments.md assigns via `eval "$(jq …)"`) and an allowlist for CC's `$ARGUMENTS` placeholder.
- * A separate dead-variable defect in archive-ledger.md was found by the same probe and filed
- * separately rather than folded in here.
+ * SCOPE: doctor.md and archive-ledger.md. Widening to EVERY command file still needs an
+ * `eval`-aware parser (post-mr-comments.md assigns via `eval "$(jq …)"`) and an allowlist for CC's
+ * `$ARGUMENTS` placeholder; archive-ledger.md was added because it needs **neither** — it contains
+ * no `eval` and no `$ARGUMENTS`, so the existing detector covers it unmodified.
+ *
+ * ISSUE #110 — archive-ledger.md Step 6 expanded `$ARCHIVE_CONTENT` and `$LEAN_LEDGER`, neither
+ * bound anywhere. The asymmetry made it worse than doctor.md's: the *destination* `$LEDGER` was
+ * correctly bound to the live `CONTINUITY_*.md`, so the ambiguous instruction pointed at real data.
+ * Reclassified from destructive to spec-ambiguity by the same execution-mode measurement above —
+ * still a defect, because a reader must invent the value before acting.
+ *
+ * ⚠ THE VARIABLE DETECTOR STRUCTURALLY CANNOT CATCH THE THIRD #110 DEFECT, so it gets its own test.
+ * Step 7 read `"$LEDGER.backup"` while no step created it (the only backup instruction lived in a
+ * later Safety section under a *dated* name, `.backup.$(date +%Y%m%d)`). `LEDGER` **is** bound, so
+ * every unbound-variable check passes and the file still names a file that never exists — which
+ * made `OLD_SIZE` empty and `PERCENT=$((REDUCTION * 100 / OLD_SIZE))` a division by zero.
+ * A bound variable plus a wrong suffix is invisible to a name-level parser: see
+ * `creates the backup file that Step 7 reads`.
  *
  * @module tests/doctor-command-shell-vars
  */
@@ -47,6 +61,11 @@ import { describe, expect, it } from 'vitest';
  */
 const DOCTOR_PATH =
   process.env.DOCTOR_MD_PATH ?? path.join(__dirname, '..', '..', 'commands', 'doctor.md');
+
+/** Same override contract as {@link DOCTOR_PATH}, for the #110 file. */
+const ARCHIVE_LEDGER_PATH =
+  process.env.ARCHIVE_LEDGER_MD_PATH ??
+  path.join(__dirname, '..', '..', 'commands', 'archive-ledger.md');
 
 /**
  * Variables supplied by the environment rather than by the file. `CLAUDE_*` are set by Claude Code
@@ -151,5 +170,75 @@ describe('doctor.md shell variables (#109)', () => {
       '```',
     ].join('\n');
     expect(unboundIn(commentOnly)).toEqual([]);
+  });
+});
+
+/**
+ * Does the spec create `$LEDGER.backup` before Step 7 reads it?
+ *
+ * Deliberately narrow: it asks only about the one path #110 named, not "every file read is created
+ * somewhere", which would need real dataflow. Stated so the next reader does not mistake its pass
+ * for general coverage of the read-a-file-nobody-wrote class.
+ */
+function backupUsage(markdown: string): { reads: boolean; creates: boolean } {
+  const src = stripComments(bashBlocks(markdown));
+  // read: the bare `.backup` name appears as a redirect source or command operand
+  const reads = /<[ \t]*"\$\{?LEDGER\}?\.backup"/.test(src);
+  // create: something copies the live ledger onto that exact name
+  const creates = /\bcp[ \t]+"\$\{?LEDGER\}?"[ \t]+"\$\{?LEDGER\}?\.backup"/.test(src);
+  return { reads, creates };
+}
+
+describe('archive-ledger.md shell variables (#110)', () => {
+  const read = () => fs.readFileSync(ARCHIVE_LEDGER_PATH, 'utf8');
+
+  it('expands no variable that is never bound', () => {
+    expect(unboundIn(read())).toEqual([]);
+  });
+
+  it('no longer names the two variables the issue reported', () => {
+    // Same resolution doctor.md took for INSTALLED_PLUGINS: removed, not assigned. Multi-KB
+    // markdown does not belong in a shell variable, so the spec hands Step 6 draft *files* whose
+    // paths are bound. Asserting absence (not boundness) keeps a future re-introduction failing.
+    const src = stripComments(bashBlocks(read()));
+    expect(src).not.toMatch(/\$\{?ARCHIVE_CONTENT/);
+    expect(src).not.toMatch(/\$\{?LEAN_LEDGER/);
+    const bound = boundNames(src);
+    expect(bound.has('ARCHIVE_DRAFT')).toBe(true);
+    expect(bound.has('LEAN_DRAFT')).toBe(true);
+  });
+
+  it('creates the backup file that Step 7 reads', () => {
+    // The third #110 defect, invisible to every unbound-variable check because LEDGER *is* bound.
+    // Reading without creating leaves OLD_SIZE empty, making the PERCENT arithmetic divide by zero.
+    const { reads, creates } = backupUsage(read());
+    expect(reads).toBe(true);
+    expect(creates).toBe(true);
+  });
+
+  it('MUST-FAIL CONTROL: the pre-fix Step 6 is reported as broken', () => {
+    const preFix = [
+      '```bash',
+      'LEDGER=$(ls .claude/continuity/ledgers/CONTINUITY_*.md | head -1)',
+      '```',
+      '```bash',
+      'echo "$ARCHIVE_CONTENT" > "$ARCHIVE_FILE"',
+      'echo "$LEAN_LEDGER"     > "$LEDGER"',
+      '```',
+    ].join('\n');
+    expect(unboundIn(preFix)).toEqual(['ARCHIVE_CONTENT', 'ARCHIVE_FILE', 'LEAN_LEDGER']);
+  });
+
+  it('MUST-FAIL CONTROL: reading a backup nobody creates is caught', () => {
+    // Guards the backup check itself. The pre-fix file read `$LEDGER.backup` and created only the
+    // differently-named `$LEDGER.backup.$(date +%Y%m%d)`, which must NOT count as creating it.
+    const preFix = [
+      '```bash',
+      'LEDGER=$(ls .claude/continuity/ledgers/CONTINUITY_*.md | head -1)',
+      'cp "$LEDGER" "$LEDGER.backup.$(date +%Y%m%d)"',
+      'OLD_SIZE=$(wc -l < "$LEDGER.backup")',
+      '```',
+    ].join('\n');
+    expect(backupUsage(preFix)).toEqual({ reads: true, creates: false });
   });
 });
