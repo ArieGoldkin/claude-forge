@@ -105,9 +105,13 @@ return promptAt - stampedAt > graceMs ? 'suspect' : 'healthy';
 ```
 
 - For `b0a7c248` — brand-new session, no hook ever ran, **no marker** → `unknown` → silent. As documented.
-- For `1ffd512a` — **resumed**, so the session id is reused and a marker **already existed** from its
-  healthy 07-28 period. Users prompted repeatedly through 07-29. `promptAt - stampedAt` ≈ **hours**
-  versus a 30 s grace → **`suspect`**.
+- For `1ffd512a` — **resumed**, so the session id is reused and a marker **would still have existed**
+  from its healthy 07-28 period. Users prompted repeatedly through 07-29. `promptAt - stampedAt` ≈
+  **hours** versus a 30 s grace → **`suspect`**.
+
+⚠ **The subjunctive is load-bearing.** `hook-liveness.ts` landed `352886c` on **2026-07-30**, ~38 h
+*after* the incident, so no marker for `1ffd512a` ever existed and none can be recovered. This
+section is a **reconstruction of a mechanism**, not a replay of a recorded artifact.
 
 So the reader would have stayed silent for the first few seconds and then fired for the remaining
 ~15.5 hours — i.e. for the part that actually cost something.

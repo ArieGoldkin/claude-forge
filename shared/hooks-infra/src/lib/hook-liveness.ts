@@ -55,9 +55,17 @@
  * **It does not follow that the reader would have stayed silent for the event.**
  * An earlier revision of this header said exactly that, and it was too strong. The
  * 2026-07-29 outage ran ~15.5 h across many `/resume`s inside the one broken
- * process, and a resumed session **reuses its session id** — so `1ffd512a` still
- * carried a marker from its healthy 07-28 period. Measured 2026-08-03, in two
- * separable halves:
+ * process, and a resumed session **reuses its session id** — so `1ffd512a` **would
+ * still have carried** a marker from its healthy 07-28 period.
+ *
+ * ⚠ **That is a reconstruction, not an observation, and the subjunctive is
+ * load-bearing.** This module landed `352886c` on 2026-07-30, **~38 h after the
+ * incident**, so no marker for `1ffd512a` ever existed and none could be recovered.
+ * The survival figures below come from **real** markers written by sessions between
+ * 2026-07-30 and 08-02; the predicate figures come from synthetic inputs. Together
+ * they establish that the mechanism *would* have held — the strongest claim the
+ * evidence supports, and not the same as having watched it hold. Measured
+ * 2026-08-03, in two separable halves:
  *
  * - **Survival.** Markers in `os.tmpdir()` outlive the incident's ~7.5 h gap by a
  *   wide margin: **≥25.3 h passively** (mtime == atime, i.e. never re-read) and
@@ -74,10 +82,13 @@
  * cache rather than through plugin resolution.
  *
  * So the honest scope on the one observed incident is: **silent from the process
- * start until the user's first prompt inside a resumed session — ~8 s — then
- * `suspect` for the remaining ~15.5 h.** (Not from the instant of resume: at that
- * point the newest prompt still predates the stamp, which is `healthy` by
- * construction. It is the first *new* prompt that makes the gap evidence.) That is
+ * start until the user's first prompt inside a resumed session — at least ~7.5 s —
+ * then `suspect` for the remaining ~15.5 h.** That bound is the measured
+ * process-start-to-`/resume` interval (`03:28:15.598Z` → `03:28:23.073Z`); the true
+ * silent window is longer by however long the user then took to submit, which the
+ * transcript does not record. (It is not the instant of resume: at that point the
+ * newest prompt still predates the stamp, which is `healthy` by construction. It is
+ * the first *new* prompt that makes the gap evidence.) That is
  * detection for the part that cost something, not a closure of #82 — the trigger
  * remains unidentified, and a process that only ever starts fresh sessions leaves
  * no marker and stays silent throughout.
