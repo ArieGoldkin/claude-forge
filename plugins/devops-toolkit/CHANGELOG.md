@@ -2,7 +2,7 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
-## [2.0.15] - 2026-08-03 — corrected the exit-code-2 claim in the output-helper reference (#67)
+## [2.0.15] - 2026-08-04 — corrected the exit-code-2 claim in the output-helper reference (#67)
 
 ### Changed
 

@@ -2,7 +2,7 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
-## [2.18.2] - 2026-08-03 — the zero-caller output helpers, decided as a rule (#67)
+## [2.18.2] - 2026-08-04 — the zero-caller output helpers, decided as a rule (#67)
 
 ### Changed
 
