@@ -2,6 +2,39 @@
 
 All notable changes to the continuity-toolkit (`ctk`) plugin will be documented in this file.
 
+## [2.18.2] - 2026-08-03 — the zero-caller output helpers, decided as a rule (#67)
+
+### Changed
+
+- **`outputStderrWarning`'s doc comment corrected — exit 2 is a *blocking error*, not a
+  user-only notice.** It read "displays the message to the user without injecting it into the
+  conversation context". That holds only where exit 2 is non-blocking; on
+  `PreToolUse` / `PostToolUse` / `Stop` it **blocks the operation** and the message reaches Claude.
+  The function takes no event parameter, so the caller owns that judgement. Measured on CC 2.1.221:
+  the binary carries `hook blocking error from command:` and `hook returned blocking error`.
+  ⚠ The per-event stderr routing was **not** measured — that part follows CC's documented contract.
+- **`docs/plugin-hook-system.md`** — the exit-code-2 bullet and the output-helper table row now say
+  the same thing, instead of repeating the wrong claim in two more places.
+- **A rule replaces case-by-case judgement.** At decision time **8 of 20** exported output helpers
+  had zero production callers, not the 2 the issue named. Deciding two would have left six for the
+  next reviewer to re-file. Recorded in `lib/output.ts`'s module header: **keep** a helper wrapping a
+  real CC mechanism nothing else wraps; **delete** a pure rename. The seven keepers are tagged
+  individually so nobody mistakes them for dead code.
+
+### Removed
+
+- **`outputMessageDisplayHide()`** — it was `return outputMessageDisplay('')`: a second name for one
+  behaviour, with no added parameters or logic, and its own doc told callers to prefer what it
+  wrapped. Not plugin-public API (it appeared in no plugin's `index.ts`) and never in any shipped
+  bundle — the bundler had already tree-shaken it, which independently corroborates zero callers.
+  The suppression contract now lives on `outputMessageDisplay`, and the assertion that matters —
+  **no `hide` field** — moved there rather than being deleted with it.
+
+### Note
+
+`dist/**/*.js` is byte-identical; only sourcemaps moved. The version bump is for the corrected
+**documentation**, which users pick up only on update.
+
 ## [2.18.1] - 2026-08-03 — `/ctk:archive-ledger` no longer tells you to write variables that do not exist (#110)
 
 ### Fixed

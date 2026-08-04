@@ -2,6 +2,22 @@
 
 All notable changes to the devops-toolkit (`dtk`) plugin will be documented in this file.
 
+## [2.0.15] - 2026-08-03 — corrected the exit-code-2 claim in the output-helper reference (#67)
+
+### Changed
+
+- **`CLAUDE.md`'s output-helper block no longer says `outputStderrWarning` means
+  "user sees, Claude doesn't".** Exit 2 is a hook **blocking error**; on
+  `PreToolUse` / `PostToolUse` / `Stop` it blocks the operation and the message reaches Claude.
+  Use `outputWarning()` for a warning that blocks nothing. The claim had never been exercised
+  because nothing in the repo calls the function — the same shape as a sibling helper that shipped
+  a `hide` field Claude Code has never had.
+
+### Note
+
+No code changed in this plugin; `dist/**/*.js` is byte-identical. The bump exists so installs pick
+up the corrected reference.
+
 ## [2.0.14] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
 
 ### Fixed

@@ -17,7 +17,6 @@ import {
   outputDefer,
   outputDeny,
   outputMessageDisplay,
-  outputMessageDisplayHide,
   outputPromptContext,
   outputRetry,
   outputSessionTitle,
@@ -1658,6 +1657,30 @@ describe('outputMessageDisplay', () => {
     expect('displayContent' in emitted.hookSpecificOutput).toBe(true);
   });
 
+  // MIGRATED FROM outputMessageDisplayHide, which was removed as a pure rename
+  // (issue #67). The suppression contract now belongs to this function, so its
+  // regression test does too — deleting the wrapper must not delete the only
+  // assertion that CC has no `hide` field.
+  //
+  // That absence is the regression that matters most: the removed helper's
+  // ORIGINAL implementation returned `{ hide: true }`, a field occurring nowhere
+  // in the CC binary, so a caller believing it had suppressed a message would
+  // have displayed that message in full. Nothing called it, so nothing caught it.
+  //
+  // Asserted with `in` rather than a truthiness check on purpose: a resurrected
+  // `hide: false` satisfies `toBeFalsy()` while re-introducing the key.
+  it('should suppress via empty displayContent and emit NO hide field', () => {
+    const emitted = outputMessageDisplay('') as {
+      hookSpecificOutput: Record<string, unknown>;
+    };
+    expect('hide' in emitted.hookSpecificOutput).toBe(false);
+    expect('hide' in emitted).toBe(false);
+    expect(Object.keys(emitted.hookSpecificOutput).sort()).toEqual([
+      'displayContent',
+      'hookEventName',
+    ]);
+  });
+
   it('should preserve unicode and emoji without mangling', () => {
     const text = 'patient 🏥 données médicales 日本語 🔒';
     expect(outputMessageDisplay(text).hookSpecificOutput?.displayContent).toBe(text);
@@ -1685,73 +1708,6 @@ describe('outputMessageDisplay', () => {
 });
 
 // =============================================================================
-// outputMessageDisplayHide TESTS
-//
-// This helper has ZERO callers in the repo. That is exactly why it needs tests:
-// its previous implementation returned `{ hide: true }`, a field that occurs
-// nowhere in the CC binary, so any caller believing it had suppressed a message
-// would have displayed that message in full. Nothing exercised it, so nothing
-// caught it — an adversarial review of #56 did.
-//
-// The absence of `hide` is therefore the regression that matters most here, and
-// it is asserted with `in` rather than a truthiness check: a resurrected
-// `hide: false` would satisfy `toBeFalsy()` while re-introducing the key.
-// =============================================================================
-
-describe('outputMessageDisplayHide', () => {
-  it('should emit an empty displayContent as the suppression signal', () => {
-    expect(outputMessageDisplayHide()).toEqual({
-      continue: true,
-      suppressOutput: true,
-      hookSpecificOutput: {
-        hookEventName: 'MessageDisplay',
-        displayContent: '',
-      },
-    });
-  });
-
-  it('should NOT emit a hide field', () => {
-    const emitted = outputMessageDisplayHide() as {
-      hookSpecificOutput: Record<string, unknown>;
-    };
-    expect('hide' in emitted.hookSpecificOutput).toBe(false);
-    expect('hide' in emitted).toBe(false);
-  });
-
-  it('should carry exactly the two MessageDisplay keys and no others', () => {
-    const emitted = outputMessageDisplayHide() as {
-      hookSpecificOutput: Record<string, unknown>;
-    };
-    expect(Object.keys(emitted.hookSpecificOutput).sort()).toEqual([
-      'displayContent',
-      'hookEventName',
-    ]);
-  });
-
-  // Pins DELEGATION, not shape. The implementation is literally
-  // `return outputMessageDisplay('')`, so both sides of this equality move
-  // together — a change to the emitted payload passes it green. The shape is
-  // pinned by the two literal assertions above; this one fires only if Hide
-  // stops delegating. Named for what it checks so the coverage is not oversold.
-  it('should delegate to outputMessageDisplay', () => {
-    expect(outputMessageDisplayHide()).toEqual(outputMessageDisplay(''));
-  });
-
-  it('should satisfy HookResult interface', () => {
-    const result: HookResult = outputMessageDisplayHide();
-    expect(result).toBeDefined();
-  });
-
-  it('should produce valid JSON when stringified', () => {
-    const json = JSON.stringify(outputMessageDisplayHide());
-    expect(() => JSON.parse(json)).not.toThrow();
-    const parsed = JSON.parse(json);
-    expect(parsed.hookSpecificOutput.displayContent).toBe('');
-    expect(parsed.hookSpecificOutput.hide).toBeUndefined();
-  });
-});
-
-// =============================================================================
 // outputStderrWarning TESTS
 //
 // Unlike every other helper in this file, this one returns `never`: it writes to
@@ -1759,11 +1715,25 @@ describe('outputMessageDisplayHide', () => {
 //
 // It is RE-EXPORTED from all five plugins' index.ts, and called from none of
 // them — `grep -n 'outputStderrWarning('` over tracked .ts outside dist/ returns
-// only this file and the definition itself. So it carries the same zero-caller
-// status as outputMessageDisplayHide below, and is tested for the same reason:
+// only this file and the definition itself. It is tested for exactly that reason:
 // nothing exercises it, so nothing would catch a change to it. (An earlier
 // version of this comment claimed it was "called from all five plugins" —
 // false, corrected after adversarial review of #66.)
+//
+// #67 settled the zero-caller question as a rule rather than case by case: KEEP a
+// helper wrapping a real CC mechanism nothing else wraps, DELETE a pure rename.
+// This one is kept — it is the only wrapper over exit 2, and the only one of the
+// eight zero-caller helpers that is genuinely plugin-public API. The sibling
+// `outputMessageDisplayHide` was `return outputMessageDisplay('')` and was
+// removed; its load-bearing assertion (no `hide` field) moved to the
+// `outputMessageDisplay` block above rather than being deleted with it.
+//
+// ⚠ A UNIT TEST PINS THE BEHAVIOUR YOU WROTE DOWN — INCLUDING WHEN IT IS WRONG.
+// These tests were green while the doc comment described exit 2 as purely
+// user-facing. It is a *blocking* error (CC 2.1.221 carries the literals
+// `hook blocking error from command:` and `hook returned blocking error`), and on
+// PreToolUse/PostToolUse/Stop the message reaches Claude. The docstring is now
+// corrected; no assertion here could have caught it, which is the point.
 //
 // The stub for process.exit deliberately THROWS. A no-op stub was measured
 // during Phase 2 of #64 and lets execution continue past a call typed `never` —
