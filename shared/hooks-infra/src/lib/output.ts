@@ -4,6 +4,35 @@
  * TypeScript port of scripts/lib/common.sh output functions.
  * These functions produce JSON output that Claude Code expects from hooks.
  *
+ * ## Zero-caller helpers — the policy (issue #67)
+ *
+ * This module is a **hook-authoring toolkit**, so a helper having no in-repo
+ * caller is expected, not dead code. At the time #67 was settled, **8 of 20**
+ * exported helpers had zero production callers. Deciding two of them in isolation
+ * would have left six identical cases for the next reviewer to re-file, so the
+ * decision was made as a rule:
+ *
+ * - **Keep** a helper that wraps a real Claude Code mechanism nothing else here
+ *   wraps — a distinct `permissionDecision`, a distinct event, a distinct field
+ *   combination, or a real budget/truncation behaviour. Zero callers is then a
+ *   fact about *this* repo, not about the helper's worth.
+ * - **Delete** a helper that is a pure rename of another helper — same behaviour,
+ *   no added parameters, no added logic. It buys a second name for one thing and
+ *   a second place for the truth to rot.
+ *
+ * Applied: `outputMessageDisplayHide()` was `return outputMessageDisplay('')` and
+ * was **removed**; the suppression contract now lives on
+ * {@link outputMessageDisplay}. The other seven were kept and are tagged
+ * individually so nobody mistakes them for dead code.
+ *
+ * ⚠ **THE REAL RISK IS NOT THE UNUSED CODE — IT IS THE UNEXERCISED CLAIM.** Both
+ * helpers #67 named carried a confident, wrong statement that no caller could
+ * falsify: one returned a `hide` field CC has never had, and the other described
+ * exit 2 as purely user-facing when it is a *blocking* error. **A helper with no
+ * callers needs its doc comment checked against the platform, not just a unit
+ * test** — a test pins the behaviour you wrote down, including when what you
+ * wrote down is wrong.
+ *
  * @module output
  */
 
@@ -200,6 +229,8 @@ export function outputAllow(
  * //          "hookSpecificOutput":{"permissionDecision":"allow",
  * //                                "additionalContext":"File is in safe directory"}}
  * ```
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputAllowWithContext(
   context: string,
@@ -256,6 +287,8 @@ export function outputPromptContext(context: string): HookResult {
  * @param context - Feedback to inject into Claude's context
  * @param hookEventName - 'Stop' (default) or 'SubagentStop'
  * @returns HookResult with continue=true, suppressOutput=true, and context
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputStopContext(
   context: string,
@@ -333,13 +366,31 @@ export function outputAsk(
 }
 
 /**
- * Output a warning to stderr that the user sees but Claude does not.
+ * Write a message to stderr and exit **2** — a hook *blocking error*.
  *
- * Writes the message to stderr and exits with code 2, which causes
- * Claude Code to display the message to the user without injecting
- * it into the conversation context.
+ * ⚠ **Exit 2 is event-dependent, and this function cannot tell which event it is
+ * running under.** It takes no event parameter, so the caller owns that
+ * judgement. An earlier version of this comment said flatly that exit 2 "displays
+ * the message to the user without injecting it into the conversation context".
+ * That is true only for the events where exit 2 is non-blocking; on
+ * `PreToolUse` / `PostToolUse` / `Stop` it **blocks the operation** and the
+ * message reaches Claude. The claim was never exercised, because nothing in this
+ * repo calls this function (issue #67) — the same way a former sibling shipped a
+ * `hide` field CC has never had.
  *
- * @param message - The warning message for the user
+ * Measured on CC **2.1.221**: the binary carries the literals
+ * `hook blocking error from command:` and `hook returned blocking error`, so exit
+ * 2 is classified as a blocking error rather than a user-facing notice.
+ * ⚠ **NOT measured here: the exact per-event stderr routing.** The claim above
+ * about which events send it to Claude comes from CC's documented hook contract,
+ * not from this probe — verify before relying on it for a specific event.
+ *
+ * Prefer {@link outputWarning} for a plain user-visible warning that blocks
+ * nothing. Reach for this only when a **blocking** failure is what you mean.
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
+ *
+ * @param message - The message written to stderr before exiting 2
  */
 export function outputStderrWarning(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -435,12 +486,22 @@ export function outputSessionTitle(title: string): HookResult {
  * ignore the unknown `hookEventName`, so this is safe to ship across
  * versions.
  *
- * @param transformedText - The text to display in place of the original
+ * **To SUPPRESS a message entirely, pass an empty string** — there is no `hide`
+ * flag. The MessageDisplay branch of CC 2.1.220's `hookSpecificOutput` schema has
+ * exactly one field, and `hide` occurs nowhere in the binary. A former
+ * `outputMessageDisplayHide()` returned `{ hide: true }`, so any caller believing
+ * it had suppressed a message displayed it in full; it was fixed to delegate here
+ * and then removed as a pure rename (issue #67). Suppress sparingly — an
+ * unexplained hidden message is confusing UX, and a redaction placeholder is
+ * usually the better choice.
+ *
+ * @param transformedText - The text to display in place of the original; `''` suppresses
  * @returns HookResult with the MessageDisplay payload
  *
  * @example
  * ```typescript
  * outputMessageDisplay("SSN: [REDACTED]");
+ * outputMessageDisplay("");            // suppress the message entirely
  * ```
  */
 export function outputMessageDisplay(transformedText: string): HookResult {
@@ -483,28 +544,6 @@ export function outputMessageDisplay(transformedText: string): HookResult {
 }
 
 /**
- * Output a directive to hide the assistant message at display time
- * (CC v2.1.152+ MessageDisplay event).
- *
- * Stronger than transform — the message is not shown to the user at all.
- * Use sparingly: an unexplained hidden message is confusing UX. Prefer
- * `outputMessageDisplay()` with a redaction placeholder unless full
- * suppression is required.
- *
- * @returns HookResult with hide directive
- */
-export function outputMessageDisplayHide(): HookResult {
-  // Suppression is an EMPTY `displayContent`, not a `hide` flag. The
-  // MessageDisplay branch of CC 2.1.220's hookSpecificOutput schema has exactly
-  // one field; `hide` occurs nowhere in the binary and the dispatch code has no
-  // handling for it. The previous implementation returned `{ hide: true }`, so
-  // any caller believing it had suppressed a message displayed it in full.
-  // Never reached by phi-output-redactor, but shipped. Found by adversarial
-  // review of #56.
-  return outputMessageDisplay('');
-}
-
-/**
  * Output answer for AskUserQuestion — auto-answer via PreToolUse hook (CC 2.1.85+).
  *
  * Use this in PreToolUse hooks to satisfy AskUserQuestion by providing
@@ -519,6 +558,8 @@ export function outputMessageDisplayHide(): HookResult {
  * // Auto-answer a question from external UI
  * outputAnswerQuestion({ answer: "yes, proceed with migration" });
  * ```
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputAnswerQuestion(updatedInput: Record<string, unknown>): HookResult {
   return {
@@ -540,6 +581,8 @@ export function outputAnswerQuestion(updatedInput: Record<string, unknown>): Hoo
  * can be resumed with `claude -p --resume`.
  *
  * @returns HookResult with permissionDecision='defer'
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputDefer(): HookResult {
   return {
@@ -661,6 +704,8 @@ export function truncateForLLM(
  * ```typescript
  * outputWarningBudgeted(veryLongLintOutput, 300);
  * ```
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputWarningBudgeted(message: string, maxChars = 500): HookResult {
   return outputWarning(truncateForLLM(message, { maxChars }));
@@ -679,6 +724,8 @@ export function outputWarningBudgeted(message: string, maxChars = 500): HookResu
  * ```typescript
  * outputContextBudgeted(longComplianceContext, 800);
  * ```
+ *
+ * Zero in-repo callers by design — see "Zero-caller helpers" in the module header.
  */
 export function outputContextBudgeted(context: string, maxChars = 1000): HookResult {
   return outputPromptContext(truncateForLLM(context, { maxChars }));

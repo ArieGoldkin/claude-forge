@@ -248,5 +248,5 @@ MIT — see [LICENSE](../../LICENSE).
 
 ---
 
-**Version**: 2.0.14
+**Version**: 2.0.15
 **Maintained by**: Arie Goldkin

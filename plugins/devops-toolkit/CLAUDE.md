@@ -1,7 +1,7 @@
 # dtk — DevOps Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
-> **Version**: 2.0.14
+> **Version**: 2.0.15
 > **Last Updated**: 2026-06-26
 
 ## Overview
@@ -67,9 +67,17 @@ outputAllow()                   // Permission auto-approve
 outputSuccess("msg")            // Success with system message
 outputPromptContext("ctx")      // Inject invisible context (UserPromptSubmit)
 outputWithContext("ctx")        // PostToolUse invisible context injection
-outputStderrWarning("msg")     // Stderr warning (user sees, Claude doesn't)
+outputStderrWarning("msg")     // stderr + exit 2 = BLOCKING error (see note below)
 outputWithNotification("u","c") // Dual-channel: systemMessage + additionalContext
 ```
+
+> ⚠ **`outputStderrWarning` exits 2, which is a hook *blocking error* — not a plain
+> notice.** This line previously read "user sees, Claude doesn't", which is true only
+> for the events where exit 2 is non-blocking; on `PreToolUse` / `PostToolUse` / `Stop`
+> it **blocks the operation** and the message reaches Claude. The function takes no
+> event parameter, so the caller owns that judgement. For a warning that blocks
+> nothing, use `outputWarning()`. Corrected under issue #67 — the claim had never been
+> exercised, because nothing in the repo calls the function.
 
 ### Input Parsing (input.ts)
 

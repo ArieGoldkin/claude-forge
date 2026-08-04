@@ -13,14 +13,14 @@
       "name": "ctk",
       "source": "./plugins/continuity-toolkit",
       "description": "Session continuity and context management (ctk, formerly continuity-toolkit) - 11 skills, 12 commands, 34 hooks, session persistence, delta-cache token compression, smart context monitoring, auto-continue handoff contract (PreCompact \u2192 SessionStart), and opt-in terminal window-title (CONTINUITY_TERMINAL_TITLE=1)",
-      "version": "2.18.1",
+      "version": "2.18.2",
       "category": "development"
     },
     {
       "name": "dtk",
       "source": "./plugins/devops-toolkit",
       "description": "DevOps toolkit (dtk, formerly devops-toolkit) - 15 skills, 2 agents, 12 commands for infrastructure and backend development, including Husky pre-commit setup",
-      "version": "2.0.14",
+      "version": "2.0.15",
       "category": "development"
     },
     {

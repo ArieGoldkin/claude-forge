@@ -36,7 +36,6 @@ export {
   outputSessionTitle,
   outputAnswerQuestion,
   outputMessageDisplay,
-  outputMessageDisplayHide,
 } from './output.js';
 
 // Input parsing for reading hook JSON from stdin

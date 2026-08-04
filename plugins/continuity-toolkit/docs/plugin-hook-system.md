@@ -296,7 +296,7 @@ Common HookResult patterns and their JSON output:
 | Post-tool context | `outputWithContext(ctx)` | `{..., hookSpecificOutput:{additionalContext:ctx}}` | Post-tool Claude context |
 | Ask user | `outputAsk(updatedInput?)` | `{continue:true, hookSpecificOutput:{permissionDecision:"ask", updatedInput?}}` | Prompt user + optional rewrite |
 | Dual channel | `outputWithNotification(userMsg, claudeCtx)` | `{continue:true, systemMessage:userMsg, hookSpecificOutput:{additionalContext:claudeCtx}}` | Different messages to user/Claude |
-| Stderr warning | `outputStderrWarning(msg)` | Writes to stderr, exits code 2 | User-only warning |
+| Stderr warning | `outputStderrWarning(msg)` | Writes to stderr, exits code 2 | **Blocking error** — see the exit-2 note under Debugging |
 
 ## Safety Patterns
 
@@ -478,7 +478,14 @@ The user never sees these messages — only Claude does, via `additionalContext`
 
 - **Log level**: Set `CONTINUITY_LOG_LEVEL=debug` to see verbose hook output in `~/.claude/logs/continuity/hooks.log`
 - **stderr**: Hook stderr goes to log files, not to the user
-- **Exit code 2**: Writes stderr message to user's terminal (not to Claude's context). Use `outputStderrWarning()` for this
+- **Exit code 2**: a hook **blocking error**, not a plain user notice. ⚠ This line previously read
+  "writes stderr message to user's terminal (not to Claude's context)" — true only for the events where
+  exit 2 is non-blocking. On `PreToolUse` / `PostToolUse` / `Stop` it **blocks the operation** and the
+  message reaches Claude. `outputStderrWarning()` wraps it but takes no event parameter, so the caller
+  owns that judgement; use `outputWarning()` for a warning that blocks nothing. Measured on CC 2.1.221:
+  the binary carries `hook blocking error from command:` and `hook returned blocking error`. The exact
+  per-event stderr routing was **not** measured — that part follows CC's documented hook contract.
+  Corrected under issue #67.
 - **Safe fallback**: If you see unexpected `{"continue":true,"suppressOutput":true}` output, check that `dist/` exists (bundle may not be built)
 - **JSON validation**: The shell wrapper only accepts lines starting with `{`. Non-JSON output is replaced with the safe fallback
 
