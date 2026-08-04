@@ -56,6 +56,19 @@
  * CI stays green while covering zero files. `enumerates every command file in the repo` exists to
  * make that failure loud; do not delete it as redundant.
  *
+ * KNOWN LIMITS OF THE PARSER, all measured at **0 occurrences** across the 81 files. They are
+ * recorded because a silent skip and a clean file are indistinguishable from the outside:
+ *
+ * - **`${#ARR[@]}` and `${!VAR}`** match neither branch of {@link expandedNames} — the character
+ *   after `${` is not `[A-Za-z_]` — so a length or indirect expansion of an unbound name is
+ *   skipped rather than flagged.
+ * - **A nested `${…}` inside a fallback** is not parsed; `[^}]*` stops at the first `}`.
+ * - **The `eval` rule scans to end of line**, so a line that merely *mentions* eval inside a string
+ *   (`echo "eval FOO=1"`) would bind `FOO`. The inverse direction — a non-eval line must not bind —
+ *   is pinned by a control; this direction is not, because the construct does not occur.
+ * - **A bound name with a wrong suffix** (`$LEDGER.backup` where only `$LEDGER` is bound) is
+ *   invisible to any name-level parser; that class keeps its own dedicated test below.
+ *
  * ISSUE #110 — archive-ledger.md Step 6 expanded `$ARCHIVE_CONTENT` and `$LEAN_LEDGER`, neither
  * bound anywhere. The asymmetry made it worse than doctor.md's: the *destination* `$LEDGER` was
  * correctly bound to the live `CONTINUITY_*.md`, so the ambiguous instruction pointed at real data.
@@ -254,8 +267,18 @@ describe('every command file expands only bound variables (#127)', () => {
     // floor rather than the exact 81 keeps this from failing every time a command is added, while
     // still catching the collapse-to-zero that actually matters.
     expect(files.length).toBeGreaterThanOrEqual(75);
-    // Dedupe works: ctk symlinks 7 of its 12 commands into shared/commands.
-    expect(new Set(files).size).toBe(files.length);
+    // Dedupe works: ctk symlinks 7 of its 12 commands into shared/commands, so a walk that kept
+    // the symlink path would count those 7 twice (88, not 81).
+    //
+    // ⚠ THE OBVIOUS ASSERTION HERE CANNOT FAIL. `expect(new Set(files).size).toBe(files.length)`
+    // is true by construction — `listCommandFiles` already returns `[...found]` spread from a Set,
+    // so it restates the data structure instead of testing the dedupe. It shipped in the first cut
+    // of this PR carrying a comment that claimed it proved dedupe worked; replacing `realpathSync`
+    // with the raw path yielded 88 files and all 15 tests still passed.
+    //
+    // What actually discriminates: `realpathSync` resolves symlinks, so no returned path may be a
+    // symlink itself. Drop the resolution and these entries become symlinks, and this fails.
+    for (const f of files) expect(fs.lstatSync(f).isSymbolicLink()).toBe(false);
     // The two files that had hand-found defects must be in scope, or the widening missed its point.
     expect(files.some((f) => f.endsWith(`${path.sep}doctor.md`))).toBe(true);
     expect(files.some((f) => f.endsWith(`${path.sep}archive-ledger.md`))).toBe(true);
