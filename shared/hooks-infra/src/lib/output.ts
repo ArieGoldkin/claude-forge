@@ -12,6 +12,14 @@
  * would have left six identical cases for the next reviewer to re-file, so the
  * decision was made as a rule:
  *
+ * ⚠ **Reproducing that denominator:** it counts the `output*` emitters only —
+ * `grep -c '^export function output' lib/output.ts`, which is **19** after this
+ * change and was 20 before it. A bare `grep -c '^export function'` returns **21**,
+ * because {@link isDenyDecision} and `truncateForLLM` are predicates/utilities
+ * that emit no `HookResult` and were never in scope. Stated because a reader who
+ * checks the number with the obvious command otherwise gets a mismatch and cannot
+ * tell whether it rotted.
+ *
  * - **Keep** a helper that wraps a real Claude Code mechanism nothing else here
  *   wraps — a distinct `permissionDecision`, a distinct event, a distinct field
  *   combination, or a real budget/truncation behaviour. Zero callers is then a
@@ -24,6 +32,15 @@
  * was **removed**; the suppression contract now lives on
  * {@link outputMessageDisplay}. The other seven were kept and are tagged
  * individually so nobody mistakes them for dead code.
+ *
+ * ⚠ **The census that produced "zero callers" is deliberately OVER-inclusive**, and
+ * that direction is what makes it safe to act on. It greps `name(` across tracked
+ * `.ts` outside `dist/`, which also matches JSDoc examples (` * return
+ * outputAllow();` in every plugin's `index.ts`) and narration strings (a video
+ * spec quotes `outputDeny(`). So its non-zero counts overstate real call sites —
+ * but a helper it reports as **zero** has zero even under the loosest counting.
+ * Verify a *keep* decision by reading the hits; a *delete* decision needs only the
+ * zero.
  *
  * ⚠ **THE REAL RISK IS NOT THE UNUSED CODE — IT IS THE UNEXERCISED CLAIM.** Both
  * helpers #67 named carried a confident, wrong statement that no caller could
