@@ -28,10 +28,46 @@
  * cannot catch that specific regression, so it is stated here: **do not reintroduce a per-plugin
  * loop whose body does not reference the loop variable.**
  *
- * SCOPE: doctor.md and archive-ledger.md. Widening to EVERY command file still needs an
- * `eval`-aware parser (post-mr-comments.md assigns via `eval "$(jq …)"`) and an allowlist for CC's
- * `$ARGUMENTS` placeholder; archive-ledger.md was added because it needs **neither** — it contains
- * no `eval` and no `$ARGUMENTS`, so the existing detector covers it unmodified.
+ * ISSUE #127 — SCOPE IS NOW EVERY COMMAND FILE, not the two that had defects found by hand.
+ * doctor.md (#109) and archive-ledger.md (#110) were each pinned only *after* someone read the file
+ * and found the bug. `listCommandFiles()` now enumerates all of them, so the next
+ * `archive-ledger`-shaped defect fails CI instead of waiting for a reader.
+ *
+ * Widening needed exactly two parser rules, both general — no per-file allowlist:
+ *
+ * 1. **`eval` binds what its argument assigns.** post-mr-comments.md does
+ *    `eval "$(jq -r '… "BASE_SHA=\(.base_sha)…"')"`. The assignment is inside a quoted string, so
+ *    the line-anchored assignment rule cannot see it. Note `HEAD_SHA` was *not* flagged — it is
+ *    separately bound by a literal assignment in the GitHub branch. That asymmetry is the tell that
+ *    the parser was right and only `eval` was opaque to it.
+ * 2. **An expansion carrying its own fallback is not unbound.** dashboard.md reads
+ *    `${CLAUDE_SESSION_MONITOR_DIR:-$HOME/…}`. The spec states the value to use when the
+ *    environment supplies none, so a reader never has to invent one — which is the whole harm this
+ *    detector exists to catch. Chosen over adding the knob to {@link ENV_PROVIDED}: an allowlist
+ *    needs an entry per plugin knob forever, this needs none.
+ *
+ * ⚠ **`$ARGUMENTS` IS NOT A BLOCKER, AND #110'S CLAIM THAT IT IS WAS STALE.** Measured: it appears
+ * in **0** fenced bash blocks. It *does* appear in **64 of the 81 files** as prose — so a future
+ * reader who greps the raw text will "refute" this note and re-add a needless allowlist entry. The
+ * detector reads only fenced `bash`/`sh` blocks, and prose is not an expansion.
+ *
+ * ⚠ **A SWEEP OVER AN EMPTY LIST PASSES.** If `listCommandFiles()` ever returns nothing — a moved
+ * directory, a broken walk — every "expands no unbound variable" assertion is vacuously true and
+ * CI stays green while covering zero files. `enumerates every command file in the repo` exists to
+ * make that failure loud; do not delete it as redundant.
+ *
+ * KNOWN LIMITS OF THE PARSER, all measured at **0 occurrences** across the 81 files. They are
+ * recorded because a silent skip and a clean file are indistinguishable from the outside:
+ *
+ * - **`${#ARR[@]}` and `${!VAR}`** match neither branch of {@link expandedNames} — the character
+ *   after `${` is not `[A-Za-z_]` — so a length or indirect expansion of an unbound name is
+ *   skipped rather than flagged.
+ * - **A nested `${…}` inside a fallback** is not parsed; `[^}]*` stops at the first `}`.
+ * - **The `eval` rule scans to end of line**, so a line that merely *mentions* eval inside a string
+ *   (`echo "eval FOO=1"`) would bind `FOO`. The inverse direction — a non-eval line must not bind —
+ *   is pinned by a control; this direction is not, because the construct does not occur.
+ * - **A bound name with a wrong suffix** (`$LEDGER.backup` where only `$LEDGER` is bound) is
+ *   invisible to any name-level parser; that class keeps its own dedicated test below.
  *
  * ISSUE #110 — archive-ledger.md Step 6 expanded `$ARCHIVE_CONTENT` and `$LEAN_LEDGER`, neither
  * bound anywhere. The asymmetry made it worse than doctor.md's: the *destination* `$LEDGER` was
@@ -115,13 +151,58 @@ function boundNames(src: string): Set<string> {
   add(/\bread[ \t]+((?:-\w+[ \t]+)*)([A-Za-z_]\w*(?:[ \t]+[A-Za-z_]\w*)*)/g, (m) =>
     m[2].split(/[ \t]+/)
   );
+  // eval binds whatever its argument text assigns (#127). The assignment lives inside a quoted
+  // string — `eval "$(jq -r '… "BASE_SHA=\(.base_sha)…"')"` — so the line-anchored rule above is
+  // blind to it. Scoped to the eval command deliberately: a bare `NAME=` inside any other quoted
+  // string (`echo "FOO=bar"`) must NOT bind, which is what stops this from binding half the repo.
+  //
+  // ⚠ THE ESCAPE SEQUENCE IS PART OF THE NAME IF YOU LET IT BE. The payload separates assignments
+  // with a literal `\n`, and `\w` happily eats the `n`: a first cut of this rule bound
+  // `nHEAD_SHA` / `nSTART_SHA` instead of the real names. It looked like it worked, because
+  // `HEAD_SHA` is *separately* bound on the GitHub branch — only `START_SHA`, which has no second
+  // binding, exposed it. So: normalise `\n` `\r` `\t` to whitespace first, and require a real
+  // separator before the name. Pinned by `binds every name in an escape-separated payload`.
+  add(/\beval\b[^\n]*/g, (m) =>
+    [...m[0].replace(/\\[nrt]/g, ' ').matchAll(/(?:^|[\s;&|("'`])([A-Za-z_]\w*)=/g)].map(
+      (x) => x[1] as string
+    )
+  );
 
   return bound;
 }
 
-/** Every `$NAME` / `${NAME…}` expansion. Skips `$1`, `$?`, `$@` and other non-identifiers. */
+/**
+ * A braced expansion suffix that supplies its own fallback: `:-` `-` `:=` `=` (#127).
+ *
+ * Must NOT match the other `${…}` forms, which supply nothing and stay subject to the check:
+ * `${VAR:0:12}` (substring, used by post-mr-comments.md), `${VAR#glob}`, `${VAR%glob}`,
+ * `${VAR/a/b}`. `${VAR:?msg}` is also excluded — it *errors* when unset rather than providing a
+ * value, so the spec still depends on something the file never sets.
+ */
+const SUPPLIES_FALLBACK = /^:?[-=]/;
+
+/**
+ * Every `$NAME` / `${NAME…}` expansion. Skips `$1`, `$?`, `$@` and other non-identifiers.
+ *
+ * An expansion whose braces carry a fallback is skipped, but **only that occurrence** — the name is
+ * deliberately not added to the bound set. A file may read `${VAR:-default}` in one place and bare
+ * `$VAR` in another, and the second is still an unbound read. Binding globally would launder it.
+ */
 function expandedNames(src: string): string[] {
-  return [...src.matchAll(/\$\{?([A-Za-z_]\w*)/g)].map((m) => m[1]);
+  const names: string[] = [];
+  // Braced alternative first so `${VAR:-x}` is inspected as a unit before the bare `$VAR` branch
+  // can claim it. `[^}]*` also means a nested `${…}` inside a fallback is not parsed — accepted,
+  // and absent from all 81 files.
+  for (const m of src.matchAll(/\$\{([A-Za-z_]\w*)([^}]*)\}|\$([A-Za-z_]\w*)/g)) {
+    if (m[1] === undefined) {
+      names.push(m[3] as string);
+      continue;
+    }
+    if (!SUPPLIES_FALLBACK.test(m[2] as string)) names.push(m[1]);
+    // The fallback text can expand variables of its own — `${FOO:-$BAR}` still reads BAR.
+    names.push(...expandedNames(m[2] as string));
+  }
+  return names;
 }
 
 function unboundIn(markdown: string): string[] {
@@ -129,6 +210,128 @@ function unboundIn(markdown: string): string[] {
   const bound = boundNames(src);
   return [...new Set(expandedNames(src).filter((n) => !bound.has(n)))].sort();
 }
+
+/** Repo root, four levels up from `plugins/<name>/hooks/tests/`. */
+const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
+
+/**
+ * Every command `.md` in the repo, deduped by REAL path (#127).
+ *
+ * Dedupe is load-bearing: ctk's `commands/` holds symlinks into `shared/commands/`, so a walk that
+ * follows them counts the same file twice and reports a doubled inventory. `realpathSync` collapses
+ * them — the same `find … -samefile` discipline the repo uses elsewhere, applied in Node.
+ *
+ * `tests/fixtures/` is excluded: those are deliberately-malformed inputs for
+ * `validate-versions.sh`, not specs anyone follows.
+ */
+function listCommandFiles(): string[] {
+  const found = new Set<string>();
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable directory is not a command file
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '.git') continue;
+        if (full.includes(`${path.sep}tests${path.sep}fixtures`)) continue;
+        walk(full);
+      } else if (
+        entry.name.endsWith('.md') &&
+        path.basename(dir) === 'commands' &&
+        !full.includes(`${path.sep}tests${path.sep}fixtures`)
+      ) {
+        try {
+          found.add(fs.realpathSync(full));
+        } catch {
+          /* dangling symlink is not a command file */
+        }
+      }
+    }
+  };
+  walk(REPO_ROOT);
+  return [...found].sort();
+}
+
+const rel = (p: string): string => path.relative(REPO_ROOT, p);
+
+describe('every command file expands only bound variables (#127)', () => {
+  const files = listCommandFiles();
+
+  it('enumerates every command file in the repo', () => {
+    // THE VACUOUS-PASS GUARD. The sweep below asserts "no file is dirty"; over an empty list that
+    // is trivially true, so a broken walk would report success while checking nothing. Asserting a
+    // floor rather than the exact 81 keeps this from failing every time a command is added, while
+    // still catching the collapse-to-zero that actually matters.
+    expect(files.length).toBeGreaterThanOrEqual(75);
+    // Dedupe works: ctk symlinks 7 of its 12 commands into shared/commands, so a walk that kept
+    // the symlink path would count those 7 twice (88, not 81).
+    //
+    // ⚠ THE OBVIOUS ASSERTION HERE CANNOT FAIL. `expect(new Set(files).size).toBe(files.length)`
+    // is true by construction — `listCommandFiles` already returns `[...found]` spread from a Set,
+    // so it restates the data structure instead of testing the dedupe. It shipped in the first cut
+    // of this PR carrying a comment that claimed it proved dedupe worked; replacing `realpathSync`
+    // with the raw path yielded 88 files and all 15 tests still passed.
+    //
+    // What actually discriminates: `realpathSync` resolves symlinks, so no returned path may be a
+    // symlink itself. Drop the resolution and these entries become symlinks, and this fails.
+    for (const f of files) expect(fs.lstatSync(f).isSymbolicLink()).toBe(false);
+    // The two files that had hand-found defects must be in scope, or the widening missed its point.
+    expect(files.some((f) => f.endsWith(`${path.sep}doctor.md`))).toBe(true);
+    expect(files.some((f) => f.endsWith(`${path.sep}archive-ledger.md`))).toBe(true);
+  });
+
+  it('reports no unbound variable in any command file', () => {
+    const offenders = Object.fromEntries(
+      files.map((f) => [rel(f), unboundIn(fs.readFileSync(f, 'utf8'))]).filter(([, u]) => u.length)
+    );
+    // Compared as a map so a failure names the file AND the variables, not just a count.
+    expect(offenders).toEqual({});
+  });
+
+  it('MUST-FAIL CONTROL: eval binds only inside eval, not from any quoted string', () => {
+    // The risk in rule 1 is over-binding: if `NAME=` bound from anywhere, the detector would go
+    // quiet across the repo and look healthier than it is. Same text, once under eval and once not.
+    const underEval = ['```bash', 'eval "$(printf \'FOO=1\')"', 'echo "$FOO"', '```'].join('\n');
+    const notEval = ['```bash', 'echo "FOO=1"', 'echo "$FOO"', '```'].join('\n');
+    expect(unboundIn(underEval)).toEqual([]);
+    expect(unboundIn(notEval)).toEqual(['FOO']);
+  });
+
+  it('binds every name in an escape-separated eval payload', () => {
+    // Regression control for the bug this rule shipped with on its first cut: `\n` between
+    // assignments was absorbed into the following name (`nB`, `nC`), so only the FIRST name bound.
+    // Asserting all three are clean is what makes a half-working extractor fail — checking one
+    // would have passed while two names were garbage.
+    const payload = [
+      '```bash',
+      'eval "$(jq -r \'. | "A=\\(.a)\\nB=\\(.b)\\nC=\\(.c)"\' in.json)"',
+      'echo "$A $B $C"',
+      '```',
+    ].join('\n');
+    expect(unboundIn(payload)).toEqual([]);
+  });
+
+  it('MUST-FAIL CONTROL: a fallback satisfies only its own expansion, not the name', () => {
+    // The risk in rule 2 is laundering: `${VAR:-x}` must not make a later bare `$VAR` acceptable.
+    const withFallback = ['```bash', 'echo "${VAR:-default}"', '```'].join('\n');
+    const alsoBare = ['```bash', 'echo "${VAR:-default}"', 'echo "$VAR"', '```'].join('\n');
+    expect(unboundIn(withFallback)).toEqual([]);
+    expect(unboundIn(alsoBare)).toEqual(['VAR']);
+  });
+
+  it('MUST-FAIL CONTROL: ${VAR:0:12} and ${VAR#glob} supply nothing and still flag', () => {
+    // Guards SUPPLIES_FALLBACK against being loosened to "any `${…}` with a suffix", which would
+    // silently exempt post-mr-comments.md's real `${BASE_SHA:0:12}` reads.
+    expect(unboundIn('```bash\necho "${SHA:0:12}"\n```')).toEqual(['SHA']);
+    expect(unboundIn('```bash\necho "${NAME#pre}"\n```')).toEqual(['NAME']);
+    // …and a nested read inside a fallback is still a read.
+    expect(unboundIn('```bash\necho "${FOO:-$BAR}"\n```')).toEqual(['BAR']);
+  });
+});
 
 describe('doctor.md shell variables (#109)', () => {
   it('expands no variable that is never bound', () => {
