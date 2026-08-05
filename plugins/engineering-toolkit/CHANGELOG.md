@@ -2,6 +2,46 @@
 
 All notable changes to the engineering-toolkit (`etk`) plugin will be documented in this file.
 
+## [2.19.0] - 2026-08-05 — forking strips the interactive channel; Socratic mode restored (#134)
+
+### Fixed
+
+- **`brainstorming` no longer declares `context: fork`, restoring its primary mode.** Measured on
+  CC 2.1.222: **a forked skill has no `AskUserQuestion` tool at all**, so Socratic questioning could
+  not ask anything. Three-arm probe with a passing positive control — a non-forked skill reached the
+  user; `context: fork` did not, in either background mode.
+- **⚠ `background: false` does NOT fix an interactivity gap, despite how it reads.** It is a real,
+  working key — the probe arm that set it demonstrably did not background — but it controls only
+  **whether the parent waits**, not whether the fork can prompt. That arm still ran as a separate
+  agent thread with no `AskUserQuestion`. Anyone reaching for it to restore a prompt will get a
+  behaviour change and no channel.
+- **The cause is `context: fork`, not the v2.1.218 background default.** v2.1.218 changed
+  *visibility* by adding the "Running in the background" announcement that made the gap noticeable.
+  ⚠ Whether the key stripped the channel on **pre-2.1.218 CC is NOT established** and is not
+  claimed here.
+
+### Added
+
+- **No-Interlocutor Guard in `brainstorming`, `auto-research`, and `development-pipeline`.** A skill
+  that cannot reach the user must say so, complete what does not depend on an answer, and return the
+  open questions verbatim for the caller to relay — **never invent an answer or take a silent
+  default**. In every measured run the model noticed the missing tool and declined to fabricate, but
+  that was *discretionary*; nothing required it. The failure this prevents is not a crash: it is a
+  confident design built on invented intent, a pipeline reporting six passed human checkpoints
+  having asked nothing, or an expensive fan-out that self-approved its own cost gate.
+
+### Changed
+
+- `auto-research` and `development-pipeline` **keep `context: fork` deliberately.** Their gates are
+  approve/reject, which a parent can relay faithfully; removing the fork would cost context
+  isolation on the repo's highest fan-out route (~11 agents on a `design` route). Iterative Socratic
+  dialogue cannot be relayed, which is why `brainstorming` was treated differently.
+- `brainstorming --deep` was **not** exempt from the defect: its Phase 5 ("Interactive Refinement")
+  also blocks on `AskUserQuestion` and re-runs Phase 2 agents from the answer — so the proposal to
+  keep `--deep` forked rested on a false premise.
+
+Full write-up: `docs/reviews/2026-08-05_134-fork-interactive-channel.md`.
+
 ## [2.18.2] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
 
 ### Fixed

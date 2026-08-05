@@ -2,8 +2,16 @@
 name: brainstorming
 description: "Refine ideas into actionable designs via Socratic questioning (simple mode) or parallel multi-agent analysis (--deep). Includes scoring matrix, tier detection, and security review. Use when: exploring a feature idea, making architectural decisions, comparing design approaches, or starting a complex project. Triggers on: brainstorm, help me design, explore options, architect, how should we, design a, what approach, trade-offs, compare approaches"
 effort: xhigh
-context: fork
 ---
+
+<!--
+DELIBERATELY NOT `context: fork`. Measured on CC 2.1.222 (issue #134): a forked
+skill has NO `AskUserQuestion` tool, so Socratic mode cannot ask anything.
+`background: false` does NOT fix this — it changes only whether the parent waits.
+Re-adding `context: fork` silently disables this skill's primary mode.
+See root CLAUDE.md § "Forking strips the interactive channel".
+-->
+
 
 # Brainstorming Ideas Into Designs
 
@@ -16,6 +24,19 @@ Transform rough ideas into fully-formed designs using either:
 **Core principle:** Ask questions to understand, explore alternatives, present design incrementally for validation.
 
 **Announce skill usage and mode at start of session.**
+
+## No-Interlocutor Guard (mandatory, both modes)
+
+**Before Phase 0, check whether `AskUserQuestion` is actually available to you.** It is absent whenever this skill runs in a forked/subagent context — measured on CC 2.1.222, issue #134.
+
+**If it is missing, you have no interlocutor. Then:**
+
+1. **Say so in your first line.** State that you ran without a user channel.
+2. **Never invent the user's answers, and never silently take a default.** A fabricated answer is indistinguishable from a real one once it is in the design.
+3. Complete every step that does **not** depend on an answer.
+4. Return the unanswered questions verbatim in a final `## Questions requiring a human` section — each with its options and what it would change. The caller relays them.
+
+The failure this prevents is not a crash. It is a confident, well-structured design built on invented intent — which looks exactly like a good one. Both modes need this: `--deep`'s Phase 5 blocks on `AskUserQuestion` too.
 
 ## Context Detection
 

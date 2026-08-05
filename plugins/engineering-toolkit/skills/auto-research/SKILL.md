@@ -14,6 +14,19 @@ configures parameters, and runs the appropriate autonomous loop.
 **Core principle:** Human writes intent, agent figures out execution. One entry point,
 many execution paths.
 
+## No-Interlocutor Guard (mandatory — read before the Phase 3 confirm gate)
+
+This skill declares `context: fork`, and **a forked skill has no `AskUserQuestion` tool** — measured on CC 2.1.222, issue #134. `background: false` does not change this; it controls only whether the parent waits. So **the plan-confirmation gate cannot prompt the user directly. It is delivered by relay.**
+
+That is a deliberate trade (the fork buys context isolation on the repo's highest fan-out route), and it is only safe if you follow this:
+
+1. **Never treat an unaskable confirmation as granted.** Approval that was never requested is not approval — and this gate exists so an expensive dispatch is approved deliberately rather than blind.
+2. When the plan needs a decision, **stop before executing it** and return the plan box, the mandatory **Fan-out** line, and the open choices in your final report under `## Questions requiring a human`.
+3. Never invent the user's selection or silently take a default.
+4. The caller relays your report and re-invokes with the answer.
+
+**A confirm gate that self-approves is worse than no gate**, because the transcript then shows a deliberation that never happened.
+
 ## When to Use
 
 | User says... | Auto-research routes to |

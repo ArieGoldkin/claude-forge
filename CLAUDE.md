@@ -43,7 +43,7 @@ claude-forge/
 │   ├── devops-toolkit/         # DevOps and infrastructure toolkit (v2.0.15, installed as dtk)
 │   ├── ai-toolkit/             # AI/LLM development patterns (v2.0.13, installed as atk)
 │   ├── frontend-toolkit/       # Frontend, UI/UX, Stitch AI, json-render, design systems, Remotion explainer videos (block-based + bespoke) (v2.3.14, installed as ftk)
-│   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.18.2, installed as etk)
+│   └── engineering-toolkit/    # Engineering practices, quality, architecture, cmux fleet orchestration (v2.19.0, installed as etk)
 └── .github/workflows/ci.yml    # GitHub Actions CI (per-plugin matrix + shared tests)
 ```
 
@@ -413,7 +413,27 @@ Convention in this monorepo:
 
 ### `context: fork` skills now run in the BACKGROUND by default (CC v2.1.218+)
 
-**Measured 2026-08-04: 11 of our `SKILL.md` files declare `context: fork`, and none declares `background:` — so all 11 take the new default.** Opt out per skill with `background: false`.
+**Re-measured 2026-08-05: 10 of our `SKILL.md` files declare `context: fork`, and none declares `background:` — so all 10 take the new default.** (Was 11 on 2026-08-04; `brainstorming` had the key **removed** — see the next section.) Opt out per skill with `background: false`. ⚠ **`background: false` does NOT do what its name suggests to a reader looking for interactivity — see the next section, which measured it.** That opt-out sentence was for one day an unmarked CHANGELOG quote; it is now measured, and it buys less than it appears to.
+
+⚠ **Count these with an anchored `grep -rl --include=SKILL.md '^context: fork'`.** The unanchored pattern now returns **11**, because `brainstorming`'s frontmatter comment *names* the key it deliberately does not declare — a verification grep matching its own documentation, the same trap recorded in the ledger for the vacuous-assertion and stale-claim checks. It fired again here, on the very commit that added the comment.
+
+### ⚠⚠ FORKING STRIPS THE INTERACTIVE CHANNEL — `background: false` DOES NOT RESTORE IT (measured 2026-08-05, CC 2.1.222, issue #134)
+
+**A skill declaring `context: fork` has no `AskUserQuestion` tool. At all. In any background mode.** Three-arm probe, one frontmatter key varied per arm, positive control passing:
+
+| Arm | `context: fork` | `background:` | Execution | `AskUserQuestion` |
+|---|---|---|---|---|
+| A | absent | — | main loop, inline | ✅ **available, question reached the user** |
+| B | present | absent (default) | background agent thread | ❌ absent from toolset |
+| C | present | `false` | **foreground** agent thread | ❌ absent from toolset |
+
+**`background: false` is real and it works** — arm C demonstrably did not background (no *"Running in the background"* announcement; it returned synchronously). **It controls whether the parent waits, not whether the fork can prompt.** Arm C still ran as a separate agent thread, reporting its own framing as *"You are an agent for Claude Code"* and seeing siblings as `SendMessage` peers.
+
+**So the cause is `context: fork` itself, not the v2.1.218 background default.** The v2.1.218 change altered *visibility* — it added the announcement that made the gap noticeable. ⚠ **NOT ESTABLISHED**: whether `context: fork` stripped `AskUserQuestion` on **pre-2.1.218 CC**. That is unmeasured and unmeasurable from here; `brainstorming` has carried the key since the initial commit (2026-06-14, unmodified), but "its Socratic mode never worked" is a counterfactual, not an observation — do not write it in the indicative.
+
+**THE RULE — a skill whose value depends on turn-taking must not declare `context: fork`.** `brainstorming` had the key removed for exactly this reason and carries an HTML comment saying so; re-adding it silently disables its primary mode. For skills where the fork's context isolation is worth more than a direct prompt, the gate must be **relayed**, and they must carry a **No-Interlocutor Guard** (`auto-research`, `development-pipeline` — approve/reject gates a parent can relay faithfully; `brainstorming` keeps one as a backstop).
+
+⚠ **The dangerous failure is not a crash.** In the measured runs the tool was simply **absent**, so the model noticed and declined to fabricate — *by its own discretion, with nothing requiring it*. A channel-less interactive skill that guesses produces a confident design built on invented intent, or a pipeline reporting six passed checkpoints having asked nothing. That is what the guard exists to prevent, and why "document it only" was rejected. Full write-up: `docs/reviews/2026-08-05_134-fork-interactive-channel.md`.
 
 **Observed, not inferred**: `/etk:review-mr` returned *"Running in the background as `@etk-review-mr`"* on all three invocations in the 2026-08-03/04 session, delivering its report by task notification rather than inline.
 
