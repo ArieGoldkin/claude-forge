@@ -1,17 +1,17 @@
 # ftk — Frontend Toolkit (Claude Code Plugin)
 
 > **Plugin Name**: ftk (formerly `frontend-toolkit`, renamed in v2.0.0)
-> **Version**: 2.3.14
+> **Version**: 2.4.0
 
 ## Overview
 
-Claude Code plugin for frontend development, UI/UX design, browser automation, and Remotion explainer videos. Provides 17 skills, 4 agents, and 11 commands.
+Claude Code plugin for frontend development, UI/UX design, browser automation, and Remotion explainer videos. Provides 18 skills, 4 agents, and 11 commands.
 
 **Hooks**: No hooks (shared hooks provided by ctk).
 
 ## Plugin Structure
 
-- `skills/` - 17 specialized skill directories (agent-browser, agentation, ai-ui-generation, ascii-visualizer, browser-content-capture, coding-standards, design-system-tokens, **explainer-video** (NEW v2.1.0), figma-design-workflow, frontend-creative-design, interaction-patterns, json-render, prototype-to-production, responsive-patterns, shadcn, stitch, ui-components)
+- `skills/` - 18 specialized skill directories (agent-browser, agentation, ai-ui-generation, ascii-visualizer, browser-content-capture, design-system-tokens, explainer-video, figma-design-workflow, frontend-creative-design, interaction-patterns, json-render, playground, prototype-to-production, **quickviz** (NEW v2.4.0), responsive-patterns, shadcn, stitch, ui-components)
 - `agents/` - 4 agent definitions (ui-developer, rapid-ui-designer, ux-researcher, whimsy-injector)
 - `commands/` - 11 slash commands
 
