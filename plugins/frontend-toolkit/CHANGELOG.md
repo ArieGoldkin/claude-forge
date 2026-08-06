@@ -2,6 +2,53 @@
 
 All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in this file.
 
+## [2.4.0] - 2026-08-06 — `quickviz`: render it now, inline
+
+### Added
+
+- **New skill `quickviz`** — renders an answer as a diagram **in the chat reply, immediately**:
+  no setup questions, no agents, no file written. With no topic given, the topic is the current
+  conversation. Adapted from [OrchestKit](https://github.com/yonatangross/orchestkit)'s skill of
+  the same name (MIT, with thanks); the behaviour contract, shape→form routing, closed glyph
+  vocabulary, and the Blast Radius / Reversibility Timeline patterns come from there.
+- **An honesty rule, carried over deliberately**: if a number is unknown, print `?` — never invent
+  one. A confident-looking chart built on guesses launders a guess as a measurement.
+
+### Changed
+
+- **`ascii-visualizer`'s ASCII-only rule is now scoped to its surface rather than stated
+  absolutely.** Its "Unicode box-drawing chars" mistake row reads *"in a file"*, and both skills now
+  carry the boundary: **files on disk stay ASCII (`+ - |`); inline chat output may use Unicode
+  (`┌─┐ │`)**. A committed file may be read in any font, diff viewer, CI log, or locale; a chat reply
+  is rendered by one client. The rule is written into **both** files on purpose — a rule stated in
+  one file and not its neighbour is how the next author picks the wrong palette.
+- **`ascii-visualizer`'s description now complies with the repo's CSO rules.** It previously began
+  with a capability statement and carried no `Use when` opening and no `Triggers on` tail, so it paid
+  permanent per-turn context rent while being hard to actually trigger.
+
+### Fixed
+
+- **The enumerated skill list in `CLAUDE.md` named a skill this plugin does not have and omitted one
+  it does** — it listed `coding-standards` (an **etk** skill) and left out `playground`. The declared
+  total, the list length, and the directory count **all agreed at 17**, which is exactly why it
+  survived. ⚠ CI check 7 does **not** catch this for ftk: the by-name verification covers the
+  `- **N skills**: a, b, c` form, and this file uses the directory-attached form, which is
+  count-only. Verified by running the gate against the wrong list — it exits 0.
+
+### Divergences from the upstream skill (each measured, not assumed)
+
+- **Glyphs inside diagrams, emoji outside.** The 11 status glyphs are **1 column** each and are safe
+  inside a bordered box; **11 of the 12 emoji are 2 columns** and shift a row's right edge. Upstream
+  ships both vocabularies without stating the placement rule.
+- **Unicode is scoped to chat**, per the surface split above, rather than used everywhere.
+- **Alignment is prose discipline, not a verifier script.** Adding executable machinery to a shipped
+  plugin needs its own justification, which it does not yet have. ⚠ The discipline is not
+  theoretical: upstream's own worked example — the one labelled *"Correct"* — measures **55, 57 and
+  56** columns across its three border lines, and the same file mixes `┌─┐` with `+-+`, which its own
+  `single-set` rule forbids.
+- **Declined**: upstream's `tokens.json` / `primitives.json` / `tokens.schema.json` substrate —
+  maintainer machinery that an installer never touches, the same call made in 2.3.7 and 2.3.8.
+
 ## [2.3.14] - 2026-08-01 — hook logs no longer leak into the real ~/.claude (#105)
 
 ### Fixed

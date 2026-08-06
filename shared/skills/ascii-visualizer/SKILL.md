@@ -1,6 +1,6 @@
 ---
 name: ascii-visualizer
-description: "Clear ASCII diagrams for architecture, workflows, tables, and file trees. Monospace-safe, aligned box-drawing output"
+description: "Use when writing an ASCII diagram INTO A FILE — architecture, workflows, comparison tables, or file trees that must render identically in any font, diff viewer, or CI log. For a quick inline picture in the chat instead, use quickviz. Triggers on ascii diagram, box drawing, architecture diagram, file tree, workflow diagram, monospace diagram, text diagram, diagram in docs"
 paths:
   - "**/*.md"
   - "**/*.txt"
@@ -238,7 +238,7 @@ GOOD:                    BAD:
 | Mistake                      | Fix                                        |
 |------------------------------|--------------------------------------------|
 | Mixed box widths in a row    | Pad shorter labels to match longest         |
-| Unicode box-drawing chars    | Use ASCII only: `+`, `-`, `\|`             |
+| Unicode box-drawing chars **in a file** | Use ASCII only: `+`, `-`, `\|` — see the surface note below |
 | Arrows without endpoints     | Every `-->` must connect two boxes          |
 | Diagrams outside code fences | Always wrap in triple backticks             |
 | Exceeding 80-char width      | Abbreviate or stack vertically              |
@@ -255,8 +255,17 @@ GOOD:                    BAD:
 - [Troubleshooting Guide](${CLAUDE_SKILL_DIR}/references/troubleshooting.md)
 - [Diagram Templates](${CLAUDE_SKILL_DIR}/templates/diagram-templates.md)
 
+## ⚠ Which surface — this skill is ASCII-only ON PURPOSE
+
+**This skill's palette is `+ - |`, and that is scoped to its output surface: diagrams written INTO A FILE.** A committed file may be read in any font, any diff viewer, any CI log, and any locale, so it gets the maximally portable character set. The "Unicode box-drawing chars" row above is about *that* surface — it is not a repo-wide ban.
+
+**For a picture rendered inline in the chat, use `quickviz` instead**, which uses Unicode box-drawing (`┌─┐ │`) because a chat reply is rendered by exactly one client. That palette is correct there and **must not be carried back into a file**.
+
+The boundary is stated in both skills deliberately. A rule that lives in one file and not its neighbour is how the next author picks the wrong palette.
+
 ## Related Skills
 
+- `quickviz` - The inline-chat counterpart. Unicode palette, renders immediately, never writes a file. Use it when the answer *is* the picture; use this skill when the picture goes into a document.
 - `brainstorming` - Use ASCII diagrams to illustrate brainstorming outputs
 - `devops-deployment` - Diagram CI/CD pipelines and infrastructure
 - `architecture-decision-record` - Visualize architectural options in ADRs

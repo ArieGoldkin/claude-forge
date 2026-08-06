@@ -1,7 +1,7 @@
 {
   "name": "ftk",
-  "version": "2.3.14",
-  "description": "Frontend development toolkit - 17 skills, 4 agents, 11 commands for UI/UX, design systems, shadcn/ui, browser automation, json-render, Google Stitch AI, and Remotion explainer videos",
+  "version": "2.4.0",
+  "description": "Frontend development toolkit - 18 skills, 4 agents, 11 commands for UI/UX, design systems, shadcn/ui, browser automation, json-render, Google Stitch AI, and Remotion explainer videos",
   "author": {
     "name": "Arie Goldkin",
     "email": "ariegoldkin88@gmail.com"
