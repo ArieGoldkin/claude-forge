@@ -518,7 +518,7 @@ Whenever you change a plugin's `dependencies` field, rename the plugin, or ship 
 1. `plugins/{name}/.claude-plugin/plugin.json` `version` — **functional** (CC reads this)
 2. `.claude-plugin/marketplace.json` `version` for that plugin — **functional** (CC reads this)
 3. `plugins/{name}/CHANGELOG.md` — add an entry describing the change
-4. `plugins/{name}/CLAUDE.md` `> Version:` header line if present
+4. `plugins/{name}/CLAUDE.md` `> Version:` header line if present — **and its `> Last Updated:` stamp *if and only if this commit changed that file's content*.** ⚠ **Deliberately NOT CI-gated, and do not add a gate.** The stamp means *content freshness* ("when was this doc last meaningfully revised"), not release synchrony — so coupling it to `version` would force a patch bump that never touched the doc to move the date, manufacturing a false claim of freshness with the authority of a passing check. Decided 2026-08-06 after the stamp went stale twice (ctk, then dtk by 39 days), each time because a commit edited the file and left the date behind. ⚠ Only **2 of 5** plugin `CLAUDE.md` files carry the stamp at all (ctk, dtk); atk/ftk/etk have none — so this is a per-file property, not a convention to propagate.
 5. `README.md` (root) plugin table — version column for that row
 6. `CLAUDE.md` (root) plugin tree comment (line ~42-48) — `(vX.Y.Z, installed as ...)`
 7. `plugins/{name}/README.md` `**Version**:` line if present — **CI-enforced** (check 8)

@@ -2,7 +2,7 @@
 
 > **Plugin Name**: dtk (formerly `devops-toolkit`, renamed in v2.0.0)
 > **Version**: 2.0.15
-> **Last Updated**: 2026-06-26
+> **Last Updated**: 2026-08-04
 
 ## Overview
 
