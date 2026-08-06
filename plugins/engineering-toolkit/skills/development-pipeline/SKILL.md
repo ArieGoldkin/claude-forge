@@ -11,6 +11,19 @@ A 6-phase development pipeline that orchestrates existing etk skills into a
 structured process: **Gate → Design → Hypothesize → Plan → Build → Verify**. Each phase delegates to
 specialized skills and includes human checkpoints for approval.
 
+## No-Interlocutor Guard (mandatory — governs every "Human checkpoint" below)
+
+This skill declares `context: fork`, and **a forked skill has no `AskUserQuestion` tool** — measured on CC 2.1.222, issue #134. `background: false` does not change this; it controls only whether the parent waits. **Every "Human checkpoint" in the flow below is therefore delivered by relay, not by a direct prompt.**
+
+At each checkpoint:
+
+1. **Never treat an unaskable checkpoint as approved.** A checkpoint you could not ask is not a checkpoint you passed.
+2. **Stop at the gate.** Do not proceed into the next phase — and never into Phase 4 (BUILD), which writes code — on an approval you did not receive.
+3. Return the artifact awaiting approval plus the open questions in your final report under `## Questions requiring a human`.
+4. Never invent the user's answer or silently take a default. The caller relays and re-invokes.
+
+The failure mode this prevents is a pipeline that reports six passed checkpoints having asked nothing at any of them.
+
 ### Pipeline Flow
 
 ```

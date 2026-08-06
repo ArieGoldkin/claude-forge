@@ -1,6 +1,6 @@
 {
   "name": "etk",
-  "version": "2.18.2",
+  "version": "2.19.0",
   "description": "Engineering practices toolkit - 27 skills, 5 agents, 21 commands for quality, architecture, testing, autonomous experimentation, auto-research, cmux execution routing (conduct), Sentry investigation, ticket scope enumeration, codebase zoom-out, caveman terse-mode, and workflow orchestration",
   "author": {
     "name": "Arie Goldkin",
