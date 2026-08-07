@@ -1,6 +1,7 @@
 ---
 name: ascii-visualizer
 description: "Use when writing an ASCII diagram INTO A FILE — architecture, workflows, comparison tables, or file trees that must render identically in any font, diff viewer, or CI log. For a quick inline picture in the chat instead, use quickviz. Triggers on ascii diagram, box drawing, architecture diagram, file tree, workflow diagram, monospace diagram, text diagram, diagram in docs"
+effort: low
 paths:
   - "**/*.md"
   - "**/*.txt"
@@ -190,7 +191,7 @@ Before finalizing any ASCII diagram:
 7. **No orphaned connectors** - Every arrow starts and ends at a box
 8. **Legend included** - If abbreviations or symbols need explanation
 9. **Wrapped in code fence** - Always use triple backticks in markdown
-10. **No Unicode box-drawing** - Stick to ASCII (`+`, `-`, `|`) for maximum compatibility
+10. **No Unicode box-drawing in a bordered box** - Stick to ASCII (`+`, `-`, `|`) for frames; **file trees are the exception** and use `├── └── │` (see "Which palette" below)
 11. **Vertical alignment** - Pipes (`|`) in columns line up across rows
 12. **Tested copy-paste** - Diagram survives copy-paste without corruption
 
@@ -255,11 +256,18 @@ GOOD:                    BAD:
 - [Troubleshooting Guide](${CLAUDE_SKILL_DIR}/references/troubleshooting.md)
 - [Diagram Templates](${CLAUDE_SKILL_DIR}/templates/diagram-templates.md)
 
-## ⚠ Which surface — this skill is ASCII-only ON PURPOSE
+## ⚠ Which palette — the rule is per glyph class, not per skill
 
-**This skill's palette is `+ - |`, and that is scoped to its output surface: diagrams written INTO A FILE.** A committed file may be read in any font, any diff viewer, any CI log, and any locale, so it gets the maximally portable character set. The "Unicode box-drawing chars" row above is about *that* surface — it is not a repo-wide ban.
+**This skill is NOT "ASCII only".** Its file-tree examples use `├── └── │`, and the file carries ~94 box-drawing characters. The real rule, which was always in force but never written down:
 
-**For a picture rendered inline in the chat, use `quickviz` instead**, which uses Unicode box-drawing (`┌─┐ │`) because a chat reply is rendered by exactly one client. That palette is correct there and **must not be carried back into a file**.
+| Glyph class | Palette | Why |
+|---|---|---|
+| **Bordered boxes / frames** | **ASCII** `+ - \|` | Every box-drawing border character is East-Asian **Ambiguous** — `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼` all render 2 columns in a CJK locale. A framed diagram in a committed file can therefore double in width for a reader you cannot predict, and no choice of *contents* prevents it. |
+| **File trees** | **Unicode** `├── └── │` | The convention `tree(1)` itself emits. A tree has **no right border to align**, so the Ambiguous risk costs nothing — the indentation shifts uniformly and stays readable. |
+
+The "Unicode box-drawing chars **in a file**" row in Common Mistakes is about the **first** class only. It is not a ban on `│` — this file's own tree examples require it.
+
+**For a picture rendered inline in the chat, use `quickviz`**, which may use Unicode *bordered boxes* because a chat reply is rendered by one client in a known locale. **That bordered-box palette must not be carried back into a file.** File trees are the standing exception in both directions.
 
 The boundary is stated in both skills deliberately. A rule that lives in one file and not its neighbour is how the next author picks the wrong palette.
 

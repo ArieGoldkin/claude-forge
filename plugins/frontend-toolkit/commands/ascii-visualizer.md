@@ -1,5 +1,5 @@
 ---
-description: Create clear ASCII diagrams for architecture, workflows, tables, and file trees
+description: Write an ASCII diagram into a file — architecture, workflows, comparison tables, or file trees. For a quick inline picture in the chat, use the quickviz skill instead
 ---
 
 # ascii-visualizer

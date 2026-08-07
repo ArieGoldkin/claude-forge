@@ -16,12 +16,15 @@ All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in
 
 ### Changed
 
-- **`ascii-visualizer`'s ASCII-only rule is now scoped to its surface rather than stated
-  absolutely.** Its "Unicode box-drawing chars" mistake row reads *"in a file"*, and both skills now
-  carry the boundary: **files on disk stay ASCII (`+ - |`); inline chat output may use Unicode
-  (`┌─┐ │`)**. A committed file may be read in any font, diff viewer, CI log, or locale; a chat reply
-  is rendered by one client. The rule is written into **both** files on purpose — a rule stated in
-  one file and not its neighbour is how the next author picks the wrong palette.
+- **`ascii-visualizer`'s ASCII-only rule is now scoped by GLYPH CLASS**, which is what it always
+  actually meant. The skill was never "ASCII only" — its own file-tree examples use `├── └── │` and
+  it carries ~94 box-drawing characters. The rule now written down in both skills:
+  **bordered boxes in a file use ASCII (`+ - |`)**, because every box-drawing border character is
+  East-Asian **Ambiguous** and a framed diagram can double in width for a reader you cannot predict;
+  **file trees use Unicode**, because a tree has no right border to align, so the risk costs nothing.
+  **In chat, bordered boxes may use Unicode** — one client, known locale. Common Mistakes row and
+  Creation Checklist item 10 are both scoped accordingly; neither is a ban on `│`.
+- **`ascii-visualizer` now declares `effort: low`**, which it previously omitted.
 - **`ascii-visualizer`'s description now complies with the repo's CSO rules.** It previously began
   with a capability statement and carried no `Use when` opening and no `Triggers on` tail, so it paid
   permanent per-turn context rent while being hard to actually trigger.
@@ -37,9 +40,13 @@ All notable changes to the frontend-toolkit (`ftk`) plugin will be documented in
 
 ### Divergences from the upstream skill (each measured, not assumed)
 
-- **Glyphs inside diagrams, emoji outside.** The 11 status glyphs are **1 column** each and are safe
-  inside a bordered box; **11 of the 12 emoji are 2 columns** and shift a row's right edge. Upstream
-  ships both vocabularies without stating the placement rule.
+- **Glyphs inside diagrams, emoji outside.** The 11 glyph slots (15 characters) are **1 column** each
+  in a Western locale; **all 11 emoji shipped here are 2 columns** and shift a row's right edge.
+  Upstream ships both vocabularies without stating the placement rule. ⚠ **1 column is not "safe
+  everywhere"**: 11 of the 15 glyphs are East-Asian Ambiguous — and so is *every border character*,
+  so in an unknown locale the correct advice is to avoid a bordered box entirely rather than swap its
+  contents. Upstream's `⏸` is dropped here (the `▷` glyph already means *awaiting input*, and `⏸` is
+  the one 1-column emoji, so keeping it would falsify the rule).
 - **Unicode is scoped to chat**, per the surface split above, rather than used everywhere.
 - **Alignment is prose discipline, not a verifier script.** Adding executable machinery to a shipped
   plugin needs its own justification, which it does not yet have. ⚠ The discipline is not
