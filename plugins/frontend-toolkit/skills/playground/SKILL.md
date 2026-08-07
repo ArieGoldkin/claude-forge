@@ -88,3 +88,11 @@ function updatePrompt() {
 - External dependencies → if CDN is down, playground is dead
 - Prompt lacks context → include enough that it's actionable without the playground
 - "Generic AI" look (glow-halo cards, `#000` bg, animation everywhere, inconsistent spacing) → run the Visual Standard §7 falsifiable checklist + §8 self-audit before declaring done
+
+## Related Skills
+
+Three ftk skills answer "show me this" and the boundary is by **deliverable**, not by topic:
+
+- **`playground`** (this) — a persisted, interactive HTML file the user opens and manipulates. Reach for it when the artifact outlives the conversation.
+- **`quickviz`** — a diagram rendered inline in the chat reply, immediately, writing no file. Reach for it when the answer *is* the picture. If a request needs no interactivity and no persistence, it belongs there, not here.
+- **`ascii-visualizer`** — a diagram written into a document. Bordered boxes use ASCII; file trees use Unicode.

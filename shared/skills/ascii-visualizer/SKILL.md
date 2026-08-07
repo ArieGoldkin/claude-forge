@@ -273,7 +273,8 @@ The boundary is stated in both skills deliberately. A rule that lives in one fil
 
 ## Related Skills
 
-- `quickviz` - The inline-chat counterpart. Unicode palette, renders immediately, never writes a file. Use it when the answer *is* the picture; use this skill when the picture goes into a document.
+- `quickviz` - The inline-chat counterpart. Unicode bordered boxes, renders immediately, never writes a file. Use it when the answer *is* the picture; use this skill when the picture goes into a document.
+- `playground` - When the deliverable is a persisted, interactive HTML file rather than a static diagram. The three-way split is by deliverable: chat reply (`quickviz`) · document (this) · interactive artifact (`playground`).
 - `brainstorming` - Use ASCII diagrams to illustrate brainstorming outputs
 - `devops-deployment` - Diagram CI/CD pipelines and infrastructure
 - `architecture-decision-record` - Visualize architectural options in ADRs
