@@ -1,6 +1,6 @@
 ---
 name: quickviz
-description: "Use when the user wants something shown visually right now in the chat — status, progress, comparisons, trade-offs, architecture, blast radius, or an ad-hoc 'show me X' — and wants the picture immediately rather than a file. For a persisted HTML explorer use playground; for diagrams written into a doc use ascii-visualizer. Triggers on visualize, show me, draw, diagram this, render, what does this look like, quick viz, sketch, ASCII art"
+description: "Use when the user wants something shown visually right now in the chat — status, progress, comparisons, trade-offs, architecture, blast radius, or an ad-hoc 'show me X' — and wants the picture immediately rather than a file. For a persisted HTML explorer use playground; for diagrams written into a doc use ascii-visualizer. Triggers on quickviz, visualize this, show me visually, draw me a diagram, diagram this, render this as a chart, what does this look like, sketch this out"
 effort: low
 disallowed-tools:
   - Edit
@@ -8,22 +8,14 @@ disallowed-tools:
   - NotebookEdit
 ---
 
-<!--
-Adapted from OrchestKit's `quickviz` skill (github.com/yonatangross/orchestkit), MIT
-licensed, with thanks. Behavior contract, shape→form routing, the closed glyph
-vocabulary, and the Blast Radius / Reversibility Timeline patterns come from there.
-
-DELIBERATELY DIVERGENT from the source in three ways, each measured:
-  1. Unicode box-drawing is allowed HERE because this skill's output surface is chat.
-     `ascii-visualizer` stays ASCII-only because its surface is files on disk. See
-     "Which skill, which palette" below — the boundary is stated in BOTH skills.
-  2. Glyphs go inside boxes, emoji stay outside. Measured, not assumed: the 11 status
-     glyphs are 1 column each; 11 of the 12 emoji are 2 columns and break alignment.
-  3. Alignment is prose discipline, not a verifier script — adding executable machinery
-     to a shipped plugin needs its own justification.
--->
-
 # Quickviz — render it now, inline
+
+> Adapted from the `quickviz` skill in **OrchestKit** by **Yonatan Gross**
+> ([yonatangross/orchestkit](https://github.com/yonatangross/orchestkit), MIT), at upstream
+> `a64613c8442d` (2026-08-06), with thanks. The render-now contract, shape→form routing, the closed
+> glyph vocabulary, and the Blast Radius / Reversibility Timeline patterns originate there.
+> Divergences from upstream — the glyph-class palette rule, the glyph/emoji placement rule, the
+> dropped `⏸`, and alignment-as-prose — are recorded in `docs/reviews/2026-08-06_quickviz-adoption-brief.md`.
 
 Render the answer as a diagram in the reply, immediately. No setup, no questions, no files.
 
@@ -35,7 +27,7 @@ Render the answer as a diagram in the reply, immediately. No setup, no questions
 
 1. **Render immediately.** Do NOT call `AskUserQuestion` to pick a format. Do NOT spawn an `Agent`. Do NOT create tasks. Choose the form yourself from the shape of the data.
 2. **With no topic given, the topic is the current conversation** — the open work, the decision just reached, the state of the thing being discussed. Render that; do not ask what to draw.
-3. **Emit inline in the reply. Never write a file** unless the user explicitly asked for one. This is a chat answer, not an artifact.
+3. **Emit inline in the reply. Never write a file** — this skill has no `Write` tool by design, and you must not route around that with `Bash`. If the user wants a persisted artifact, hand off: `playground` for an HTML explorer, `ascii-visualizer` for a diagram in a document. This is a chat answer, not an artifact.
 4. **Lead with the visual.** Prose comes after, and only if it adds something the diagram cannot carry.
 5. **Stay honest.** If a number is unknown, print `?`. **Never invent one.** A confident-looking chart built on guesses is worse than plain prose, because it launders a guess as a measurement.
 
@@ -56,15 +48,18 @@ Render the answer as a diagram in the reply, immediately. No setup, no questions
 
 ### Status glyphs — these go INSIDE diagrams
 
-Closed set. Every glyph is exactly **1 column wide**, so it is safe inside a bordered box.
+Closed set: **11 semantic slots, 15 characters** (three slots hold a triple).
 
 ```
 ●  active / current        ○  inactive / pending
 ✓  passed / done           ✗  failed / blocked
 ⚠  warning                 ◆  primary / focused
-▶  running                 ▷  awaiting input
-↑↓→ trend                  ▓▒░ fill: high / med / low
+◇  secondary / unfocused   ▶  running
+▷  awaiting input          ↑↓→ trend
+▓▒░ fill: high / med / low
 ```
+
+Every one is **1 column** in a Western locale, so none of them widens a row the way an emoji does. ⚠ **That is not the same as "safe everywhere":** 11 of the 15 are East-Asian **Ambiguous** and render 2 columns in a CJK locale. Only `✓ ✗ ⚠ ░` are unconditionally narrow.
 
 Semantic only, never decorative. `✓` means *passed* — a plain list of items is not passing, so use `●`/`○` or an unmarked `-`.
 
@@ -72,7 +67,7 @@ Semantic only, never decorative. `✓` means *passed* — a plain list of items 
 
 ✅ ❌ ⚠️ 🔄 💡 🚨 🎯 🔥 📜 🤖 ⚡ — for prose, bullets, and headers.
 
-⚠ **Measured: 11 of these 12 render 2 columns wide.** One emoji inside a bordered row shifts that row's right edge and breaks the box. Keep them out of anything with a right border.
+⚠ **Measured: all 11 render 2 columns wide.** One emoji inside a bordered row shifts that row's right edge and breaks the box. Keep them out of anything with a right border. (Upstream also lists `⏸`; it is dropped here because the `▷` glyph already means *awaiting input*, and unlike the rest `⏸` is 1 column — keeping it would make "all are 2 columns" false.)
 
 ## Alignment discipline
 
@@ -81,9 +76,10 @@ A misaligned box looks broken and discredits the whole answer. Speed applies to 
 - **Every line of a box must be the same display width.** Count it — do not eyeball it.
 - **Prefer alignment-robust forms.** Flows, trees, and meters have no right border to match, so they cannot misalign. Full bordered boxes are the expensive option — use them when the structure earns it.
 - **One character set per diagram.** Do not mix `┌─┐` with `+-+` in the same drawing.
-- **Emoji and CJK text are 2 columns.** So are many CJK-locale renderings of `●◆▶↑→▓`. If a diagram must survive an unknown locale, fall back to `✓ ✗ ⚠ ░`, which are unconditionally narrow.
+- **Emoji and CJK text are 2 columns**, and so are `●◆◇▶▷↑↓→▓▒` in a CJK locale.
+- ⚠ **In an unknown locale, do not draw a bordered box at all.** Swapping in "safe" content glyphs cannot rescue it: **every border character** — `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╔ ═ ╗ ║ ╚ ╝` — is itself Ambiguous, so the frame doubles no matter what sits inside it. Use indentation, a flow, or a plain table instead; those have no width to match.
 
-> This discipline is not theoretical. The upstream project's own worked example — the one labelled *"Correct"* — measures 55, 57, and 56 columns across its three border lines.
+> This discipline is not theoretical. The upstream project's own worked example — the one labelled *"Correct"* in `rules/ascii-architecture.md` at `a64613c8442d` — measures **55, 57 and 56** columns across its three border lines. Upstream may fix it; the measurement is pinned to that commit so the claim stays checkable either way.
 
 ## Palette
 
@@ -102,11 +98,20 @@ Avoid anything needing a non-default monospace font, and any ASCII-art logo.
 
 | You want | Skill | Palette |
 |---|---|---|
-| A picture in the chat, now | **quickviz** (this) | **Unicode** `┌─┐` |
-| A diagram written into a file | `ascii-visualizer` | **ASCII only** `+ - \|` |
+| A picture in the chat, now | **quickviz** (this) | Unicode boxes `┌─┐ │` |
+| A diagram written into a file | `ascii-visualizer` | **by glyph class** — see below |
 | An interactive HTML explorer | `playground` | n/a |
 
-⚠ **The split is by output surface, and it is deliberate.** A committed file may be read in any font, diff viewer, or CI log, so it stays ASCII. A chat reply is rendered by one client, so it can afford Unicode. **Do not carry this skill's palette into a file.**
+⚠ **The rule is per glyph class, not per skill.** `ascii-visualizer` is **not** "ASCII only" — its own file-tree examples use `├── └── │` and it contains ~94 box-drawing characters. What it actually holds is:
+
+| In a file | Palette | Why |
+|---|---|---|
+| **Bordered boxes** | ASCII `+ - \|` | Every box-drawing border char is East-Asian Ambiguous, so a framed diagram can double in width in another locale. A file may be read anywhere. |
+| **File trees** | Unicode `├── └── │` | The established convention `tree(1)` itself emits; no right border to misalign, so the Ambiguous risk costs nothing. |
+
+**In chat, bordered boxes may use Unicode** — one client renders it, and the locale is known.
+
+**Do not carry this skill's bordered-box palette into a file.** File trees are the exception and always were.
 
 ## Patterns
 
