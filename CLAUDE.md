@@ -328,7 +328,7 @@ The model-economics guidance above is **advisory**. As of the v2.1.175–187 lin
    ```
 2. **`autoMode.soft_deny: ["Agent(model:fable)"]`** — prompt before an expensive subagent spawn instead of hard-blocking it (respects the `$defaults` merge semantics).
 
-Why this matters here: **auto-research is the repo's highest-fan-out entry point** (a `design` route spawns ~11 agents), so it is exactly where an unconstrained model choice is most expensive. These settings are the enforceable backing for the advisory rule that fan-out must not defeat the cost ceiling. Configure in managed settings (org-wide) or `~/.claude/settings.local.json` (gitignored, per-developer). ⚠ **The `settings.local.json` path is under review** — see the same warning under "Recommended `hard_deny` baseline"; CC v2.1.207 changed which sources `autoMode` is read from, and the user-level case is unmeasured.
+Why this matters here: **auto-research is the repo's highest-fan-out entry point** (a `design` route spawns ~11 agents), so it is exactly where an unconstrained model choice is most expensive. These settings are the enforceable backing for the advisory rule that fan-out must not defeat the cost ceiling. Configure in managed settings (org-wide) or **`~/.claude/settings.json`** (per-developer). ⚠ **MEASURED 2026-08-07 (issue #139): a user-level `~/.claude/settings.local.json` is NOT read for `autoMode`** — a rule placed there is absent from `claude auto-mode config`'s effective output, while the same rule in `settings.json` is present. ⚠ And **`soft_deny` above must carry `"$defaults"`** for the same reason `hard_deny` must — see "Recommended `hard_deny` baseline" for the measurement.
 
 > **Note — unattended / cloud routines.** These keys govern *local* sessions (interactive and in-session `--unattended`/`/loop`). A `/schedule` **cloud routine** runs on Anthropic-managed VMs and does **not** read `.claude/settings.json` — govern it through its creation-form scopes (the model selector is the *documented* cost pin; plus network/connectors, branch-push). `enforceAvailableModels` reaches a routine only via **server-managed** settings, and its effect on routine model choice is *inferred, not documented*. The full two-context map is `plugins/engineering-toolkit/skills/auto-research/references/unattended-governance.md`.
 
@@ -574,6 +574,7 @@ When using Claude Code Auto Mode, the classifier uses this context to determine 
 {
   "autoMode": {
     "hard_deny": [
+      "$defaults",
       "Bash(rm -rf /*)",
       "Bash(git push --force* origin main*)",
       "Bash(git push --force* origin master*)",
@@ -590,7 +591,13 @@ When using Claude Code Auto Mode, the classifier uses this context to determine 
 
 Add organization-specific patterns on top — production deploy commands, secret-rotating CLIs, anything that touches shared state without an undo path. `hard_deny` is the right place for "never auto, ever"; `soft_deny` is the right place for "usually no but occasionally fine, prompt me."
 
-Configure in `~/.claude/settings.local.json` (gitignored) or managed settings for organization-wide enforcement. ⚠ **This path is under review and deliberately unedited.** CC v2.1.207 stopped reading `autoMode` from **repo-resident** `.claude/settings.local.json` and points at `~/.claude/settings.json`; whether a **user-level** `.local.json` is still honoured is neither documented nor measured. Treating the CHANGELOG line as settling it is the inference shape that produced #98's false floor note — probe first. See `docs/reviews/2026-08-04_cc-v2.1.221-alignment-audit.md` § Tier 3.
+Configure in **`~/.claude/settings.json`** (NOT `settings.local.json`) or managed settings for organization-wide enforcement. ⚠⚠ **MEASURED 2026-08-07 on CC 2.1.224 (issue #139) — two things, and both fail OPEN.**
+
+**(a) A user-level `~/.claude/settings.local.json` is NOT read for `autoMode`.** Probed with `claude auto-mode config`, which prints the effective merged config: a `hard_deny` placed in `settings.local.json` was **absent** from it, while the same rule in `settings.json` was **present**. Our guidance previously named the `.local.json` path, so anyone who followed it had an inert `hard_deny`.
+
+**(b) ⚠⚠ THE BASELINE ABOVE MUST INCLUDE `"$defaults"`, OR IT DELETES CC'S DATA-EXFILTRATION RULE.** Supplying `hard_deny` without it **replaces** the shipped list rather than appending. Measured: shipped default `hard_deny` = **1** entry (a long-form *Data Exfiltration* rule covering trust-boundary crossings, encoded payloads, bulk-tree pushes, and remote repoints). With a custom list and no `"$defaults"`, effective = **1** — *yours*, and the Data-Exfiltration rule is **gone**. With `"$defaults"` prepended, effective = **2** and it survives. Nine shell globs are not a substitute for that rule.
+
+⚠ **NOT ESTABLISHED, do not infer it**: that a read `hard_deny` actually **gates**. The probe verified the rule is **present in the effective config**, never that it blocks — a matching command still executed, most likely because auto mode was inactive in that session. *Read* is not *gates*; assuming otherwise is exactly what made #98's floor note false.
 
 ## Repository
 
