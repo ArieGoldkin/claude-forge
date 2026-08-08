@@ -197,6 +197,29 @@ jobs:
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-marketplace"
       - name: bad-changelog fixture must fail
         run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-changelog"
+      # #143: the directory-attached enumerated form (`- `skills/` - N ... (a, b, c)`)
+      # was counted but NEVER name-checked -- only the `- **N skills**: a, b, c` form was.
+      # ftk's CLAUDE.md therefore named `coding-standards` (an ETK skill) and omitted
+      # `playground` (its own) while the declared total, the list length and the directory
+      # count all agreed at 17, and this gate exited 0. The fixture reproduces that exact
+      # shape -- one phantom, one omission, correct total -- and carries a nested
+      # `(NEW v9.9.9)` annotation so the greedy-paren path is exercised too. Verified to
+      # PASS against the pre-#143 checker, which is what makes it a real control.
+      - name: bad-count-list-dir fixture must fail (dir-attached list, one phantom + one omission)
+        run: "! bash scripts/validate-versions.sh tests/fixtures/versions/bad-count-list-dir"
+      # #140: a failing check used to `continue`, skipping that plugin's REMAINING checks,
+      # so drift was fixed one CI run at a time -- the exact anti-pattern check 7's own
+      # comment names and fixes across the plugin loop, reproduced inside a plugin.
+      # A non-zero exit is NOT sufficient here: the old behaviour also exited non-zero,
+      # it just reported one failure instead of two. Assert the COUNT, or this test
+      # passes against the bug it exists to catch.
+      - name: bad-two-independent fixture must report BOTH failures, not just the first
+        run: |
+          out=$(bash scripts/validate-versions.sh tests/fixtures/versions/bad-two-independent 2>&1) && {
+            echo "expected a non-zero exit"; echo "$out"; exit 1; }
+          n=$(printf '%s\n' "$out" | grep -cE '^[[:space:]]+FAIL')
+          printf '%s\n' "$out"
+          [ "$n" -eq 2 ] || { echo "expected 2 FAIL lines (check 2 and check 8), got $n"; exit 1; }
       # Check 6 (#63/#74): the log-level variable's name must agree across the
       # wrapper, vitest.config.ts and CLAUDE.md. Check 6 skips a plugin with no
       # wrapper, so without these fixtures deleting the whole block would leave

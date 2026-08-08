@@ -67,7 +67,6 @@ print(match or 'NOT_FOUND')
     echo "  FAIL  $PLUGIN_NAME: plugin.json=$PLUGIN_VER vs marketplace.json=$MARKET_VER"
     echo "        Fix: ./scripts/bump-version.sh $PLUGIN_NAME $PLUGIN_VER"
     FAILED=1
-    continue
   fi
 
   # --- Check 2: CLAUDE.md version ---
@@ -85,7 +84,6 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "  FAIL  $PLUGIN_NAME: CLAUDE.md=$CLAUDE_VER vs plugin.json=$PLUGIN_VER"
       echo "        Fix: Update '> **Version**:' in $CLAUDE_MD"
       FAILED=1
-      continue
     fi
   fi
 
@@ -98,7 +96,6 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "  FAIL  $PLUGIN_NAME: CHANGELOG.md missing entry for [$PLUGIN_VER]"
       echo "        Fix: Add ## [$PLUGIN_VER] section to $CHANGELOG"
       FAILED=1
-      continue
     fi
   fi
 
@@ -116,7 +113,6 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "  FAIL  $PLUGIN_NAME: README.md=$README_VER vs plugin.json=$PLUGIN_VER"
       echo "        Fix: Update version in README.md plugin table"
       FAILED=1
-      continue
     fi
   fi
 
@@ -135,10 +131,17 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "  FAIL  $PLUGIN_NAME: root CLAUDE.md=(v$ROOT_VER) vs plugin.json=$PLUGIN_VER"
       echo "        Fix: update '(vX.Y.Z, installed as $SHORT_NAME)' in $ROOT_CLAUDE_MD"
       FAILED=1
-      continue
     fi
   fi
 
+  # `break` below means "skip the REST OF CHECK 6", not "skip this plugin".
+  # Check 6 is the one check with genuine INTERNAL dependencies: every step
+  # after the wrapper read needs $HOOK_NAME, so an early exit must abandon
+  # check 6 -- but checks 7 and 8 are independent and must still run. This
+  # one-pass loop is the smallest construct that expresses that in bash.
+  # (The nested `while read src_file` loop inside check 6 keeps its own
+  #  `continue`; that one is real loop control, not a check exit.)
+  for _check6_once in 1; do
   # --- Check 6: log-level env var identity (wrapper vs tests vs CLAUDE.md) ---
   # Issue #63 shipped THREE disagreeing names for ONE variable: production read
   # `AI_LOG_LEVEL` (wrapper sets CLAUDE_PLUGIN_NAME="ai"), tests ran as
@@ -162,7 +165,7 @@ print(m.group(1) if m else 'NOT_FOUND')
     echo "        Fix: add the wrapper, or move the hooks out -- check 6 cannot verify"
     echo "             the log-level identity of a plugin whose production name is unknowable"
     FAILED=1
-    continue
+    break
   fi
 
   if [[ -f "$WRAPPER" ]]; then
@@ -183,7 +186,7 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "        Fix: add 'export CLAUDE_PLUGIN_NAME=\"<short-name>\"' -- without it logging"
       echo "             silently falls back to the name 'plugin' for every hook in this plugin"
       FAILED=1
-      continue
+      break
     fi
 
     # 6a. The name is upper-cased into a SHELL variable name, so it must be a
@@ -196,7 +199,7 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "        Fix: use only [A-Za-z_][A-Za-z0-9_]* in $WRAPPER --"
       echo "             the name is upper-cased into \${NAME}_LOG_LEVEL, which a POSIX shell must be able to export"
       FAILED=1
-      continue
+      break
     fi
 
     EXPECTED_LOG_VAR="$(printf '%s' "$HOOK_NAME" | tr '[:lower:]' '[:upper:]')_LOG_LEVEL"
@@ -219,20 +222,20 @@ print(m.group(1) if m else 'NOT_FOUND')
         echo "  FAIL  $PLUGIN_NAME: $VITEST_CONFIG sets CLAUDE_PLUGIN_NAME but its value could not be read"
         echo "        Fix: write it as CLAUDE_PLUGIN_NAME: '$HOOK_NAME' so the identity is verifiable"
         FAILED=1
-        continue
+        break
       fi
       if [[ -z "$TEST_NAME" ]]; then
         echo "  FAIL  $PLUGIN_NAME: $VITEST_CONFIG does not set CLAUDE_PLUGIN_NAME"
         echo "        Fix: add env: { CLAUDE_PLUGIN_NAME: '$HOOK_NAME' } -- otherwise the suite"
         echo "             runs as 'plugin' and verifies an identity no user ever gets (#63)"
         FAILED=1
-        continue
+        break
       fi
       if [[ "$TEST_NAME" != "$HOOK_NAME" ]]; then
         echo "  FAIL  $PLUGIN_NAME: vitest.config.ts runs as \"$TEST_NAME\" but production runs as \"$HOOK_NAME\""
         echo "        Fix: set CLAUDE_PLUGIN_NAME: '$HOOK_NAME' in $VITEST_CONFIG"
         FAILED=1
-        continue
+        break
       fi
     fi
 
@@ -258,7 +261,7 @@ print(m.group(1) if m else 'NOT_FOUND')
         echo "        Fix: every .md under $plugin_dir (except CHANGELOG.md) must name"
         echo "             exactly $EXPECTED_LOG_VAR -- derived from CLAUDE_PLUGIN_NAME=\"$HOOK_NAME\" in $WRAPPER"
         FAILED=1
-        continue
+        break
       fi
     fi
 
@@ -298,10 +301,12 @@ print(m.group(1) if m else 'NOT_FOUND')
         fi
       done < <(find "$plugin_dir/hooks/src" -type f -name '*.ts' 2>/dev/null | sort)
       if [[ "$SRC_DRIFT" -eq 1 ]]; then
-        continue
+        break
       fi
     fi
   fi
+
+  done  # end check 6 one-pass wrapper
 
   # --- Check 7: declared counts vs filesystem ground truth ---
   # Delegated to scripts/lib/check-counts.py -- the extraction needs two markdown
@@ -318,7 +323,6 @@ print(m.group(1) if m else 'NOT_FOUND')
     python3 "$COUNT_HELPER" "$REPO_ROOT" "$plugin_dir" "$SHORT_NAME" || COUNT_RC=$?
     if [[ "$COUNT_RC" -ne 0 ]]; then
       FAILED=1
-      continue
     fi
   else
     # The helper is not optional. A missing file must be louder than a passing
@@ -326,7 +330,6 @@ print(m.group(1) if m else 'NOT_FOUND')
     # "quieter than a failure" hole that check 6's missing-wrapper branch closes.
     echo "  FAIL  $PLUGIN_NAME: $COUNT_HELPER is missing -- check 7 cannot run"
     FAILED=1
-    continue
   fi
 
   # --- Check 8: plugin README.md version ---
@@ -344,7 +347,6 @@ print(m.group(1) if m else 'NOT_FOUND')
       echo "  FAIL  $PLUGIN_NAME: README.md=$PR_VER vs plugin.json=$PLUGIN_VER"
       echo "        Fix: update '**Version**:' in $PLUGIN_README"
       FAILED=1
-      continue
     fi
   fi
 
