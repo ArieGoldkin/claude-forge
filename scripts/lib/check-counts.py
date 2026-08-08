@@ -165,13 +165,48 @@ ENUM_LIST = re.compile(
 )
 
 
+# The SECOND enumerated form, and the one that was NOT name-checked until #143.
+# ftk ships `- `skills/` - 18 specialized skill directories (a, b, c)`; etk ships the
+# MARKED form above. Only the MARKED one was verified by name, so ftk's CLAUDE.md
+# named `coding-standards` (an ETK skill) and omitted `playground` (its own) while the
+# declared total, the list length and the directory count all agreed at 17 -- and the
+# gate exited 0. Measured, not hypothesised: that is how it shipped.
+#
+# The pattern is deliberately TIGHT, because this file's own header records that a
+# pattern loose enough to read prose false-FAILs on prose. It requires ALL of:
+#   * a BACKTICKED directory name -- prose says "18 skills", never "`skills/`"
+#   * a count
+#   * a parenthesised list on the SAME line
+# `(.+)` is greedy on purpose: it must run to the LAST `)` on the line, because a real
+# entry carries a nested annotation -- `**quickviz** (NEW v2.4.0)` -- and a lazy or
+# `[^)]+` match truncates the list there, silently dropping every name after it.
+ENUM_LIST_DIR = re.compile(
+    r"`(skills|agents|commands)/`\s*[-\u2013\u2014]\s*(\d+)\s+[^(\n]*\((.+)\)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# Entries may carry a trailing annotation the directory name does not have.
+_ANNOT = re.compile(r"\s*\([^()]*\)\s*$")
+
+
+def _clean_name(raw):
+    """Strip markdown emphasis, backticks, and a trailing `(NEW vX.Y.Z)`-style note."""
+    n = raw.strip().strip("`*").strip()
+    n = _ANNOT.sub("", n)
+    return n.strip().strip("`*").strip()
+
+
 def enumerated_lists(text):
     """-> list of (kind, declared_n, [names]). Only the comma form; tables vary too
     much between plugins to parse safely (dtk uses 4 sub-tables)."""
     out = []
     for m in ENUM_LIST.finditer(text):
-        names = [n.strip().strip("`*") for n in m.group(3).split(",")]
+        names = [_clean_name(n) for n in m.group(3).split(",")]
         out.append((m.group(2).lower().rstrip("s"), int(m.group(1)), [n for n in names if n]))
+    # #143: the directory-attached form, same tuple shape so the caller is unchanged.
+    for m in ENUM_LIST_DIR.finditer(text):
+        names = [_clean_name(n) for n in m.group(3).split(",")]
+        out.append((m.group(1).lower().rstrip("s"), int(m.group(2)), [n for n in names if n]))
     return out
 
 
